@@ -1,0 +1,5 @@
+node_modules/
+bundles/*/raw/
+visualizer/graph.html
+# phase-0 triage scratch: manifest + routing decisions. log.md is the durable record.
+inbox/

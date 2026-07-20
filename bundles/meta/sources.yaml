@@ -1,0 +1,2 @@
+# Ingestion sources for meta. Run: bun run ingest meta
+sources: []

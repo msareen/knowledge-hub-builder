@@ -1,0 +1,15 @@
+# raw/ — ingested source material, NOT canonical.
+#
+# Phase 1 of ingest.md drops faithful copies here, one subdirectory per source
+# type: raw/folder/, raw/web/, raw/confluence/, raw/ado/, raw/pdf/ ...
+# Every .md file starts with a provenance header (lint L8):
+#
+#   ---
+#   source: <url | path | tool query>
+#   fetched: <ISO timestamp>
+#   ---
+#
+# Re-acquiring overwrites this tree idempotently. It is gitignored
+# (bundles/*/raw/) and never cited in answers — curate into concept docs and
+# cite those instead. This file only keeps the directory present in the
+# template; delete it once the bundle has real raw content.
