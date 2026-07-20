@@ -1,6 +1,6 @@
 # lint.md — structural rules
 
-Enforced by `bun run lint` (`scripts/lint.ts`). Combines BKR routing rules with
+Enforced by `bkr lint` (`scripts/lint.ts`). Combines BKR routing rules with
 OKF v0.1 conformance (see the OKF spec). Reserved filenames: `index.md`, `log.md`
 (OKF) and `refs.md` (BKR). Every other `.md` in a bundle — outside `raw/` —
 is a **concept document**.
@@ -9,7 +9,7 @@ is a **concept document**.
 
 - L1. Every `bundles/<name>/` has: `index.md`, `refs.md`, `sources.yaml`. Concept docs
   live in whatever subdirectory grouping fits the domain. No per-bundle AGENT.md —
-  root `AGENT.md` is the common contract; `bun run export` injects it for standalone
+  root `AGENT.md` is the common contract; `bkr export` injects it for standalone
   sharing.
 - L2. Bundle names: lowercase, digits, hyphens (`^[a-z0-9][a-z0-9-]*$`).
 

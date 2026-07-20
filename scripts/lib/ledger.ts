@@ -14,7 +14,7 @@ export type Entry = {
 
 const HEADER = `# {{name}} — ingest log
 
-Ingestion ledger, one row per source. \`bun run ingest\` maintains \`source\`, \`sha256\`,
+Ingestion ledger, one row per source. \`bkr ingest\` maintains \`source\`, \`sha256\`,
 \`fetched\` and \`raw\`; the agent fills \`curated\` during phase 2 of ingest.md.
 
 Empty \`raw\` = acquired-but-not-extracted (binary awaiting a CLI pass).

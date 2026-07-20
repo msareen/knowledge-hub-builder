@@ -12,7 +12,7 @@ const out = outIdx >= 0 ? args[outIdx + 1] : join(INBOX, "manifest.jsonl");
 const roots = (outIdx >= 0 ? [...args.slice(0, outIdx), ...args.slice(outIdx + 2)] : args).filter(Boolean);
 
 if (!roots.length) {
-  console.error("Usage: bun run triage <path...> [--out inbox/manifest.jsonl]");
+  console.error("Usage: bkr triage <path...> [--out inbox/manifest.jsonl]");
   process.exit(1);
 }
 
@@ -105,4 +105,4 @@ console.log(
 console.log(
   `  top types: ${[...byExt.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([e, n]) => `${e}:${n}`).join(" ")}`,
 );
-console.log(`\nNext: read the manifest, cluster into topics, write inbox/routing.yaml, then: bun run route`);
+console.log(`\nNext: read the manifest, cluster into topics, write inbox/routing.yaml, then: bkr route`);

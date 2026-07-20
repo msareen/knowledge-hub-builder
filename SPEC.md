@@ -1,8 +1,9 @@
 # BKR — Specification
 
-**BKR — Bundled Knowledge Routing.** A knowledge hub builder: clone it into wherever the
-knowledge should live (OneDrive, a shared drive) and build the hub inside that clone.
-BKR supplies the rules and tooling; `bundles/` is yours.
+**BKR — Bundled Knowledge Routing.** A knowledge hub builder, distributed as
+`@msareen/bkr`. Install the tooling once; run `bkr init` wherever the knowledge should
+live (OneDrive, a shared drive, a private repo) to create a **hub**. BKR supplies the
+rules and tooling and holds no knowledge; the hub holds all of it and is yours.
 
 A personal knowledge system built as a **bundle of bundles**: independent knowledge bundles
 joined by a thin router, navigable by any coding/knowledge agent (Claude, Codex, or other).
@@ -18,10 +19,10 @@ BKR's own contribution is the bundle-of-bundles layer over both — see §1.
 
 1. **Bundle** — a self-contained topic unit owning its content and ingestion sources.
    Bundles are *lean*: the common rules (AGENT.md, query.md, lint.md) live once at the
-   repo root, not duplicated per bundle. When a bundle must travel alone,
-   `bun run export <bundle>` produces a standalone folder with the common patterns
+   hub root, not duplicated per bundle. When a bundle must travel alone,
+   `bkr export <bundle>` produces a standalone folder with the common patterns
    injected — independence on demand rather than boilerplate everywhere.
-2. **Bundle of bundles** — the repo root is itself a bundle whose content is *routing*, not
+2. **Bundle of bundles** — the hub root is itself a bundle whose content is *routing*, not
    knowledge. `outer.index.md` is the router: it points at bundles and larger topics, and
    details route downward into a bundle's own `index.md`.
 3. **No collation by copying** — when two topics must be combined, content is never merged
@@ -36,41 +37,79 @@ BKR's own contribution is the bundle-of-bundles layer over both — see §1.
    whisper. Extraction is incremental — formats are added one by one.
 6. **Bun** is the scripting language for all tooling and third-party interfaces.
 
-## 2. Directory layout
+## 2. Two directories, one of them yours
+
+BKR is two things that must not be confused: an installed **package** (tooling, no
+knowledge) and a **hub** (knowledge, no tooling). Nothing you write ever lands in the
+package, and the package is never a place to keep bundles.
+
+### 2a. The hub — created by `bkr init`, lives wherever you want
 
 ```
-bundle-knowledge-router/
-├── README.md            # human entry point: setup + build/query tutorial
-├── SPEC.md              # this file
-├── AGENT.md             # agent entry point: how to navigate the whole space
-├── outer.index.md       # THE router — bundle-of-bundles index
-├── query.md             # cross-bundle query protocol
-├── ingest.md            # ingestion protocol: acquire → raw/, curate → concept docs
-├── lint.md              # structural rules (enforced by scripts/lint.ts)
-├── package.json         # Bun project
-├── CLAUDE.md            # Claude shim — points at AGENT.md, nothing more
-├── skills/              # agent-agnostic workflow skills (query, ingest, lint, …)
-├── .bundle_template/    # copied by scripts/new-bundle.ts — lives outside bundles/
+my-knowledge/                  # ~/OneDrive/my-knowledge, a private repo, a share…
+├── bkr.json                   # THE MARKER — how `bkr` finds this hub; records its version
+├── outer.index.md             # THE router — bundle-of-bundles index
 ├── bundles/
-│   └── <bundle>/        # OKF bundle, lean: content + routing, no agent boilerplate
-│       ├── index.md     # OKF index: progressive disclosure of this bundle
-│       ├── refs.md      # cross-bundle references (the ONLY way out of a bundle)
-│       ├── sources.yaml # ingestion sources for this bundle
-│       ├── <group>/     # free-form subdirectories of concept .md files
-│       │   ├── index.md #   (each may carry its own index)
+│   └── <bundle>/              # OKF bundle, lean: content + routing, no agent boilerplate
+│       ├── index.md           # OKF index: progressive disclosure of this bundle
+│       ├── refs.md            # cross-bundle references (the ONLY way out of a bundle)
+│       ├── sources.yaml       # ingestion sources for this bundle
+│       ├── log.md             # ingest ledger: source → sha256 → raw → curated
+│       ├── <group>/           # free-form subdirectories of concept .md files
+│       │   ├── index.md       #   (each may carry its own index)
 │       │   └── <concept>.md
-│       └── raw/         # ingested/extracted material, pre-curation (gitignore-able)
-├── scripts/
-│   ├── new-bundle.ts    # scaffold a bundle from .bundle_template, register in outer.index.md
-│   ├── export.ts        # bundle + common patterns → standalone shareable folder
-│   ├── lint.ts          # enforce lint.md across all bundles
-│   ├── visualize.ts     # emit visualizer/graph.html from indexes + refs
-│   └── ingest/
-│       ├── folder.ts    # local folder → bundle/raw
-│       └── web.ts       # internet links → bundle/raw
-└── visualizer/
-    └── graph.html       # generated — bundle graph, self-contained
+│       └── raw/               # ingested/extracted material, pre-curation (gitignored)
+├── inbox/                     # phase-0 triage scratch (gitignored)
+├── visualizer/graph.html      # generated
+│
+│   ── below: package-owned copies, refreshed by `bkr upgrade`, never hand-edited ──
+├── AGENT.md                   # agent entry point: how to navigate the whole space
+├── CLAUDE.md                  # Claude shim — points at AGENT.md, nothing more
+├── SPEC.md                    # this file
+├── query.md                   # cross-bundle query protocol
+├── ingest.md                  # ingestion protocol: acquire → raw/, curate → concept docs
+├── lint.md                    # structural rules (enforced by the linter)
+└── skills/                    # agent-agnostic workflow skills (query, ingest, lint, …)
 ```
+
+The contract docs are *copied into* the hub rather than read from the package because an
+agent is opened on the hub folder and must find its rules there, without knowing where
+`bkr` is installed. They are package-owned: `bkr upgrade` overwrites them in place and
+leaves `bundles/` and `outer.index.md` alone.
+
+### 2b. The package — `@msareen/bkr`, installed once
+
+```
+@msareen/bkr/
+├── package.json               # bin: bkr → scripts/cli.ts
+├── scripts/
+│   ├── cli.ts                 # subcommand dispatch; owns the global --hub flag
+│   ├── init.ts                # bkr init / bkr upgrade
+│   ├── new-bundle.ts          # scaffold from .bundle_template, register in outer.index.md
+│   ├── export.ts              # bundle + common patterns → standalone shareable folder
+│   ├── lint.ts                # enforce lint.md across the hub
+│   ├── visualize.ts           # emit visualizer/graph.html from indexes + refs
+│   ├── triage.ts / route.ts   # phase-0 bulk corpus handling
+│   ├── ingest/                # folder.ts, files.ts, web.ts → bundle/raw
+│   └── lib/
+│       ├── paths.ts           # package-side paths — importing it never needs a hub
+│       └── util.ts            # hub resolution + shared helpers
+├── .bundle_template/          # copied by `bkr new-bundle`
+├── templates/hub/             # copied by `bkr init`
+└── AGENT.md, query.md, …      # the masters that `bkr init`/`upgrade` copy into hubs
+```
+
+### 2c. Hub resolution
+
+`bkr` locates the hub in this order, and refuses to guess if none is found:
+
+1. `--hub <dir>` on the command line;
+2. `$BKR_HUB`;
+3. the nearest ancestor of the working directory containing `bkr.json`.
+
+Rule 3 is the normal path: `cd` anywhere inside the hub and run `bkr lint`. One
+consequence worth stating — a hub is identified by its marker file, not its name, so
+hubs may be renamed or moved freely, and nested hubs resolve to the innermost one.
 
 ## 3. Routing model
 
@@ -141,7 +180,7 @@ fetched-at). Raw material is input for curation into concept docs — never cite
 canonical directly. Re-running ingestion overwrites `raw/` idempotently.
 
 **Scripting philosophy: script only what's trivial and deterministic.** Folder and web
-ingestion are scripted (`bun run ingest`). Confluence and ADO are reached through their
+ingestion are scripted (`bkr ingest`). Confluence and ADO are reached through their
 MCP servers or official CLIs by the agent itself, following the conventions in
 `AGENT.md §Ingestion` — no API wrapper code to maintain here. If bulk, repeated,
 agent-free refresh of a source ever becomes a real need, promote it to a script then.
@@ -161,7 +200,7 @@ one format at a time:
 
 ## 7. Lint
 
-`bun run lint` enforces (details in `lint.md`):
+`bkr lint` enforces (details in `lint.md`):
 - every bundle has `index.md`, `refs.md`, `sources.yaml`
 - every bundle is registered in `outer.index.md`; nothing in `outer.index.md` is dangling
 - every concept doc is listed in an index and carries OKF frontmatter (`type` required)
@@ -170,7 +209,7 @@ one format at a time:
 
 ## 8. Visualizer
 
-`bun run visualize` scans `outer.index.md`, every bundle `index.md`, and every `refs.md`,
+`bkr visualize` scans `outer.index.md`, every bundle `index.md`, and every `refs.md`,
 and emits `visualizer/graph.html` — a single self-contained HTML file: bundles as nodes,
 refs as directed edges, note counts as node size. No server, open in any browser.
 
@@ -180,5 +219,5 @@ refs as directed edges, note counts as node size. No server, open in any browser
 question → AGENT.md → outer.index.md → bundle/index.md → concept docs
                                     ↘ (spanning?) refs.md → other bundle via ITS index
 new material → sources.yaml → ingest (script or MCP/CLI) → raw/ → curate into
-concept docs (+ index entries) → bun run lint
+concept docs (+ index entries) → bkr lint
 ```

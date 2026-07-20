@@ -1,16 +1,46 @@
 {
-  "name": "bkr",
+  "name": "@msareen/bkr",
+  "version": "0.1.0",
   "description": "Bundled Knowledge Routing — a knowledge hub builder",
-  "private": true,
+  "keywords": ["knowledge-base", "okf", "agent", "wiki", "bundles", "claude", "rag"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msareen/bundle-knowledge-router.git"
+  },
+  "homepage": "https://github.com/msareen/bundle-knowledge-router#readme",
   "type": "module",
+  "bin": {
+    "bkr": "./scripts/cli.ts"
+  },
+  "files": [
+    "scripts/",
+    "skills/",
+    "templates/",
+    ".bundle_template/",
+    "AGENT.md",
+    "CLAUDE.md",
+    "SPEC.md",
+    "query.md",
+    "ingest.md",
+    "lint.md",
+    "README.md"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "lint": "bun scripts/lint.ts",
-    "visualize": "bun scripts/visualize.ts",
-    "new-bundle": "bun scripts/new-bundle.ts",
-    "export": "bun scripts/export.ts",
-    "triage": "bun scripts/triage.ts",
-    "route": "bun scripts/route.ts",
-    "ingest": "bun scripts/ingest/index.ts"
+    "bkr": "bun scripts/cli.ts",
+    "lint": "bun scripts/cli.ts lint",
+    "visualize": "bun scripts/cli.ts visualize",
+    "new-bundle": "bun scripts/cli.ts new-bundle",
+    "export": "bun scripts/cli.ts export",
+    "triage": "bun scripts/cli.ts triage",
+    "route": "bun scripts/cli.ts route",
+    "ingest": "bun scripts/cli.ts ingest"
   },
   "dependencies": {
     "yaml": "^2.4.0"

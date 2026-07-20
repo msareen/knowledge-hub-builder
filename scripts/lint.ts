@@ -1,5 +1,5 @@
-// bun scripts/lint.ts — enforce lint.md (structural rules + OKF v0.1 conformance)
-import { ROOT, BUNDLES, listBundles, read, mdLinks, refTargets, join, existsSync } from "./lib/util";
+// bkr lint — enforce lint.md (structural rules + OKF v0.1 conformance) across the hub
+import { HUB, BUNDLES, listBundles, read, mdLinks, refTargets, join, existsSync } from "./lib/util";
 import { readdirSync, statSync } from "node:fs";
 import { dirname, relative } from "node:path";
 
@@ -10,7 +10,7 @@ const warn = (rule: string, msg: string) => { warnings++; console.warn(`warn  ${
 const stripComments = (md: string) => md.replace(/<!--[\s\S]*?-->/g, "");
 const RESERVED = ["index.md", "log.md", "refs.md"]; // refs.md is BKR-reserved
 const bundles = listBundles();
-const outerIndex = read(join(ROOT, "outer.index.md"));
+const outerIndex = read(join(HUB, "outer.index.md"));
 
 /** All files under dir (relative paths), skipping raw/. */
 function walk(dir: string, base = dir): string[] {

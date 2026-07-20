@@ -1,6 +1,11 @@
 # AGENT.md — entry point for any agent
 
-You are inside **BKR**, a bundle-of-bundles knowledge system. Full design: `SPEC.md`.
+You are inside a **BKR hub** — a bundle-of-bundles knowledge system. Full design: `SPEC.md`.
+
+The hub is this folder: `bkr.json`, `outer.index.md`, and `bundles/`. The knowledge is
+here; the `bkr` tooling is installed separately and holds none of it. This file and its
+siblings (`SPEC.md`, `query.md`, `ingest.md`, `lint.md`, `skills/`) are package-owned
+copies refreshed by `bkr upgrade` — never edit them, edit bundle content instead.
 
 ## How to navigate
 
@@ -37,24 +42,28 @@ This file is the single common contract — bundles carry no per-bundle agent ru
   concepts to each other with plain markdown links, `/path/from/bundle/root.md`
   preferred; relationship meaning goes in the surrounding prose.
 - **Cross-bundle relationships** go in `refs.md` only — never inline links across bundles.
-- **Decisions:** any change to root files (`SPEC.md`, `lint.md`, `query.md`, this file)
-  gets a line in `bundles/meta/notes/decisions.md`.
+- **Decisions:** if this hub has a `meta` bundle, any change to how the hub itself works
+  gets a dated line in `bundles/meta/notes/decisions.md`.
 - **`raw/` is not canonical.** It's ingested source material awaiting curation. Cite
   concept docs; use `raw/` only when curating.
-- **New bundle:** `bun run new-bundle <name>` — never hand-copy `_template`.
-- After structural edits run `bun run lint` and fix what it reports.
+- **New bundle:** `bkr new-bundle <name>` — never hand-copy `_template`.
+- After structural edits run `bkr lint` and fix what it reports.
 
-## Tooling (Bun)
+## Tooling
+
+Run `bkr` from anywhere inside the hub — it finds the hub by walking up to `bkr.json`.
+From outside, pass `--hub <dir>` or set `$BKR_HUB`.
 
 | Command | Purpose |
 |---|---|
-| `bun run lint` | validate structure against `lint.md` |
-| `bun run visualize` | regenerate `visualizer/graph.html` |
-| `bun run new-bundle <name>` | scaffold + register a bundle |
-| `bun run triage <path...>` | index a bulk corpus in place (no copies) → `inbox/manifest.jsonl` |
-| `bun run route` | apply `inbox/routing.yaml` → `files` sources in each bundle |
-| `bun run ingest <bundle>` | pull sources from `sources.yaml`; maintains the `log.md` ledger |
-| `bun run export <bundle> [dest]` | standalone copy: bundle + common patterns, shareable alone |
+| `bkr lint` | validate structure against `lint.md` |
+| `bkr upgrade` | refresh this hub's package-owned contract docs |
+| `bkr visualize` | regenerate `visualizer/graph.html` |
+| `bkr new-bundle <name>` | scaffold + register a bundle |
+| `bkr triage <path...>` | index a bulk corpus in place (no copies) → `inbox/manifest.jsonl` |
+| `bkr route` | apply `inbox/routing.yaml` → `files` sources in each bundle |
+| `bkr ingest <bundle>` | pull sources from `sources.yaml`; maintains the `log.md` ledger |
+| `bkr export <bundle> [dest]` | standalone copy: bundle + common patterns, shareable alone |
 
 ## Ingestion
 

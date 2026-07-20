@@ -5,7 +5,19 @@ description: Design decisions for BKR and their rationale.
 
 # Design decisions
 
-- **2026-07-20 — The clone is the hub (no hub-root indirection).** BKR is cloned into
+- **2026-07-20 — Package + hub split; shipped as `@msareen/bkr`.** Supersedes the
+  clone-is-the-hub decision below. `bun install -g @msareen/bkr` installs tooling only;
+  `bkr init <dir>` creates a hub (`bkr.json` + `outer.index.md` + `bundles/`) anywhere.
+  Hub resolution: `--hub` > `$BKR_HUB` > nearest ancestor with `bkr.json`. Reason: a
+  clone forces personal knowledge to live inside the tool's git history and makes
+  updating a merge; the split makes them independent, and multiple hubs per install
+  become free. `scripts/lib/paths.ts` (package side) is separated from `util.ts` (hub
+  side) so `bkr init` can run before any hub exists. The contract docs are *copied* into
+  each hub rather than read from the package, because an agent is opened on the hub
+  folder and must find its rules there; `bkr upgrade` refreshes those copies and leaves
+  `bundles/`+`outer.index.md` untouched. This repo stays its own hub (`bundles/meta`),
+  excluded from the tarball by the `files` allowlist.
+- **2026-07-20 — The clone is the hub (no hub-root indirection).** *(superseded above.)* BKR is cloned into
   wherever the knowledge should live (OneDrive, shared drive); `bundles/` sits inside the
   clone. Rejected for now: a `--hub`/`$BKR_HUB`/`bkr.json` root resolved separately from
   the repo. Reason: the indirection touches every script and buys nothing until someone

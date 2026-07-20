@@ -12,4 +12,4 @@ into concept docs. Never skip to curation.
 Keep each bundle's `log.md` ledger current — its empty `raw`/`curated` columns are the
 worklist, and nothing else records it.
 
-Finish with `bun run lint` and fix every error.
+Finish with `bkr lint` and fix every error.

@@ -1,5 +1,5 @@
-// bun scripts/visualize.ts — scan bundles + refs, emit visualizer/graph.html (self-contained)
-import { ROOT, BUNDLES, listBundles, read, refTargets, join, existsSync, mkdirSync } from "./lib/util";
+// bkr visualize — scan bundles + refs, emit visualizer/graph.html (self-contained)
+import { HUB, BUNDLES, listBundles, read, refTargets, join, existsSync, mkdirSync } from "./lib/util";
 import { readdirSync, writeFileSync } from "node:fs";
 
 type Node = { id: string; notes: number; scope: string };
@@ -11,7 +11,7 @@ const edges: Edge[] = [];
 
 // scope lines from outer.index.md table
 const scopes: Record<string, string> = {};
-for (const line of read(join(ROOT, "outer.index.md")).split("\n")) {
+for (const line of read(join(HUB, "outer.index.md")).split("\n")) {
   const m = line.match(/^\|\s*\[([a-z0-9-]+)\][^|]*\|\s*([^|]+)\|/);
   if (m) scopes[m[1]] = m[2].trim();
 }
@@ -94,7 +94,7 @@ cv.onmousemove=e=>{hover=at(e.clientX,e.clientY);
 (function loop(){step();draw();requestAnimationFrame(loop)})();
 </script>`;
 
-const outDir = join(ROOT, "visualizer");
+const outDir = join(HUB, "visualizer");
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "graph.html"), html);
 console.log(`visualizer/graph.html — ${nodes.length} bundles, ${edges.length} refs`);

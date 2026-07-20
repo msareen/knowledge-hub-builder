@@ -1,4 +1,4 @@
-// Explicit file list → raw/files/. Produced by `bun run route` from a triage manifest,
+// Explicit file list → raw/files/. Produced by `bkr route` from a triage manifest,
 // so the paths are already topic-assigned. Skips anything whose content hash is
 // unchanged and whose raw/ copy is still present.
 import { readFileSync, existsSync } from "node:fs";

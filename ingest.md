@@ -12,13 +12,13 @@ corpus is the reverse — the bundle set is an *output* of inspecting the data. 
 resolves that without duplicating anything.
 
 ```
-bun run triage <path...>     # index in place: path, size, sha256, head snippet → inbox/manifest.jsonl
+bkr triage <path...>     # index in place: path, size, sha256, head snippet → inbox/manifest.jsonl
                              # copies 0 bytes; reports duplicate groups by content hash
 ```
 
 Then, as the agent: read `inbox/manifest.jsonl` (the `head` snippet is enough to
 classify — do not open the corpus), cluster into topics, propose the bundle set to the
-user, `bun run new-bundle` each approved one, and write the assignment:
+user, `bkr new-bundle` each approved one, and write the assignment:
 
 ```yaml
 # inbox/routing.yaml
@@ -28,7 +28,7 @@ routes:
 unrouted: []          # anything you deliberately declined to ingest
 ```
 
-`bun run route` merges each list into that bundle's `sources.yaml` as a `files` source.
+`bkr route` merges each list into that bundle's `sources.yaml` as a `files` source.
 Nothing is acquired yet — phase 1 does that, per bundle.
 
 Triage is the one phase that legitimately looks across all bundles. That does not
@@ -50,7 +50,7 @@ fetched: <ISO timestamp>
 ```
 
 Re-acquiring is incremental: a source whose content hash is unchanged and whose `raw/`
-file still exists is skipped. `bun run ingest <bundle> --force` re-acquires everything.
+file still exists is skipped. `bkr ingest <bundle> --force` re-acquires everything.
 `raw/` is gitignored and never canonical.
 
 ### The ledger — `log.md`
@@ -66,7 +66,7 @@ doc, and committed, so it survives `raw/` being deleted and re-derived).
 | `raw` | script | bundle-relative `raw/` path; **empty = extraction still pending** |
 | `curated` | agent | concept doc(s) distilled from it; **empty = not yet curated** |
 
-`bun run ingest` maintains the first four and never touches `curated`. Fill `curated`
+`bkr ingest` maintains the first four and never touches `curated`. Fill `curated`
 yourself in phase 2 — it is the only record of what work remains, and the empty-column
 counts printed after each run are your worklist. Binary sources are recorded with an
 empty `raw` the moment they are seen, so a pending `pdftotext`/`whisper` pass is never
@@ -74,8 +74,8 @@ lost between runs.
 
 | Source | How |
 |---|---|
-| local folder, web urls | scripted: declare in `sources.yaml`, run `bun run ingest <bundle>` |
-| explicit file list | scripted: `files` source, usually written by `bun run route` after triage |
+| local folder, web urls | scripted: declare in `sources.yaml`, run `bkr ingest <bundle>` |
+| explicit file list | scripted: `files` source, usually written by `bkr route` after triage |
 | Confluence | agent: MCP server or CLI → save pages to `raw/confluence/` |
 | Azure DevOps | agent: MCP/CLI → wiki pages / work items to `raw/ado/` |
 | PDF | agent: `pdftotext -layout <file> -` → `raw/<type>/<file>.md` |
@@ -95,7 +95,7 @@ lost between runs.
    and record it in the `curated` column of `log.md`.
 4. Anything belonging to a different topic → that other bundle via its own curation,
    plus a `refs.md` entry here. Never inline-link across bundles.
-5. `bun run lint` — fix errors before finishing.
+5. `bkr lint` — fix errors before finishing.
 
 ## Hygiene
 
