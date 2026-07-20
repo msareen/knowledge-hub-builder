@@ -1,0 +1,12 @@
+# Knowledge is markdown written by agents and humans on different platforms — normalize
+# to LF so diffs stay readable and a bundle synced across machines doesn't churn.
+* text=auto eol=lf
+
+# Anything acquired into raw/ is provenance, not source. Don't rewrite it.
+bundles/*/raw/** -text
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.pptx binary

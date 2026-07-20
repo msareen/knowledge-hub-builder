@@ -1,0 +1,11 @@
+# Normalize to LF in the repository. Windows checkouts keep LF too — nothing here is
+# read by a tool that needs CRLF, and mixed endings make markdown diffs unreadable.
+* text=auto eol=lf
+
+# Never touch these, whatever the heuristic thinks.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.pptx binary

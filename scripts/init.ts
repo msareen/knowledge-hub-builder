@@ -54,12 +54,15 @@ if (upgrading) {
 
   mkdirSync(join(hub, "bundles"), { recursive: true });
   cpSync(join(HUB_TEMPLATE, "outer.index.md"), join(hub, "outer.index.md"));
-  if (!existsSync(join(hub, ".gitignore"))) cpSync(join(HUB_TEMPLATE, "gitignore"), join(hub, ".gitignore"));
+  // Dotfiles: shipped unprefixed so npm doesn't swallow them, renamed on the way in.
+  // Never clobber — `bkr init` may be run inside a folder that is already a git repo.
+  for (const f of ["gitignore", "gitattributes"])
+    if (!existsSync(join(hub, `.${f}`))) cpSync(join(HUB_TEMPLATE, f), join(hub, `.${f}`));
   const synced = syncManaged(hub);
   stamp(hub);
 
   console.log(`Hub created: ${hub}`);
-  console.log(`  bkr.json, outer.index.md, bundles/, .gitignore`);
+  console.log(`  bkr.json, outer.index.md, bundles/, .gitignore, .gitattributes`);
   console.log(`  contract docs (package-owned, refreshed by 'bkr upgrade'): ${synced.join(", ")}`);
   console.log(`\nNext:`);
   console.log(`  cd ${basename(hub)}`);
