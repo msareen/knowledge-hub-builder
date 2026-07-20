@@ -68,6 +68,29 @@ opened on that folder finds its rules without knowing where `bkr` is installed. 
 copies are package-owned — don't hand-edit them; `bkr upgrade` refreshes them in place
 and never touches `bundles/` or `outer.index.md`.
 
+```
+ npm registry                      your machine
+┌──────────────────┐   bun install   ┌─────────────────────────────────────────┐
+│  @msareen/bkr     │ ──────────────▶ │  bkr CLI (global, on $PATH)             │
+│  (the package)     │   bun update    │                                          │
+└──────────────────┘                 │  finds a hub by walking up to bkr.json  │
+                                      └──────────────────┬───────────────────────┘
+                                                          │ bkr init <dir>
+                                                          │ (copies contract docs in,
+                                                          │  never copies your data out)
+                                                          ▼
+                          ┌───────────────────────────────────────────────────┐
+                          │  the hub  (~/OneDrive/my-knowledge, a repo, ...)   │
+                          │                                                     │
+                          │  bkr.json            marker bkr walks up to        │
+                          │  CLAUDE.md → AGENT.md  contract, package-owned     │
+                          │  query.md / ingest.md / lint.md   ┐  refreshed by  │
+                          │  skills/                          ┘  bkr upgrade   │
+                          │  outer.index.md       router, you + agent maintain │
+                          │  bundles/<name>/      your knowledge, yours alone  │
+                          └───────────────────────────────────────────────────┘
+```
+
 Open the hub folder in Claude Code (or any agent) — `CLAUDE.md` → `AGENT.md` takes it
 from there. Run `bkr` from anywhere inside the hub; it finds the hub by walking up to
 `bkr.json`. From outside, pass `--hub <dir>` or set `$BKR_HUB`.
@@ -110,13 +133,40 @@ Nothing is copied yet — this only declares provenance.
 
 ### Step 3. Acquire
 
-```bash
-bkr ingest finances
+You never type `bkr ingest` yourself — you ask in chat ("ingest the finances bundle"),
+the `ingest` skill fires, and the agent runs the command on your behalf:
+
+```
+ you                    agent                          bkr CLI              filesystem
+  │  "ingest finances"    │                                │                     │
+  ├──────────────────────▶│                                │                     │
+  │                       │  loads skills/ingest/SKILL.md  │                     │
+  │                       │  reads ingest.md for the plan  │                     │
+  │                       │                                │                     │
+  │                       │  bkr ingest finances            │                     │
+  │                       ├───────────────────────────────▶│                     │
+  │                       │                                │  read sources.yaml  │
+  │                       │                                ├────────────────────▶│
+  │                       │                                │  fetch/copy sources │
+  │                       │                                ├────────────────────▶│
+  │                       │                                │  write raw/*, log.md│
+  │                       │                                ├────────────────────▶│
+  │                       │◀───────────────────────────────┤ done + log summary  │
+  │                       │                                │                     │
+  │                       │  (binaries only) runs           │                     │
+  │                       │  pdftotext/pandoc/whisper ──────┼────────────────────▶│
+  │                       │                                │                     │
+  │                       │  curates raw/ → concept docs ───┼────────────────────▶│
+  │                       │  updates index.md + log.md      │                     │
+  │                       │                                │                     │
+  │                       │  bkr lint                        │                     │
+  │                       ├───────────────────────────────▶│                     │
+  │◀──────────────────────┤  "0 errors, curated N docs"     │                     │
 ```
 
 Text files land in `bundles/finances/raw/` with a `source:`/`fetched:` provenance header.
-Binaries (PDF, DOCX, audio) are *recorded but not extracted* — the agent runs
-`pdftotext`/`pandoc`/`whisper` on those, per the table in [ingest.md](ingest.md).
+Binaries (PDF, DOCX, audio) are *recorded but not extracted* by `bkr ingest` itself —
+the agent runs `pdftotext`/`pandoc`/`whisper` on those, per the table in [ingest.md](ingest.md).
 
 Every acquisition is written to `bundles/finances/log.md`, the ingest ledger. Re-running
 skips sources whose content hash hasn't changed (`--force` overrides). `raw/` is
@@ -218,17 +268,31 @@ bkr ingest <bundle>                  # then per bundle, as in Tutorial 1
 
 ## Commands
 
+### You run this one
+
+There's no hub yet for a skill to live in, so this is the one command you (or the
+agent, if you just ask in chat) run directly instead of through a skill:
+
 | Command | Purpose |
 |---|---|
 | `bkr init [dir]` | create a hub (default: current directory) |
-| `bkr upgrade` | refresh the hub's package-owned contract docs after a `bkr` update |
-| `bkr new-bundle <name> ["scope"]` | scaffold a bundle + register it in `outer.index.md` |
-| `bkr ingest <bundle> [--force]` | acquire declared sources → `raw/`, update `log.md` |
-| `bkr triage <path...>` | index a bulk corpus in place → `inbox/manifest.jsonl` |
-| `bkr route` | apply `inbox/routing.yaml` → each bundle's `sources.yaml` |
-| `bkr lint` | validate structure against [lint.md](lint.md) |
-| `bkr visualize` | regenerate `visualizer/graph.html` |
-| `bkr export <bundle> [dest]` | standalone copy that works alone with any agent |
+
+### The agent runs the rest, via skills
+
+Once a hub exists, `AGENT.md` + `skills/` are in place, and every other command is
+triggered by the matching skill (see [skills/](skills)) — the agent runs the `bkr`
+CLI on your behalf. You never type these yourself:
+
+| Command | Purpose | Skill |
+|---|---|---|
+| `bkr upgrade` | refresh the hub's package-owned contract docs after a `bkr` update | — (run ad hoc when you ask to update) |
+| `bkr new-bundle <name> ["scope"]` | scaffold a bundle + register it in `outer.index.md` | `new-bundle` |
+| `bkr ingest <bundle> [--force]` | acquire declared sources → `raw/`, update `log.md` | `ingest` |
+| `bkr triage <path...>` | index a bulk corpus in place → `inbox/manifest.jsonl` | `ingest` |
+| `bkr route` | apply `inbox/routing.yaml` → each bundle's `sources.yaml` | `ingest` |
+| `bkr lint` | validate structure against [lint.md](lint.md) | `lint` |
+| `bkr visualize` | regenerate `visualizer/graph.html` | `visualize` |
+| `bkr export <bundle> [dest]` | standalone copy that works alone with any agent | `export` |
 
 Global flag: `--hub <dir>` runs a command against a hub you aren't standing in.
 
