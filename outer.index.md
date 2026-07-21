@@ -6,7 +6,7 @@ Routing only. One line of scope + when to route there. No knowledge content here
 
 | Bundle | Scope | Route here when |
 |---|---|---|
-| [meta](bundles/meta/index.md) | BKR itself: conventions, decisions, backlog | Question is about how this system works or should evolve |
+| [meta](bundles/meta/index.md) | KHB itself: conventions, decisions, backlog | Question is about how this system works or should evolve |
 
 ## Larger topics
 

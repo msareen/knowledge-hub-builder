@@ -1,40 +1,40 @@
 import { readdirSync, readFileSync, existsSync, statSync, mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, basename, dirname, resolve } from "node:path";
-import { MARKER } from "./paths";
+import { MARKER, markerIn } from "./paths";
 
 /**
- * Find the hub root — the folder holding bkr.json, outer.index.md and bundles/.
- * It is the user's knowledge, and lives wherever they put it; the bkr package holds
- * no knowledge of its own. Precedence: $BKR_HUB (set from --hub by cli.ts) > nearest
+ * Find the hub root — the folder holding khb.json, outer.index.md and bundles/.
+ * It is the user's knowledge, and lives wherever they put it; the khb package holds
+ * no knowledge of its own. Precedence: $KHB_HUB (set from --hub by cli.ts) > nearest
  * ancestor of cwd containing the marker.
  */
 function resolveHub(): string {
-  const explicit = process.env.BKR_HUB;
+  const explicit = process.env.KHB_HUB;
   if (explicit) {
     const dir = resolve(explicit);
-    if (!existsSync(join(dir, MARKER))) {
-      console.error(`Not a BKR hub (no ${MARKER}): ${dir}`);
+    if (!markerIn(dir)) {
+      console.error(`Not a KHB hub (no ${MARKER}): ${dir}`);
       process.exit(1);
     }
     return dir;
   }
   for (let dir = process.cwd(); ; ) {
-    if (existsSync(join(dir, MARKER))) return dir;
+    if (markerIn(dir)) return dir;
     const up = dirname(dir);
     if (up === dir) break;
     dir = up;
   }
-  console.error(`No BKR hub found in ${process.cwd()} or any parent directory.`);
-  console.error(`Create one:   bkr init <dir>`);
-  console.error(`Or point at an existing one:   bkr --hub <dir> <command>   (or set $BKR_HUB)`);
+  console.error(`No KHB hub found in ${process.cwd()} or any parent directory.`);
+  console.error(`Create one:   khb init <dir>`);
+  console.error(`Or point at an existing one:   khb --hub <dir> <command>   (or set $KHB_HUB)`);
   process.exit(1);
 }
 
 export const HUB = resolveHub();
 export const BUNDLES = join(HUB, "bundles");
 export const INBOX = join(HUB, "inbox");
-export { TEMPLATE } from "./paths";
+export { TEMPLATE, markerIn } from "./paths";
 
 export function listBundles(): string[] {
   if (!existsSync(BUNDLES)) return [];

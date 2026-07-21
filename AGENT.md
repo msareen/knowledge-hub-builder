@@ -1,10 +1,10 @@
 # AGENT.md — entry point for any agent
 
-You are inside a **BKR hub** — a bundle-of-bundles knowledge system. Full design: `SPEC.md`.
+You are inside a **KHB hub** — a bundle-of-bundles knowledge system. Full design: `SPEC.md`.
 
-The hub is this folder: `bkr.json`, `outer.index.md`, and `bundles/`. The knowledge is
-here; the `bkr` tooling is installed separately and holds none of it. This file and its
-siblings (`SPEC.md`, `skills/`) are package-owned copies refreshed by `bkr upgrade` —
+The hub is this folder: `khb.json`, `outer.index.md`, and `bundles/`. The knowledge is
+here; the `khb` tooling is installed separately and holds none of it. This file and its
+siblings (`SPEC.md`, `skills/`) are package-owned copies refreshed by `khb upgrade` —
 never edit them, edit bundle content instead. Every workflow protocol lives wholly inside
 `skills/<name>/SKILL.md`: query, ingest, catalog, lint, new-bundle, export, visualize.
 Those files are plain markdown — any agent can read one directly, whether or not its
@@ -52,26 +52,26 @@ This file is the single common contract — bundles carry no per-bundle agent ru
   gets a dated line in `bundles/meta/notes/decisions.md`.
 - **`raw/` is not canonical.** It's ingested source material awaiting curation. Cite
   concept docs; use `raw/` only when curating.
-- **New bundle:** `bkr new-bundle <name>` — never hand-copy `_template`.
-- After structural edits run `bkr lint` and fix what it reports.
+- **New bundle:** `khb new-bundle <name>` — never hand-copy `_template`.
+- After structural edits run `khb lint` and fix what it reports.
 
 ## Tooling
 
-Run `bkr` from anywhere inside the hub — it finds the hub by walking up to `bkr.json`.
-From outside, pass `--hub <dir>` or set `$BKR_HUB`.
+Run `khb` from anywhere inside the hub — it finds the hub by walking up to `khb.json`.
+From outside, pass `--hub <dir>` or set `$KHB_HUB`.
 
 | Command | Purpose |
 |---|---|
-| `bkr lint` | validate structure against `skills/lint/SKILL.md` |
-| `bkr upgrade` | refresh this hub's package-owned contract docs |
-| `bkr visualize` | regenerate `visualizer/graph.html` |
-| `bkr new-bundle <name>` | scaffold + register a bundle |
-| `bkr triage <path...>` | index a bulk corpus in place (no copies) → `inbox/manifest.jsonl` |
-| `bkr catalog` | extract text + build label batches → `inbox/catalog/in/` |
-| `bkr catalog-merge` | fold labeled batches → `inbox/catalog.jsonl` |
-| `bkr route` | apply `inbox/routing.yaml` → `files` sources in each bundle |
-| `bkr ingest <bundle>` | pull sources from `sources.yaml`; maintains the `log.md` ledger |
-| `bkr export <bundle> [dest]` | standalone copy: bundle + common patterns, shareable alone |
+| `khb lint` | validate structure against `skills/lint/SKILL.md` |
+| `khb upgrade` | refresh this hub's package-owned contract docs |
+| `khb visualize` | regenerate `visualizer/graph.html` |
+| `khb new-bundle <name>` | scaffold + register a bundle |
+| `khb triage <path...>` | index a bulk corpus in place (no copies) → `inbox/manifest.jsonl` |
+| `khb catalog` | extract text + build label batches → `inbox/catalog/in/` |
+| `khb catalog-merge` | fold labeled batches → `inbox/catalog.jsonl` |
+| `khb route` | apply `inbox/routing.yaml` → `files` sources in each bundle |
+| `khb ingest <bundle>` | pull sources from `sources.yaml`; maintains the `log.md` ledger |
+| `khb export <bundle> [dest]` | standalone copy: bundle + common patterns, shareable alone |
 
 ## Ingestion
 

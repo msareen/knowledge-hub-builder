@@ -1,9 +1,9 @@
 ---
 name: query
-description: Answer a question from the BKR knowledge base. Use when the user asks what/why/how about any topic stored in bundles, or asks to look something up in the wiki/knowledge base.
+description: Answer a question from the KHB knowledge base. Use when the user asks what/why/how about any topic stored in bundles, or asks to look something up in the wiki/knowledge base.
 ---
 
-# Query BKR
+# Query KHB
 
 Route from `outer.index.md` to exactly one bundle, enter through that bundle's
 `index.md`, answer from concept docs only. This file is the whole protocol — nothing

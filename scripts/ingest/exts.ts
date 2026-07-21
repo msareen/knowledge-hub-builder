@@ -1,6 +1,6 @@
 // Shared file-type classification for every acquisition path (folder, files, triage).
 export const TEXT = [".md", ".txt", ".rst", ".adoc", ".html", ".csv", ".json", ".yaml", ".yml"];
-// .pdf/.docx/.odt are extracted by bkr itself (lib/extract.ts). Audio and video are
+// .pdf/.docx/.odt are extracted by khb itself (lib/extract.ts). Audio and video are
 // extractable in principle but need an explicit whisper pass — see skills/ingest/SKILL.md.
 export const EXTRACTABLE = [".pdf", ".docx", ".odt", ".mp3", ".wav", ".m4a", ".mp4"];
 

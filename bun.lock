@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@msareen/bkr",
+      "name": "@msareen/khb",
       "dependencies": {
         "fflate": "^0.8.3",
         "mammoth": "^1.12.0",

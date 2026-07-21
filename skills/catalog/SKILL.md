@@ -1,31 +1,31 @@
 ---
 name: catalog
-description: Label a triaged corpus so a bundle set can be proposed from evidence instead of filenames — runs bkr catalog, fans out cheap Haiku subagents over the batch files, merges the facets, then collapses them into wide bundle-sized categories. Use after bkr triage on a large mixed corpus whose bundles are not yet known.
+description: Label a triaged corpus so a bundle set can be proposed from evidence instead of filenames — runs khb catalog, fans out cheap Haiku subagents over the batch files, merges the facets, then collapses them into wide bundle-sized categories. Use after khb triage on a large mixed corpus whose bundles are not yet known.
 ---
 
 # Catalog a triaged corpus
 
-Phase 0 of the [ingest skill](../ingest/SKILL.md), between `bkr triage` and writing
+Phase 0 of the [ingest skill](../ingest/SKILL.md), between `khb triage` and writing
 `inbox/routing.yaml`. Only needed when the bundle set is an *output* of looking at the
 data. If you already know the bundles, skip straight to `inbox/routing.yaml`.
 
-The design is deliberately Claude-specific and stated out loud: `bkr` stays mechanical and
+The design is deliberately Claude-specific and stated out loud: `khb` stays mechanical and
 dependency-free, and the labeling brain is a subagent fan-out you orchestrate from this
-session. No MCP, no API keys, no model calls inside `bkr`.
+session. No MCP, no API keys, no model calls inside `khb`.
 
 ## 1. Build the batches (mechanical)
 
 ```
-bkr catalog                # or --batch N (default 100 files per batch)
+khb catalog                # or --batch N (default 100 files per batch)
 ```
 
-Extracts text for every non-skip, non-protected manifest row — PDF/DOCX/ODT with bkr's own
+Extracts text for every non-skip, non-protected manifest row — PDF/DOCX/ODT with khb's own
 bundled libraries, cached at `inbox/extracted/<sha256>.md` — and writes
 `inbox/catalog/in/NNNN.jsonl`, one `{path, sha256, ext, name, size, snippet}` row per file.
 
 Watch the summary for two non-failures. **Scanned PDFs** (pages, no text layer) are listed
 in `inbox/scanned.jsonl`; they need `bun add @hyzyla/pdfium sharp tesseract.js` and then
-`bkr catalog --ocr`. **Audio and video** are never extracted here at all — transcribe them
+`khb catalog --ocr`. **Audio and video** are never extracted here at all — transcribe them
 with Whisper per the ingest skill if the corpus needs them. Both are worth raising with the user
 before labeling, since neither is in the batches and both cost real time.
 
@@ -66,7 +66,7 @@ The output **file** is the product — the subagent's prose reply is discarded.
 ## 4. Merge
 
 ```
-bkr catalog-merge
+khb catalog-merge
 ```
 
 Folds `out/*.jsonl` into `inbox/catalog.jsonl`, deduping on `path+sha256`, and prints the
@@ -82,9 +82,9 @@ bundle-sized categories (a bundle is a domain, not a folder). Propose them to th
 per approved category:
 
 ```
-bkr new-bundle <name> "<scope>"
+khb new-bundle <name> "<scope>"
 ```
 
-Write `inbox/routing.yaml` from the facets, `bkr route`, then `bkr ingest <bundle>` per
+Write `inbox/routing.yaml` from the facets, `khb route`, then `khb ingest <bundle>` per
 bundle — which reuses the same extraction cache, so no PDF is converted twice. Continue with
-phase 2 curation in [ingest skill](../ingest/SKILL.md), and finish with `bkr lint`.
+phase 2 curation in [ingest skill](../ingest/SKILL.md), and finish with `khb lint`.

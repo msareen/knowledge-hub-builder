@@ -1,4 +1,4 @@
-// bkr lint — enforce skills/lint/SKILL.md (structural rules + OKF v0.1 conformance) across the hub
+// khb lint — enforce skills/lint/SKILL.md (structural rules + OKF v0.1 conformance) across the hub
 import { HUB, BUNDLES, listBundles, read, mdLinks, refTargets, join, existsSync } from "./lib/util";
 import { readdirSync, statSync } from "node:fs";
 import { dirname, relative } from "node:path";
@@ -8,7 +8,7 @@ const err = (rule: string, msg: string) => { errors++; console.error(`ERROR ${ru
 const warn = (rule: string, msg: string) => { warnings++; console.warn(`warn  ${rule}: ${msg}`); };
 
 const stripComments = (md: string) => md.replace(/<!--[\s\S]*?-->/g, "");
-const RESERVED = ["index.md", "log.md", "refs.md"]; // refs.md is BKR-reserved
+const RESERVED = ["index.md", "log.md", "refs.md"]; // refs.md is KHB-reserved
 const bundles = listBundles();
 const outerIndex = read(join(HUB, "outer.index.md"));
 

@@ -1,28 +1,44 @@
-// Package-side paths. Importing this must never require a hub to exist — `bkr init`
+// Package-side paths. Importing this must never require a hub to exist — `khb init`
 // runs before there is one. Hub-side paths live in util.ts.
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 
-/** Root of the installed @msareen/bkr package (NOT the user's hub). */
+/** Root of the installed @msareen/khb package (NOT the user's hub). */
 export const PKG = fileURLToPath(new URL("../..", import.meta.url));
 
 export const TEMPLATE = join(PKG, ".bundle_template");
 export const HUB_TEMPLATE = join(PKG, "templates", "hub");
 
-/** Marker file that identifies a hub root; `bkr` walks up from cwd looking for it. */
-export const MARKER = "bkr.json";
+/** Marker file that identifies a hub root; `khb` walks up from cwd looking for it. */
+export const MARKER = "khb.json";
 
 /**
- * Package-owned files copied into every hub by `bkr init` and refreshed by
- * `bkr upgrade`. These are the agent contract — the hub needs its own copies so an
- * agent opened on the hub folder can read them without knowing where bkr is installed.
+ * Marker names used by earlier versions. Still recognised when resolving a hub —
+ * otherwise a hub created before the rename becomes invisible to every command,
+ * `khb upgrade` included, and there is no way in from the CLI. `khb upgrade` renames
+ * the file it finds to MARKER, so each hub carries a legacy name at most once.
+ */
+export const LEGACY_MARKERS = ["bkr.json"];
+
+/**
+ * The marker file present in `dir`, if it is a hub at all. Lives here rather than in
+ * util.ts because `khb init` needs it *before* a hub exists, and importing util.ts
+ * resolves a hub or exits.
+ */
+export const markerIn = (dir: string): string | undefined =>
+  [MARKER, ...LEGACY_MARKERS].find((m) => existsSync(join(dir, m)));
+
+/**
+ * Package-owned files copied into every hub by `khb init` and refreshed by
+ * `khb upgrade`. These are the agent contract — the hub needs its own copies so an
+ * agent opened on the hub folder can read them without knowing where khb is installed.
  * Anything here is overwritten on upgrade, so users must not edit them.
  */
 export const MANAGED = ["AGENT.md", "CLAUDE.md", "SPEC.md", "skills"];
 
 /**
- * Files that used to be MANAGED and no longer are. `bkr upgrade` deletes them from the
+ * Files that used to be MANAGED and no longer are. `khb upgrade` deletes them from the
  * hub — a stale copy left behind states an older contract than the one now shipping,
  * and an agent has no way to tell which is current. Only ever list package-owned names.
  */

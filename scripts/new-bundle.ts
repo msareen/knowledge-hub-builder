@@ -1,11 +1,11 @@
-// bkr new-bundle <name> ["scope line"] — scaffold from .bundle_template + register.
+// khb new-bundle <name> ["scope line"] — scaffold from .bundle_template + register.
 // Template comes from the package; the bundle lands in the hub.
 import { cpSync, readFileSync, writeFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { HUB, BUNDLES, TEMPLATE, join } from "./lib/util";
 
 const [name, scope = "TODO scope"] = process.argv.slice(2);
 if (!name || !/^[a-z0-9][a-z0-9-]*$/.test(name)) {
-  console.error("Usage: bkr new-bundle <name> [scope]   (lowercase, digits, hyphens)");
+  console.error("Usage: khb new-bundle <name> [scope]   (lowercase, digits, hyphens)");
   process.exit(1);
 }
 const dest = join(BUNDLES, name);
@@ -31,4 +31,4 @@ lines.splice(lastTableRow + 1, 0, row);
 writeFileSync(outerPath, lines.join("\n"));
 
 console.log(`Created bundles/${name}/ and registered it in outer.index.md`);
-console.log("Next: set its scope line in outer.index.md, add sources to sources.yaml, run: bkr lint");
+console.log("Next: set its scope line in outer.index.md, add sources to sources.yaml, run: khb lint");

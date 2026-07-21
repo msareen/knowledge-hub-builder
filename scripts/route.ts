@@ -1,7 +1,7 @@
 // bun scripts/route.ts [routing.yaml] — apply phase-0 routing decisions.
 // Reads inbox/routing.yaml (written by the agent after reading the manifest) and merges
 // each bundle's assigned paths into its sources.yaml as a `files` source. Copies nothing:
-// acquisition still happens per-bundle via `bkr ingest <bundle>`.
+// acquisition still happens per-bundle via `khb ingest <bundle>`.
 import { parse, stringify } from "yaml";
 import { readFileSync, writeFileSync } from "node:fs";
 import { INBOX, BUNDLES, listBundles, join, existsSync } from "./lib/util";
@@ -22,7 +22,7 @@ const known = listBundles();
 const missing = Object.keys(routes).filter((b) => !known.includes(b));
 if (missing.length) {
   console.error(`Unknown bundle(s): ${missing.join(", ")}`);
-  console.error(`Create them first: ${missing.map((b) => `bkr new-bundle ${b} "<scope>"`).join(" && ")}`);
+  console.error(`Create them first: ${missing.map((b) => `khb new-bundle ${b} "<scope>"`).join(" && ")}`);
   process.exit(1);
 }
 
@@ -48,4 +48,4 @@ for (const [bundle, paths] of Object.entries(routes)) {
 
 const unrouted = routing.unrouted?.length ?? 0;
 if (unrouted) console.log(`\n${unrouted} path(s) left unrouted — revisit or drop them.`);
-console.log(`\nNext: ${Object.keys(routes).map((b) => `bkr ingest ${b}`).join(" && ")}`);
+console.log(`\nNext: ${Object.keys(routes).map((b) => `khb ingest ${b}`).join(" && ")}`);

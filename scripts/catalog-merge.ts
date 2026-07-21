@@ -21,7 +21,7 @@ const OUT_DIR = join(INBOX, "catalog", "out");
 
 if (!existsSync(OUT_DIR)) {
   console.error(`No label files: ${OUT_DIR}`);
-  console.error(`Build batches first:   bkr catalog`);
+  console.error(`Build batches first:   khb catalog`);
   process.exit(1);
 }
 
@@ -115,4 +115,4 @@ if (missing.length) {
 }
 
 console.log(`\nNext: collapse the topic tail into a small set of wide, bundle-sized categories,`);
-console.log(`  propose them, then: bkr new-bundle <name> "<scope>" && bkr route`);
+console.log(`  propose them, then: khb new-bundle <name> "<scope>" && khb route`);

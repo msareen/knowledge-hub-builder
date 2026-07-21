@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-BKR is agent-agnostic; this file is only a Claude-specific shim.
+KHB is agent-agnostic; this file is only a Claude-specific shim.
 
 All rules live in the common contract: @AGENT.md
 

@@ -20,7 +20,7 @@ const roots = args.filter(Boolean);
 
 if (!roots.length) {
   console.error(
-    "Usage: bkr triage <path...> [--out inbox/manifest.jsonl] [--error-log inbox/triage-errors.jsonl] [--skip-protected] [--verbose]",
+    "Usage: khb triage <path...> [--out inbox/manifest.jsonl] [--error-log inbox/triage-errors.jsonl] [--skip-protected] [--verbose]",
   );
   process.exit(1);
 }
@@ -187,5 +187,5 @@ if (protectedSeen) {
   );
 }
 if (errors.length) console.log(`  ${errors.length} error(s) logged to ${errorLog}`);
-console.log(`\nNext: bkr catalog   — extract text + build label batches so clustering isn't blind`);
-console.log(`  (already know the bundles? skip it: write inbox/routing.yaml, then bkr route)`);
+console.log(`\nNext: khb catalog   — extract text + build label batches so clustering isn't blind`);
+console.log(`  (already know the bundles? skip it: write inbox/routing.yaml, then khb route)`);

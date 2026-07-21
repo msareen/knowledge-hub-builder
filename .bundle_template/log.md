@@ -1,6 +1,6 @@
 # {{name}} — ingest log
 
-Ingestion ledger, one row per source. `bkr ingest` maintains `source`, `sha256`,
+Ingestion ledger, one row per source. `khb ingest` maintains `source`, `sha256`,
 `fetched` and `raw`; the agent fills `curated` during phase 2 of skills/ingest/SKILL.md.
 
 Empty `raw` = acquired-but-not-extracted (binary awaiting a CLI pass).

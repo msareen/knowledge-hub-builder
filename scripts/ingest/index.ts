@@ -17,7 +17,7 @@ export type Source =
 const argv = process.argv.slice(2);
 const force = argv.includes("--force");
 const bundle = argv.find((a) => !a.startsWith("--"));
-if (!bundle) { console.error("Usage: bkr ingest <bundle> [--force]"); process.exit(1); }
+if (!bundle) { console.error("Usage: khb ingest <bundle> [--force]"); process.exit(1); }
 
 const dir = bundleDir(bundle);
 const cfg = parse(read(join(dir, "sources.yaml"))) as { sources?: Source[] } | null;

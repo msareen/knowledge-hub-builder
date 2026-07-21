@@ -5,9 +5,9 @@
 // per-bundle. Nothing here ever writes into a bundle's `raw/` — `raw/` stays derived and
 // rebuildable (templates/hub/gitignore:2); callers copy out of the cache.
 //
-// Extraction is built in. bkr is tooling, so it carries the libraries: unpdf (pdf.js),
+// Extraction is built in. khb is tooling, so it carries the libraries: unpdf (pdf.js),
 // mammoth and fflate are pure JS with no native build and no PATH assumptions, which is
-// what lets `bkr catalog` work on a bare machine. External CLIs are a bonus, not a
+// what lets `khb catalog` work on a bare machine. External CLIs are a bonus, not a
 // requirement: if `pdftotext` or `pandoc` happen to be installed they get a second shot at
 // anything the library couldn't read, because poppler still wins on gnarly layouts.
 //
@@ -42,7 +42,7 @@ export function extractedBody(path: string): string {
 
 type LibResult = { text: string; pages?: number };
 
-/** Built-in, pure-JS extractors. Loaded lazily so `bkr init` never pays for them. */
+/** Built-in, pure-JS extractors. Loaded lazily so `khb init` never pays for them. */
 const LIBRARY: Record<string, (file: string) => Promise<LibResult>> = {
   ".pdf": async (file) => {
     const { extractText, getDocumentProxy } = await import("unpdf");
@@ -150,10 +150,10 @@ export async function ocrCached(path: string, hash: string, dpi = 216): Promise<
     sharp = (await import("sharp")).default;
     ({ createWorker } = await import("tesseract.js"));
   } catch {
-    // Resolution is relative to the bkr package, not the hub — say where, because for a
+    // Resolution is relative to the khb package, not the hub — say where, because for a
     // global install those are different directories and `bun add` in the hub is a no-op.
     const { PKG } = await import("./paths");
-    console.warn(`  OCR unavailable. Install it where bkr resolves modules from:`);
+    console.warn(`  OCR unavailable. Install it where khb resolves modules from:`);
     console.warn(`    cd ${PKG} && bun add @hyzyla/pdfium sharp tesseract.js`);
     return { status: "failed" };
   }

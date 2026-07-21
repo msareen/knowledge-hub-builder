@@ -36,7 +36,7 @@ const SNIPPET_CHARS = 4000;
 
 if (!existsSync(manifestPath)) {
   console.error(`No manifest: ${manifestPath}`);
-  console.error(`Index the corpus first:   bkr triage <path...>`);
+  console.error(`Index the corpus first:   khb triage <path...>`);
   process.exit(1);
 }
 
@@ -46,8 +46,8 @@ if (!existsSync(manifestPath)) {
 const staleOut = existsSync(OUT_DIR) ? readdirSync(OUT_DIR).filter((f) => f.endsWith(".jsonl")) : [];
 if (staleOut.length && !reset) {
   console.error(`${staleOut.length} unmerged label file(s) in ${OUT_DIR}`);
-  console.error(`Fold them into the catalog first:   bkr catalog-merge`);
-  console.error(`Or discard them:                    bkr catalog --reset`);
+  console.error(`Fold them into the catalog first:   khb catalog-merge`);
+  console.error(`Or discard them:                    khb catalog --reset`);
   process.exit(1);
 }
 
@@ -198,7 +198,7 @@ if (scanned.length) {
   const list = join(INBOX, "scanned.jsonl");
   writeFileSync(list, scanned.map((r) => JSON.stringify(r)).join("\n") + "\n");
   console.log(`\n  ${scanned.length} scanned PDF(s) — pages, but no text layer. Listed in ${list}`);
-  console.log(`  To read them:  bun add @hyzyla/pdfium sharp tesseract.js && bkr catalog --ocr`);
+  console.log(`  To read them:  bun add @hyzyla/pdfium sharp tesseract.js && khb catalog --ocr`);
   console.log(`  (OCR is slower and noisier than real text — that is why it is opt-in.)`);
 }
 
@@ -211,4 +211,4 @@ console.log(`\nbatches: ${batches.length} file(s) of up to ${batchSize} in ${IN_
 console.log(`  ${snippets.length} file(s) awaiting labels`);
 console.log(`\nNext: label the batches — see skills/catalog/SKILL.md`);
 console.log(`  one Agent(model: "haiku") call per batch file; each writes its own`);
-console.log(`  ${join(OUT_DIR, "NNNN.jsonl")}, then: bkr catalog-merge`);
+console.log(`  ${join(OUT_DIR, "NNNN.jsonl")}, then: khb catalog-merge`);

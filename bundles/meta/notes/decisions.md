@@ -5,6 +5,25 @@ description: Design decisions for BKR and their rationale.
 
 # Design decisions
 
+- **2026-07-22 — Renamed BKR → KHB throughout.** Supersedes the 2026-07-20 naming
+  decision below. CLI `bkr` → `khb`, package `@msareen/bkr` → `@msareen/khb`,
+  `$BKR_HUB` → `$KHB_HUB`, and the expansion is now *Knowledge Hub Builder*, matching
+  the repo. Reason: the repo, the marker and the CLI each answered to a different name.
+  Two strings deliberately did **not** change: `LEGACY_MARKERS` still contains
+  `bkr.json`, and `khb upgrade` still reads a `bkr` version field out of an old marker
+  (`before.khb ?? before.bkr`) — both are on-disk state in hubs we don't own, so
+  renaming them would strand those hubs rather than migrate them.
+- **2026-07-22 — README leads with a generated terminal GIF.** `images/demo.gif`, built
+  by `images/make-demo-gif.py` from output transcribed off a real session, so it can be
+  regenerated when the CLI changes and never drifts into showing invented output.
+  `images/` is outside the `files` allowlist, so the GIF never ships in the tarball.
+- **2026-07-22 — Hub marker renamed `bkr.json` → `khb.json`.** The marker is what
+  every command walks up the tree to find, so renaming it orphans hubs created by an
+  earlier version — including from `bkr upgrade`, which must resolve a hub before it can
+  fix anything. `LEGACY_MARKERS` in `scripts/lib/paths.ts` keeps the old name resolvable
+  and `bkr upgrade` renames the file it finds, so a hub carries a legacy name at most
+  once. `markerIn()` lives in `paths.ts`, not `util.ts`: `bkr init` needs it before a hub
+  exists, and importing `util.ts` resolves a hub or exits.
 - **2026-07-21 — Protocols live inside the skills, not beside them.** `query.md`,
   `ingest.md` and `lint.md` were folded wholesale into `skills/query/SKILL.md`,
   `skills/ingest/SKILL.md` and `skills/lint/SKILL.md`; the root copies are gone. The
