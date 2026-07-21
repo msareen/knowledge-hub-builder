@@ -32,7 +32,7 @@ export async function ingestFolder(
       continue;
     }
     const name = mdName(rel.replaceAll(/[\\/]/g, "__"));
-    const cached = extractedPath(hash); // filled by `bkr catalog`; keyed by content hash
+    const cached = extractedPath(hash); // filled by `khb extract`; keyed by content hash
     if (kind === "text") {
       const raw = writeRaw(rawDir, name, p, readFileSync(p, "utf8"));
       record(entries, { source: p, sha256: hash, fetched: new Date().toISOString(), raw });

@@ -1,4 +1,4 @@
-// Explicit file list → raw/files/. Produced by `bkr route` from a triage manifest,
+// Explicit file list → raw/files/. Produced by `khb triage`,
 // so the paths are already topic-assigned. Skips anything whose content hash is
 // unchanged and whose raw/ copy is still present.
 import { readFileSync, existsSync } from "node:fs";
@@ -31,7 +31,7 @@ export async function ingestFiles(
       const raw = writeRaw(rawDir, mdName(basename(p)), p, readFileSync(p, "utf8"));
       record(entries, { source: p, sha256: hash, fetched: new Date().toISOString(), raw });
     } else if (kind === "extractable") {
-      // `bkr catalog` may already have converted this exact content. The cache is keyed by
+      // `khb extract` may already have converted this exact content. The cache is keyed by
       // hash, so copy out of it rather than shelling out again — a copy, not a move, so
       // raw/ stays derived and the cache stays reusable by other bundles.
       const cached = extractedPath(hash);

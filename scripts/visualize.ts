@@ -1,4 +1,4 @@
-// bkr visualize — scan bundles + refs, emit visualizer/graph.html (self-contained)
+// khb visualize — scan bundles + refs, emit visualizer/graph.html (self-contained)
 import { HUB, BUNDLES, listBundles, read, refTargets, join, existsSync, mkdirSync } from "./lib/util";
 import { readdirSync, writeFileSync } from "node:fs";
 
@@ -38,14 +38,14 @@ for (const b of bundles) {
 
 const data = JSON.stringify({ nodes, edges });
 const html = `<!doctype html>
-<meta charset="utf-8"><title>BKR — bundle graph</title>
+<meta charset="utf-8"><title>KHB — bundle graph</title>
 <style>
   body{margin:0;font:14px system-ui;background:#111;color:#ddd}
   #hud{position:fixed;top:10px;left:12px}
   #hud b{color:#7cc}
   canvas{display:block}
 </style>
-<div id="hud"><b>BKR</b> — ${nodes.length} bundles, ${edges.length} refs. Drag nodes; hover for scope.</div>
+<div id="hud"><b>KHB</b> — ${nodes.length} bundles, ${edges.length} refs. Drag nodes; hover for scope.</div>
 <canvas id="c"></canvas>
 <script>
 const G=${data};

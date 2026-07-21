@@ -1,14 +1,16 @@
-// bkr lint — enforce lint.md (structural rules + OKF v0.1 conformance) across the hub
+// khb lint — enforce lint.md (structural rules + OKF v0.1 conformance) across the hub
 import { HUB, BUNDLES, listBundles, read, mdLinks, refTargets, join, existsSync } from "./lib/util";
 import { readdirSync, statSync } from "node:fs";
 import { dirname, relative } from "node:path";
+import { parse as parseYaml } from "yaml";
+import { makeResolver } from "./lib/concepts";
 
 let errors = 0, warnings = 0;
 const err = (rule: string, msg: string) => { errors++; console.error(`ERROR ${rule}: ${msg}`); };
 const warn = (rule: string, msg: string) => { warnings++; console.warn(`warn  ${rule}: ${msg}`); };
 
 const stripComments = (md: string) => md.replace(/<!--[\s\S]*?-->/g, "");
-const RESERVED = ["index.md", "log.md", "refs.md"]; // refs.md is BKR-reserved
+const RESERVED = ["index.md", "log.md", "refs.md"]; // refs.md is KHB-reserved
 const bundles = listBundles();
 const outerIndex = read(join(HUB, "outer.index.md"));
 
@@ -59,6 +61,10 @@ for (const b of bundles) {
   for (const c of concepts)
     if (!indexed.has(c)) err("L4", `${b}: ${c} not listed in any index.md`);
 
+  // One definition of "what a link points at", shared with the split machinery.
+  const resolveIn = makeResolver(dir);
+
+  const meta = new Map<string, { fm: any; body: string }>();
   for (const c of concepts) {
     const body = read(join(dir, c));
 
@@ -67,11 +73,55 @@ for (const b of bundles) {
     if (!fm) err("L9", `${b}: ${c} has no YAML frontmatter (OKF requires it)`);
     else if (!/^type:\s*\S/m.test(fm)) err("L9", `${b}: ${c} frontmatter missing required 'type'`);
 
+    let parsed: any = null;
+    if (fm) try { parsed = parseYaml(fm); } catch { /* L9 shape is checked above */ }
+    meta.set(c, { fm: parsed, body });
+
     // L6 no cross-bundle links from concept docs
     for (const l of mdLinks(stripComments(body))) {
-      if (/(^|\/)bundles\//.test(l.target) || l.target.startsWith("../../"))
+      if (/(^|\/)bundles\//.test(l.target) || l.target.startsWith("../../")) {
         err("L6", `${b}: ${c} links into another bundle (${l.target}) — use refs.md`);
+        continue;
+      }
+      // L12 in-bundle links resolve. The usual cause is a doc that left the bundle
+      // (see `khb split --only-tagged`); the link must become prose + a refs.md pointer.
+      const r = resolveIn(c, l.target);
+      if (r && !existsSync(join(dir, r)))
+        warn("L12", `${b}: ${c} links to missing ${r} — left the bundle? rewrite it as prose + refs.md`);
     }
+  }
+
+  // L10/L11 derived answers (query.md fold 2): provenance resolves, and doesn't go stale
+  const day = (t: number) => new Date(t).toISOString().slice(0, 10);
+  for (const [c, { fm, body }] of meta) {
+    const df = fm?.derived_from;
+    if (df == null) continue;
+    const sources = (Array.isArray(df) ? df : [df]).map(String).filter(Boolean);
+    if (!sources.length) continue;
+
+    const ts = Date.parse(String(fm?.timestamp ?? ""));
+    if (Number.isNaN(ts))
+      warn("L11", `${b}: ${c} has derived_from but no parsable 'timestamp' — cannot check staleness`);
+
+    const linked = new Set(
+      mdLinks(stripComments(body)).map((l) => resolveIn(c, l.target)).filter(Boolean) as string[],
+    );
+    let anyLinked = false;
+
+    for (const s of sources) {
+      const target = resolveIn(c, s);
+      if (!target || !existsSync(join(dir, target))) {
+        warn("L10", `${b}: ${c} derived_from '${s}' does not resolve inside the bundle`);
+        continue;
+      }
+      if (linked.has(target)) anyLinked = true;
+      const sts = Date.parse(String(meta.get(target)?.fm?.timestamp ?? ""));
+      if (!Number.isNaN(ts) && !Number.isNaN(sts) && sts > ts)
+        warn("L11", `${b}: ${c} may be stale — source ${target} is newer (${day(sts)} > ${day(ts)})`);
+    }
+
+    if (!anyLinked)
+      warn("L10", `${b}: ${c} links to none of its derived_from sources — orphaned derivation`);
   }
 
   // L7 ref targets exist

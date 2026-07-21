@@ -1,11 +1,11 @@
 # AGENT.md — entry point for any agent
 
-You are inside a **BKR hub** — a bundle-of-bundles knowledge system. Full design: `SPEC.md`.
+You are inside a **KHB hub** — a bundle-of-bundles knowledge system. Full design: `SPEC.md`.
 
-The hub is this folder: `bkr.json`, `outer.index.md`, and `bundles/`. The knowledge is
-here; the `bkr` tooling is installed separately and holds none of it. This file and its
+The hub is this folder: `khb.json`, `outer.index.md`, and `bundles/`. The knowledge is
+here; the `khb` tooling is installed separately and holds none of it. This file and its
 siblings (`SPEC.md`, `query.md`, `ingest.md`, `lint.md`, `skills/`) are package-owned
-copies refreshed by `bkr upgrade` — never edit them, edit bundle content instead.
+copies refreshed by `khb upgrade` — never edit them, edit bundle content instead.
 
 ## How to navigate
 
@@ -13,6 +13,9 @@ copies refreshed by `bkr upgrade` — never edit them, edit bundle content inste
 2. If that doesn't settle it, escalate per `query.md`: grep the bundle `index.md` files,
    then concept front matter, then **ask the user** which bundle. Never guess silently.
 3. Enter the bundle via its `index.md`, then read only the concepts/notes it routes you to.
+4. After answering, run fold 2 of `query.md`: a durable answer — a comparison, an
+   analysis, a connection — gets filed back as a concept doc (usually by rebuilding the
+   existing doc that owns the topic), proposed to the user first. Queries write too.
 
 This file is the single common contract — bundles carry no per-bundle agent rules.
 
@@ -48,33 +51,39 @@ This file is the single common contract — bundles carry no per-bundle agent ru
   gets a dated line in `bundles/meta/notes/decisions.md`.
 - **`raw/` is not canonical.** It's ingested source material awaiting curation. Cite
   concept docs; use `raw/` only when curating.
-- **New bundle:** `bkr new-bundle <name>` — never hand-copy `_template`.
-- After structural edits run `bkr lint` and fix what it reports.
+- **New bundle:** `khb new-bundle <name>` — never hand-copy `_template`.
+- After structural edits run `khb lint` and fix what it reports.
 
 ## Tooling
 
-Run `bkr` from anywhere inside the hub — it finds the hub by walking up to `bkr.json`.
-From outside, pass `--hub <dir>` or set `$BKR_HUB`.
+Run `khb` from anywhere inside the hub — it finds the hub by walking up to `khb.json`.
+From outside, pass `--hub <dir>` or set `$KHB_HUB`.
 
 | Command | Purpose |
 |---|---|
-| `bkr lint` | validate structure against `lint.md` |
-| `bkr upgrade` | refresh this hub's package-owned contract docs |
-| `bkr visualize` | regenerate `visualizer/graph.html` |
-| `bkr new-bundle <name>` | scaffold + register a bundle |
-| `bkr triage <path...>` | index a bulk corpus in place (no copies) → `inbox/manifest.jsonl` |
-| `bkr catalog` | extract text + build label batches → `inbox/catalog/in/` |
-| `bkr catalog-merge` | fold labeled batches → `inbox/catalog.jsonl` |
-| `bkr route` | apply `inbox/routing.yaml` → `files` sources in each bundle |
-| `bkr ingest <bundle>` | pull sources from `sources.yaml`; maintains the `log.md` ledger |
-| `bkr export <bundle> [dest]` | standalone copy: bundle + common patterns, shareable alone |
+| `khb lint` | validate structure against `lint.md` |
+| `khb upgrade` | refresh this hub's package-owned contract docs |
+| `khb visualize` | regenerate `visualizer/graph.html` |
+| `khb new-bundle <name>` | scaffold + register a bundle |
+| `khb triage <path...>` | index a bulk corpus in place (no copies) → primary bundle |
+| `khb extract [--ocr]` | pre-convert a triaged corpus into the extraction cache |
+| `khb recatalog [bundle]` | tag + link-graph census of a *curated* bundle → `inbox/recatalog/` |
+| `khb split <from> <new> --tag T` | promote a tag into its own bundle, link closure intact |
+| `khb ingest <bundle>` | pull sources from `sources.yaml`; maintains the `log.md` ledger |
+| `khb export <bundle> [dest]` | standalone copy: bundle + common patterns, shareable alone |
 
 ## Ingestion
 
-Follow `ingest.md`: phase 0 triage a bulk corpus into a manifest when the bundle set
-isn't known yet (and catalog it if filenames alone won't tell you the bundles),
-phase 1 acquire into `raw/` (scripted for folder/files/web, MCP/CLI for
-the rest, provenance header always), phase 2 curate `raw/` into concept docs and
+Follow `ingest.md`: phase 0 triage a bulk corpus — by default it lands whole in the hub's
+**primary bundle** (`khb.json` → `primary`, normally `main`), and separation comes from
+concept `type`/`tags` at curation, not from bundles invented up front. `--to <bundle>` is
+the only up-front alternative, for a boundary that is real before you have read anything —
+a client, a confidentiality level. A tag earns its own bundle later, via
+`khb recatalog` (census: what each tag would cost to split) and `khb split` (the move).
+Splits go by **link closure**, never by tag alone — a doc drags whatever it links to, and
+whatever that links to; `khb split` handles this, `--only-tagged` overrides it and leaves
+dangling links for you to rewrite. Phase 1 acquire into `raw/` (scripted for folder/files/web,
+MCP/CLI for the rest, provenance header always), phase 2 curate `raw/` into concept docs and
 register them in the bundle's `index.md`. Each bundle's `log.md` is the durable ledger
 of what has been acquired and curated — keep its `curated` column current.
 

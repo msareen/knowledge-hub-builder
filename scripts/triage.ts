@@ -1,10 +1,14 @@
-// bun scripts/triage.ts <path...> [--out <file>] [--error-log <file>] [--skip-protected] [--verbose]
+// bun scripts/triage.ts <path...> [--to <bundle>] [--out <file>]
+//                                 [--error-log <file>] [--skip-protected] [--verbose]
 // Phase 0 of ingest.md. Indexes a corpus WITHOUT copying it: one JSONL row per file
-// (path, size, hash, head snippet). The agent reads the manifest to decide which
-// bundles exist and what routes where; only then does anything get acquired.
+// (path, size, hash, head snippet), then routes it into the primary bundle. That is the
+// only path: a corpus always lands somewhere, because an indexed-but-unrouted manifest
+// helps nobody. `--to` picks a different bundle when one is obviously required (a client,
+// a confidentiality boundary); carving one bundle into several happens later, after
+// curation, with `khb recatalog` and `khb split`.
 // Output is gitignored scratch.
 import { readdirSync, statSync, writeFileSync, mkdirSync, openSync, readSync, closeSync } from "node:fs";
-import { INBOX, join, basename, sha256File, existsSync } from "./lib/util";
+import { INBOX, BUNDLES, join, basename, sha256File, existsSync, primaryBundle, addFilesSource } from "./lib/util";
 import { kindOf, extOf, type Kind } from "./ingest/exts";
 import { PROTECTABLE, detectPasswordProtected } from "./ingest/protect";
 import { takeFlag, takeValue } from "./lib/args";
@@ -14,14 +18,25 @@ const args = process.argv.slice(2);
 
 const verbose = takeFlag(args, "--verbose");
 const skipProtected = takeFlag(args, "--skip-protected");
+const to = takeValue(args, "--to");
 const out = takeValue(args, "--out") ?? join(INBOX, "manifest.jsonl");
 const errorLog = takeValue(args, "--error-log") ?? join(INBOX, "triage-errors.jsonl");
 const roots = args.filter(Boolean);
 
 if (!roots.length) {
   console.error(
-    "Usage: bkr triage <path...> [--out inbox/manifest.jsonl] [--error-log inbox/triage-errors.jsonl] [--skip-protected] [--verbose]",
+    "Usage: khb triage <path...> [--to <bundle>] [--out inbox/manifest.jsonl]\n" +
+      "                    [--error-log inbox/triage-errors.jsonl] [--skip-protected] [--verbose]",
   );
+  process.exit(1);
+}
+
+// Resolve the landing bundle before the walk, so a typo fails in a second rather than
+// after hashing a multi-GB corpus.
+const target = to ?? primaryBundle();
+if (target && !existsSync(join(BUNDLES, target))) {
+  console.error(`No such bundle: ${target}`);
+  console.error(`Create it first:   khb new-bundle ${target} "<scope>"`);
   process.exit(1);
 }
 
@@ -165,7 +180,7 @@ if (errors.length) {
   writeFileSync(errorLog, errors.map((e) => JSON.stringify(e)).join("\n") + "\n");
 }
 
-// Summary — what the agent needs to size the routing job before reading the manifest.
+// Summary — the census that tells you whether this corpus is worth ingesting at all.
 const byExt = new Map<string, number>();
 for (const r of rows) byExt.set(r.ext || "(none)", (byExt.get(r.ext || "(none)") ?? 0) + 1);
 const dupes = [...byHash.values()].filter((v) => v.length > 1);
@@ -187,5 +202,19 @@ if (protectedSeen) {
   );
 }
 if (errors.length) console.log(`  ${errors.length} error(s) logged to ${errorLog}`);
-console.log(`\nNext: bkr catalog   — extract text + build label batches so clustering isn't blind`);
-console.log(`  (already know the bundles? skip it: write inbox/routing.yaml, then bkr route)`);
+
+// Route it. Only files worth acquiring — `skip` kinds are binaries/media no extractor reads.
+if (!target) {
+  console.log(`\nIndexed, but nowhere to route: this hub has no primary bundle.`);
+  console.log(`  Create one and re-run:   khb new-bundle main "<scope>"   (or pass --to <bundle>)`);
+} else if (!rows.length) {
+  console.log(`\nNothing to route.`);
+} else {
+  const routable = rows.filter((r) => r.kind !== "skip").map((r) => r.path);
+  const { added, total } = addFilesSource(target, routable);
+  console.log(`\n${target}: +${added} path(s) (${total} total) in sources.yaml`);
+  const skipped = rows.length - routable.length;
+  if (skipped) console.log(`  ${skipped} unreadable-format file(s) left out — add them by hand if they matter`);
+  console.log(`\nNext: khb ingest ${target}   — acquire them into raw/, then curate (ingest.md phase 2)`);
+  console.log(`  Tag concepts as you curate; a tag that outgrows the bundle earns its own via khb new-bundle.`);
+}

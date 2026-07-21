@@ -80,3 +80,57 @@ description: Design decisions for BKR and their rationale.
   export, visualize, folder/web ingest.
 - **2026-07-18 — Ingest external sources.** Folder/Confluence/ADO/web pulled into
   `raw/` with provenance instead of living inside the wiki.
+- **2026-07-21 — Query is two-fold; answers file back.** Fold 1 answers, fold 2 decides
+  whether the answer is itself knowledge and writes it into the owning bundle as a concept
+  doc with `derived_from` provenance — preferring to *rebuild* the doc that already owns
+  the topic over adding a near-duplicate. Reason: a comparison or connection synthesized in
+  chat is worth as much as an ingested source; without fold 2 the hub only compounds at the
+  rate you feed it. Proposed to the user before writing, since revisions overwrite curated
+  knowledge. Protocol in `query.md`.
+- **2026-07-21 — Lint checks derived answers (L10/L11).** Docs filed back by query fold 2
+  carry `derived_from`; lint verifies the sources resolve inside the bundle, that the doc
+  links at least one of them inline, and warns when a source's `timestamp` is newer than
+  the derived doc's — the synthesis may have been superseded. Warnings, not errors: a stale
+  derivation is still knowledge, it just needs rechecking. Reason: without it, fold 2 grows
+  a layer of second-hand docs that silently drift from the docs they summarize.
+- **2026-07-21 — One primary bundle; splits are earned.** `bkr init` now scaffolds
+  `bundles/main/` and records it as `primary` in `bkr.json`; `bkr triage <path...>` routes
+  the corpus straight into it. Separation comes from concept `type`/`tags` at curation, and
+  a tag graduates to a bundle via `bkr new-bundle` once it has the docs to justify one.
+  Reason: phase 0 demanded a bundle set *before* anyone had read the material — the one
+  moment you are least equipped to name bundles — and blocked every first ingest on
+  clustering. The catalog → `routing.yaml` → `bkr route` flow survives behind
+  `bkr triage --no-route` for corpora that must be split up front (separate clients,
+  confidentiality, parallel agents). `--to <bundle>` is the single-non-primary middle ground.
+- **2026-07-21 — Recataloging: the split happens after curation, by link closure.**
+  `bkr recatalog [bundle]` reads a curated bundle's front matter + link graph into
+  `inbox/recatalog/<bundle>.json` and prints a tag census; `bkr split <from> <new> --tag T`
+  performs the move (docs, both indexes, refs both ways, log rows + raw/ + sources paths),
+  dry-run by default. Reason: bundles are best chosen from knowledge, not filenames, so the
+  cataloging pass belongs *after* ingestion as well as before. The load-bearing rule is that
+  the movable unit is the link-connected component, not the tag: a concept doc without the
+  docs it links to is a fragment, so a tag whose closure exceeds itself is a cross-cutting
+  thread and must stay a tag. Moving whole components means no link can break; `--only-tagged`
+  overrides it and the cut links surface as lint L12. Prose is never rewritten mechanically —
+  that is curation.
+- **2026-07-21 — Lint L12: in-bundle links must resolve (warning).** A doc that leaves the
+  bundle leaves its inbound links pointing at nothing, and those are not L6 errors because
+  they no longer name a bundle at all. Found by testing `bkr split --only-tagged`, which
+  claimed lint would catch the cut links when nothing did.
+- **2026-07-21 — Dropped the pre-ingest cluster flow.** Deleted `bkr catalog-merge`,
+  `bkr route`, `inbox/routing.yaml`, `bkr triage --no-route` and `skills/catalog`;
+  `bkr catalog` lost its labeling half and became `bkr extract` (pre-convert a triaged
+  corpus into the hash-keyed cache, report what is unreadable, opt-in OCR). Reason: that
+  flow picked the bundle set from machine-labeled 4KB snippets *before* curation — the
+  weakest evidence available for the most consequential decision in a hub — and it now
+  duplicates a better mechanism. Corpora land in the primary bundle (`bkr triage`, or
+  `--to` for a boundary that already exists), and bundles are carved out afterwards from
+  curated docs and their link graph (`bkr recatalog` / `bkr split`). One way in, one way to
+  split. `auto-catalog-plan.md` keeps the rationale record.
+- **2026-07-21 — Renamed BKR → KHB (`@msareen/khb`, CLI `khb`).** The old expansion was
+  *Bundled Knowledge Routing*; routing-as-the-headline no longer describes the tool, so the
+  name is now just what it always did: a **knowledge hub builder**. Package, `bin`, hub
+  marker (`bkr.json` → `khb.json`), env var (`$KHB_HUB`) and all docs moved. Hubs created
+  as BKR still resolve — both markers are accepted, and `khb upgrade` renames the file in
+  place, preserving `created` and `primary`. Entries above this line predate the rename and
+  use the current command names; the 2026-07-20 naming entry is left as written.

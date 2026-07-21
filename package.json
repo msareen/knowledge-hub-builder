@@ -1,7 +1,7 @@
 {
-  "name": "@msareen/bkr",
+  "name": "@msareen/khb",
   "version": "0.1.0",
-  "description": "Bundled Knowledge Routing — a knowledge hub builder",
+  "description": "KHB — a knowledge hub builder",
   "keywords": ["knowledge-base", "okf", "agent", "wiki", "bundles", "claude", "rag"],
   "license": "MIT",
   "repository": {
@@ -11,7 +11,7 @@
   "homepage": "https://github.com/msareen/bundle-knowledge-router#readme",
   "type": "module",
   "bin": {
-    "bkr": "./scripts/cli.ts"
+    "khb": "./scripts/cli.ts"
   },
   "files": [
     "scripts/",
@@ -33,15 +33,15 @@
     "access": "public"
   },
   "scripts": {
-    "bkr": "bun scripts/cli.ts",
+    "khb": "bun scripts/cli.ts",
     "lint": "bun scripts/cli.ts lint",
     "visualize": "bun scripts/cli.ts visualize",
     "new-bundle": "bun scripts/cli.ts new-bundle",
     "export": "bun scripts/cli.ts export",
     "triage": "bun scripts/cli.ts triage",
-    "catalog": "bun scripts/cli.ts catalog",
-    "catalog-merge": "bun scripts/cli.ts catalog-merge",
-    "route": "bun scripts/cli.ts route",
+    "extract": "bun scripts/cli.ts extract",
+    "recatalog": "bun scripts/cli.ts recatalog",
+    "split": "bun scripts/cli.ts split",
     "ingest": "bun scripts/cli.ts ingest"
   },
   "dependencies": {
