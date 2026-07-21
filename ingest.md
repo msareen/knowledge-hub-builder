@@ -97,10 +97,51 @@ lost between runs.
 | explicit file list | scripted: `files` source, usually written by `bkr route` after triage |
 | Confluence | agent: MCP server or CLI → save pages to `raw/confluence/` |
 | Azure DevOps | agent: MCP/CLI → wiki pages / work items to `raw/ado/` |
-| PDF | scripted if `bkr catalog` already cached it; else agent: `pdftotext -layout <file> -` |
-| DOCX | scripted if `bkr catalog` already cached it; else agent: `pandoc <file> -t gfm` |
-| Audio | agent: `whisper <file> --model base --output_format txt` → wrap as md |
+| PDF, DOCX, ODT | scripted: `bkr` extracts these itself — no system tools to install |
+| scanned PDF | scripted but opt-in: `bkr catalog --ocr` (see below) |
+| Audio, video | agent: transcribe with Whisper (see below), then wrap as md |
 | Source code repo | do NOT copy — record location in `sources.yaml`, read in place |
+
+### Extraction: what `bkr` does and doesn't do for you
+
+`bkr` carries its own extractors (`unpdf`, `mammoth`, `fflate` — all pure JS), so PDF, DOCX
+and ODT work on a bare machine with no `pdftotext` or `pandoc` install. If those CLIs *are*
+on PATH they get a second attempt at anything the libraries can't read, since poppler still
+wins on awkward layouts. Everything lands in the hash-keyed cache at
+`inbox/extracted/<sha256>.md`, and `bkr ingest` copies out of it, so nothing converts twice.
+
+Two cases stay explicit, because both cost real time and produce lower-fidelity text than
+direct extraction:
+
+**Scanned PDFs.** A PDF with pages but no text layer is reported as `scanned`, not `failed`
+— the file is readable, just not by a text extractor — and listed in `inbox/scanned.jsonl`.
+To actually read them:
+
+```
+bun add @hyzyla/pdfium sharp tesseract.js    # ~75 MB, WASM, no system binary
+bkr catalog --ocr
+```
+
+Install them where `bkr` resolves modules from, which for a global install is the bkr
+package directory, not your hub — run `bkr catalog --ocr` once and it prints the exact
+`cd … && bun add …` to use. First run also downloads ~5 MB of language data.
+
+OCR text is noisier than real text, so the cache header records `tool: tesseract.js` —
+treat it with more suspicion during curation, and quote it more carefully.
+
+**Audio and video.** Not extracted by `bkr` at any setting: transcription is minutes of
+compute per file, so it stays an agent-run pass you choose to make.
+
+```
+pip install -U openai-whisper                       # the reference implementation
+whisper <file> --model base --output_format txt     # writes <file>.txt next to the source
+```
+
+`faster-whisper` (also pip) is a drop-in with far lower runtime if the corpus is large, and
+OpenAI's hosted transcription API is an option when local compute isn't. Whichever you use,
+write the result into `raw/<type>/<file>.md` with the usual provenance header and note the
+model in it — transcripts are lossy, and later curation needs to know which one produced it.
+Video is the same job: Whisper reads the audio track directly, no separate demux step.
 
 ## Phase 2 — curate `raw/` → concept docs (agent)
 

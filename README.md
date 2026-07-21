@@ -37,8 +37,10 @@ bundles stay readable, parallelizable, and individually exportable.
 
 ## Setup
 
-Requires [Bun](https://bun.sh). Optional extractors, only if you ingest those formats:
-`pdftotext` (poppler), `pandoc`, `whisper`.
+Requires [Bun](https://bun.sh). Nothing else: PDF, DOCX and ODT extraction is built in.
+Optional, only for the formats that genuinely need more: `bun add @hyzyla/pdfium sharp
+tesseract.js` for OCR of scanned PDFs, and `whisper` for audio/video transcription.
+`pdftotext` (poppler) / `pandoc` are used automatically if present, but never required.
 
 Install the tooling once:
 
@@ -153,8 +155,8 @@ the `ingest` skill fires, and the agent runs the command on your behalf:
   │                       │                                ├────────────────────▶│
   │                       │◀───────────────────────────────┤ done + log summary  │
   │                       │                                │                     │
-  │                       │  (binaries only) runs           │                     │
-  │                       │  pdftotext/pandoc/whisper ──────┼────────────────────▶│
+  │                       │  (scans + audio only) runs      │                     │
+  │                       │  bkr catalog --ocr / whisper ───┼────────────────────▶│
   │                       │                                │                     │
   │                       │  curates raw/ → concept docs ───┼────────────────────▶│
   │                       │  updates index.md + log.md      │                     │
@@ -165,8 +167,10 @@ the `ingest` skill fires, and the agent runs the command on your behalf:
 ```
 
 Text files land in `bundles/finances/raw/` with a `source:`/`fetched:` provenance header.
-Binaries (PDF, DOCX, audio) are *recorded but not extracted* by `bkr ingest` itself —
-the agent runs `pdftotext`/`pandoc`/`whisper` on those, per the table in [ingest.md](ingest.md).
+PDF, DOCX and ODT are extracted by `bkr` itself and reused from the hash-keyed cache that
+`bkr catalog` fills, so nothing converts twice. Only the expensive formats stay explicit:
+scanned PDFs need `bkr catalog --ocr`, audio and video need a Whisper pass the agent runs —
+see the table in [ingest.md](ingest.md).
 
 Every acquisition is written to `bundles/finances/log.md`, the ingest ledger. Re-running
 skips sources whose content hash hasn't changed (`--force` overrides). `raw/` is

@@ -176,15 +176,40 @@ improves, from a blind manifest to facets.
 - `ingest.md` — insert the catalog step into Phase 0 between triage and clustering, and note
   that `bkr ingest` now transparently reuses the extraction cache.
 
-## Known gaps (not fixed here)
+## Known gaps
 
-- `.xlsx` and `.pptx` are absent from `EXTRACTABLE` in `scripts/ingest/exts.ts`, so they
-  classify as `skip` and never reach cataloging — 117 files in the real test corpus. The
-  extractor map is a table, so adding them later is a config entry, not a redesign.
-- Audio stays manual. `whisper` writes to files rather than stdout, which fits the
-  content-addressed cache poorly; `ingest.md` already documents it as agent-run CLI work.
+- ~~`.odt` is not extractable~~ — **fixed**, see *Extraction moved in-process* below.
+- `.xlsx` and `.pptx` are still absent from `EXTRACTABLE` in `scripts/ingest/exts.ts` — 117
+  files in the real test corpus. Both are zip+XML, exactly the shape `fflate` already
+  handles for `.odt`, so this is now a small addition rather than a new dependency.
+- Audio and video stay manual: transcription is minutes of compute per file, so it is an
+  explicit Whisper pass in `ingest.md`, not a silent extractor.
 - Much of a real corpus is not knowledge at all — photos, `.vcf` contact dumps, browser cache.
   Pruning the manifest between triage and catalog is expected practice, not an edge case.
+
+## Extraction moved in-process (after the first real ingest)
+
+The first real corpus run found the design's biggest wrong assumption: it treated
+`pdftotext`/`pandoc` as ambient. They weren't installed, so **0 of 8 extractable files were
+read**, and the ingest was unblocked by hand-installing five Python packages plus a
+Tesseract binary. bkr is tooling, so it should carry that weight rather than push it onto
+the user.
+
+- **PDF/DOCX/ODT are now extracted by bkr itself** — `unpdf` (MIT), `mammoth` (BSD-2),
+  `fflate` (MIT). ~5 MB, pure JS, no native build, no PATH assumption. `pdftotext`/`pandoc`
+  are kept as an automatic *second* attempt when installed, since poppler still wins on
+  awkward layouts, but nothing requires them.
+- **Scanned PDFs get their own status.** `unpdf` returns `totalPages` alongside the text, so
+  pages-but-no-characters is detectable for free and reported as `scanned`, never `failed`,
+  with the list written to `inbox/scanned.jsonl`. Conflating "no extractor" with "no text
+  layer" is what sent the first ingest hunting by hand.
+- **OCR is opt-in**, behind `bkr catalog --ocr`: `@hyzyla/pdfium` + `sharp` +
+  `tesseract.js`, all WASM, no system binary — but ~75 MB plus a one-time language-data
+  download, and seconds per page. The cache header records `tool: tesseract.js` so curation
+  knows the text is noisier than the rest.
+- **`mupdf` was rejected on licensing.** It is the obvious single package for both text and
+  rendering, and it is AGPL-3.0-or-later; bkr is MIT and published to npm. pdfium is BSD,
+  pdf.js and tesseract.js are Apache-2.0.
 
 ## Verification
 

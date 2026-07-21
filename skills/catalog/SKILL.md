@@ -19,9 +19,15 @@ session. No MCP, no API keys, no model calls inside `bkr`.
 bkr catalog                # or --batch N (default 100 files per batch)
 ```
 
-Extracts text for every non-skip, non-protected manifest row — PDFs/DOCX via
-`pdftotext`/`pandoc`, cached at `inbox/extracted/<sha256>.md` — and writes
+Extracts text for every non-skip, non-protected manifest row — PDF/DOCX/ODT with bkr's own
+bundled libraries, cached at `inbox/extracted/<sha256>.md` — and writes
 `inbox/catalog/in/NNNN.jsonl`, one `{path, sha256, ext, name, size, snippet}` row per file.
+
+Watch the summary for two non-failures. **Scanned PDFs** (pages, no text layer) are listed
+in `inbox/scanned.jsonl`; they need `bun add @hyzyla/pdfium sharp tesseract.js` and then
+`bkr catalog --ocr`. **Audio and video** are never extracted here at all — transcribe them
+with Whisper per `ingest.md` if the corpus needs them. Both are worth raising with the user
+before labeling, since neither is in the batches and both cost real time.
 
 Rows already in `inbox/catalog.jsonl` are skipped, so re-running after narrowing scope is
 cheap. **Prune the manifest first** if triage swept up junk (browser caches, photo dumps,
