@@ -10,7 +10,9 @@ copies refreshed by `bkr upgrade` — never edit them, edit bundle content inste
 ## How to navigate
 
 1. Start at `outer.index.md`. Pick exactly one bundle for the question. Do not browse.
-2. Enter the bundle via its `index.md`, then read only the concepts/notes it routes you to.
+2. If that doesn't settle it, escalate per `query.md`: grep the bundle `index.md` files,
+   then concept front matter, then **ask the user** which bundle. Never guess silently.
+3. Enter the bundle via its `index.md`, then read only the concepts/notes it routes you to.
 
 This file is the single common contract — bundles carry no per-bundle agent rules.
 
