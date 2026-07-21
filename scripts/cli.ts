@@ -9,6 +9,8 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; help: string }> =
   "new-bundle": { load: () => import("./new-bundle"), help: 'bkr new-bundle <name> ["scope"]  scaffold a bundle + register it' },
   ingest: { load: () => import("./ingest/index"), help: "bkr ingest <bundle> [--force]   acquire declared sources → raw/" },
   triage: { load: () => import("./triage"), help: "bkr triage <path...>            index a corpus in place (copies nothing)" },
+  catalog: { load: () => import("./catalog"), help: "bkr catalog [--batch N]         extract text → label batches for a model" },
+  "catalog-merge": { load: () => import("./catalog-merge"), help: "bkr catalog-merge               fold labeled batches → inbox/catalog.jsonl" },
   route: { load: () => import("./route"), help: "bkr route                       apply inbox/routing.yaml → sources.yaml" },
   lint: { load: () => import("./lint"), help: "bkr lint                        validate the hub against lint.md" },
   visualize: { load: () => import("./visualize"), help: "bkr visualize                   regenerate visualizer/graph.html" },

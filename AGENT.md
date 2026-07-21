@@ -61,6 +61,8 @@ From outside, pass `--hub <dir>` or set `$BKR_HUB`.
 | `bkr visualize` | regenerate `visualizer/graph.html` |
 | `bkr new-bundle <name>` | scaffold + register a bundle |
 | `bkr triage <path...>` | index a bulk corpus in place (no copies) → `inbox/manifest.jsonl` |
+| `bkr catalog` | extract text + build label batches → `inbox/catalog/in/` |
+| `bkr catalog-merge` | fold labeled batches → `inbox/catalog.jsonl` |
 | `bkr route` | apply `inbox/routing.yaml` → `files` sources in each bundle |
 | `bkr ingest <bundle>` | pull sources from `sources.yaml`; maintains the `log.md` ledger |
 | `bkr export <bundle> [dest]` | standalone copy: bundle + common patterns, shareable alone |
@@ -68,7 +70,8 @@ From outside, pass `--hub <dir>` or set `$BKR_HUB`.
 ## Ingestion
 
 Follow `ingest.md`: phase 0 triage a bulk corpus into a manifest when the bundle set
-isn't known yet, phase 1 acquire into `raw/` (scripted for folder/files/web, MCP/CLI for
+isn't known yet (and catalog it if filenames alone won't tell you the bundles),
+phase 1 acquire into `raw/` (scripted for folder/files/web, MCP/CLI for
 the rest, provenance header always), phase 2 curate `raw/` into concept docs and
 register them in the bundle's `index.md`. Each bundle's `log.md` is the durable ledger
 of what has been acquired and curated — keep its `curated` column current.

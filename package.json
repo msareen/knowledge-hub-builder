@@ -39,6 +39,8 @@
     "new-bundle": "bun scripts/cli.ts new-bundle",
     "export": "bun scripts/cli.ts export",
     "triage": "bun scripts/cli.ts triage",
+    "catalog": "bun scripts/cli.ts catalog",
+    "catalog-merge": "bun scripts/cli.ts catalog-merge",
     "route": "bun scripts/cli.ts route",
     "ingest": "bun scripts/cli.ts ingest"
   },

@@ -16,9 +16,28 @@ bkr triage <path...>     # index in place: path, size, sha256, head snippet → 
                              # copies 0 bytes; reports duplicate groups by content hash
 ```
 
-Then, as the agent: read `inbox/manifest.jsonl` (the `head` snippet is enough to
-classify — do not open the corpus), cluster into topics, propose the bundle set to the
-user, `bkr new-bundle` each approved one, and write the assignment:
+Triage is free — `stat` + hash + a 1KB peek, no external tools — so it is safe to point at
+an unknown multi-GB corpus. Read the manifest and **prune what isn't knowledge** (browser
+caches, photo dumps, contact exports) before spending anything on the next step.
+
+### Catalog (optional, but the manifest alone is thin)
+
+The `head` snippet is only populated for text files, so every PDF and DOCX — exactly the
+formats most likely to carry content — reaches clustering blank. `bkr catalog` fixes that:
+
+```
+bkr catalog              # extract text (cached by hash) → inbox/catalog/in/NNNN.jsonl
+                             # then label the batches with cheap subagents
+bkr catalog-merge        # → inbox/catalog.jsonl: {path, sha256, topic, doc_type, project, summary}
+```
+
+`bkr` never contacts a model; labeling is a documented subagent fan-out over the batch
+files, spelled out in `skills/catalog/SKILL.md`. Extracted text is cached hub-wide at
+`inbox/extracted/<sha256>.md`, and phase 1 reuses it — nothing is converted twice.
+
+Then, as the agent: cluster on the catalog facets if you have them, otherwise on the
+manifest's `head` (do not open the corpus either way), propose the bundle set to the user,
+`bkr new-bundle` each approved one, and write the assignment:
 
 ```yaml
 # inbox/routing.yaml
@@ -78,8 +97,8 @@ lost between runs.
 | explicit file list | scripted: `files` source, usually written by `bkr route` after triage |
 | Confluence | agent: MCP server or CLI → save pages to `raw/confluence/` |
 | Azure DevOps | agent: MCP/CLI → wiki pages / work items to `raw/ado/` |
-| PDF | agent: `pdftotext -layout <file> -` → `raw/<type>/<file>.md` |
-| DOCX | agent: `pandoc <file> -t gfm` (or mammoth) → `raw/<type>/<file>.md` |
+| PDF | scripted if `bkr catalog` already cached it; else agent: `pdftotext -layout <file> -` |
+| DOCX | scripted if `bkr catalog` already cached it; else agent: `pandoc <file> -t gfm` |
 | Audio | agent: `whisper <file> --model base --output_format txt` → wrap as md |
 | Source code repo | do NOT copy — record location in `sources.yaml`, read in place |
 

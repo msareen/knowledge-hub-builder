@@ -1,6 +1,8 @@
 # Global ingestion: mechanical extraction + Haiku subagent cataloging (Phase 0 upgrade)
 
-> Status: design, not built. `bkr catalog` / `bkr catalog-merge` do not exist yet.
+> Status: **built**. `bkr catalog` and `bkr catalog-merge` ship; the fan-out is documented in
+> `skills/catalog/SKILL.md`. This file is kept as the rationale record — see *As built* at the
+> bottom for where the implementation diverged from the design below.
 
 ## Context
 
@@ -198,3 +200,28 @@ improves, from a blind manifest to facets.
    confirm `raw/` is populated straight from `inbox/extracted/<hash>.md` with no second
    `pdftotext` invocation (check the cache file's mtime stays unchanged).
 7. `bkr lint`.
+
+All seven ran green against a scratch hub, including one real Haiku `Agent` call — the
+subagent wrote its own `out/0001.jsonl` exactly to contract, and `bkr ingest` populated
+`raw/` from the cache with the cache file's mtime unchanged.
+
+## As built
+
+Deltas from the design above, all discovered while wiring it up:
+
+- **Password-protected rows are skipped**, not just `kind === "skip"` ones. `triage`
+  already flags them (`protected: true`), and no converter can open them, so extracting
+  them is guaranteed wasted CPU.
+- **`bkr catalog` refuses to clobber unmerged labels.** Batch files are a per-run pairing —
+  `in/NNNN.jsonl` is answered by `out/NNNN.jsonl` — so a re-run wipes both. If `out/` holds
+  files that were never merged, catalog errors and points at `bkr catalog-merge`;
+  `--reset` discards them deliberately. `catalog.jsonl` is the only durable home for labels.
+- **`bkr catalog-merge` clears `out/` on success** (`--keep` opts out), so the next catalog
+  run starts clean and the missing-batch report can't be confused by last run's answers.
+- **Shared helpers instead of a third copy.** `scripts/lib/args.ts` (`takeFlag`/`takeValue`)
+  and `scripts/lib/progress.ts` (the TTY progress bar) were lifted out of `triage.ts`, which
+  now imports them.
+- **`extractedBody()`** strips the cache file's own provenance header, so a snippet isn't
+  padded with front matter and a `raw/` copy doesn't end up with two headers stacked.
+- `AGENT.md`'s command table also gained both commands — an agent reading only the contract
+  would otherwise never learn they exist.

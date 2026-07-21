@@ -7,27 +7,15 @@ import { readdirSync, statSync, writeFileSync, mkdirSync, openSync, readSync, cl
 import { INBOX, join, basename, sha256File, existsSync } from "./lib/util";
 import { kindOf, extOf, type Kind } from "./ingest/exts";
 import { PROTECTABLE, detectPasswordProtected } from "./ingest/protect";
+import { takeFlag, takeValue } from "./lib/args";
+import { renderProgress, endProgress, logAbove } from "./lib/progress";
 
 const args = process.argv.slice(2);
 
-function takeFlag(name: string): boolean {
-  const i = args.indexOf(name);
-  if (i < 0) return false;
-  args.splice(i, 1);
-  return true;
-}
-function takeValue(name: string): string | undefined {
-  const i = args.indexOf(name);
-  if (i < 0) return undefined;
-  const v = args[i + 1];
-  args.splice(i, 2);
-  return v;
-}
-
-const verbose = takeFlag("--verbose");
-const skipProtected = takeFlag("--skip-protected");
-const out = takeValue("--out") ?? join(INBOX, "manifest.jsonl");
-const errorLog = takeValue("--error-log") ?? join(INBOX, "triage-errors.jsonl");
+const verbose = takeFlag(args, "--verbose");
+const skipProtected = takeFlag(args, "--skip-protected");
+const out = takeValue(args, "--out") ?? join(INBOX, "manifest.jsonl");
+const errorLog = takeValue(args, "--error-log") ?? join(INBOX, "triage-errors.jsonl");
 const roots = args.filter(Boolean);
 
 if (!roots.length) {
@@ -88,23 +76,9 @@ function opLabel(kind: Kind, ext: string): string {
   return ops.join("+");
 }
 
-const BAR_WIDTH = 24;
-const LINE_WIDTH = 140;
-
-/** Live progress bar, redrawn in place via \r. No-ops when stdout isn't a TTY (piped/CI). */
-function renderProgress(done: number, total: number, label: string) {
-  if (!process.stdout.isTTY) return;
-  const pct = total ? Math.floor((done / total) * 100) : 100;
-  const filled = Math.round((BAR_WIDTH * pct) / 100);
-  const bar = "#".repeat(filled) + "-".repeat(BAR_WIDTH - filled);
-  const line = `[${bar}] ${pct}% (${done}/${total}) ${label}`.slice(0, LINE_WIDTH);
-  process.stdout.write(`\r${line.padEnd(LINE_WIDTH)}`);
-}
-
-/** Per-file verbose trail. Breaks to a fresh line first so it doesn't get clobbered by the progress bar's \r. */
+/** Per-file verbose trail. */
 function vlog(msg: string) {
-  if (!verbose) return;
-  console.log(process.stdout.isTTY ? `\n${msg}` : msg);
+  if (verbose) logAbove(msg);
 }
 
 type Row = {
@@ -182,7 +156,7 @@ for (let i = 0; i < allFiles.length; i++) {
     vlog(`  [error] ${p}: ${err}`);
   }
 }
-if (process.stdout.isTTY) process.stdout.write("\n");
+endProgress();
 
 mkdirSync(INBOX, { recursive: true });
 writeFileSync(out, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""));
@@ -213,4 +187,5 @@ if (protectedSeen) {
   );
 }
 if (errors.length) console.log(`  ${errors.length} error(s) logged to ${errorLog}`);
-console.log(`\nNext: read the manifest, cluster into topics, write inbox/routing.yaml, then: bkr route`);
+console.log(`\nNext: bkr catalog   — extract text + build label batches so clustering isn't blind`);
+console.log(`  (already know the bundles? skip it: write inbox/routing.yaml, then bkr route)`);
