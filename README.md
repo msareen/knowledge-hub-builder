@@ -71,26 +71,29 @@ copies are package-owned — don't hand-edit them; `bkr upgrade` refreshes them 
 and never touches `bundles/` or `outer.index.md`.
 
 ```
- npm registry                      your machine
-┌──────────────────┐   bun install   ┌─────────────────────────────────────────┐
-│  @msareen/bkr     │ ──────────────▶ │  bkr CLI (global, on $PATH)             │
-│  (the package)     │   bun update    │                                          │
-└──────────────────┘                 │  finds a hub by walking up to bkr.json  │
-                                      └──────────────────┬───────────────────────┘
-                                                          │ bkr init <dir>
-                                                          │ (copies contract docs in,
-                                                          │  never copies your data out)
-                                                          ▼
-                          ┌───────────────────────────────────────────────────┐
-                          │  the hub  (~/OneDrive/my-knowledge, a repo, ...)   │
-                          │                                                     │
-                          │  bkr.json            marker bkr walks up to        │
-                          │  CLAUDE.md → AGENT.md  contract, package-owned     │
-                          │  query.md / ingest.md / lint.md   ┐  refreshed by  │
-                          │  skills/                          ┘  bkr upgrade   │
-                          │  outer.index.md       router, you + agent maintain │
-                          │  bundles/<name>/      your knowledge, yours alone  │
-                          └───────────────────────────────────────────────────┘
+  npm registry                          your machine
+
+  ┌────────────────────┐                ┌──────────────────────────────────────────┐
+  │ @msareen/bkr       │ bun install    │ bkr CLI (global, on $PATH)               │
+  │ (the package)      │ ───────▶       │                                          │
+  │                    │ bun update     │ finds a hub by walking up to bkr.json    │
+  └────────────────────┘                └──────────────────────────────────────────┘
+                                                            │
+                                                            │ bkr init <dir>
+                                                            │ (copies contract docs in,
+                                                            │  never copies your data out)
+                                                            ▼
+                  ┌──────────────────────────────────────────────────────────┐
+                  │ the hub  (~/OneDrive/my-knowledge, a repo, ...)          │
+                  │                                                          │
+                  │ bkr.json                 marker bkr walks up to          │
+                  │ CLAUDE.md → AGENT.md   ┐ contract, package-owned,        │
+                  │ query.md / ingest.md   ┤ refreshed by bkr upgrade        │
+                  │ lint.md / skills/       ┘                                │
+                  │ outer.index.md            router, you + agent maintain   │
+                  │ bundles/<name>/           your knowledge, yours alone    │
+                  │                                                          │
+                  └──────────────────────────────────────────────────────────┘
 ```
 
 Open the hub folder in Claude Code (or any agent) — `CLAUDE.md` → `AGENT.md` takes it
