@@ -1,18 +1,27 @@
-// bun scripts/triage.ts <path...> [--out <file>] — phase 0 of ingest.md.
-// Indexes a corpus WITHOUT copying it: one JSONL row per file (path, size, hash, head
-// snippet). The agent reads the manifest to decide which bundles exist and what routes
-// where; only then does anything get acquired. Output is gitignored scratch.
+// bun scripts/triage.ts <path...> [--out <file>] [--error-log <file>] [--skip-protected] [--verbose]
+// Phase 0 of ingest.md. Indexes a corpus WITHOUT copying it: one JSONL row per file
+// (path, size, hash, head snippet). The agent reads the manifest to decide which
+// bundles exist and what routes where; only then does anything get acquired.
+// Output is gitignored scratch.
 import { readdirSync, statSync, writeFileSync, mkdirSync, openSync, readSync, closeSync } from "node:fs";
-import { INBOX, join, sha256File, existsSync } from "./lib/util";
-import { kindOf, extOf } from "./ingest/exts";
+import { INBOX, join, basename, sha256File, existsSync } from "./lib/util";
+import { kindOf, extOf, type Kind } from "./ingest/exts";
+import { PROTECTABLE, detectPasswordProtected } from "./ingest/protect";
+import { takeFlag, takeValue } from "./lib/args";
+import { renderProgress, endProgress, logAbove } from "./lib/progress";
 
 const args = process.argv.slice(2);
-const outIdx = args.indexOf("--out");
-const out = outIdx >= 0 ? args[outIdx + 1] : join(INBOX, "manifest.jsonl");
-const roots = (outIdx >= 0 ? [...args.slice(0, outIdx), ...args.slice(outIdx + 2)] : args).filter(Boolean);
+
+const verbose = takeFlag(args, "--verbose");
+const skipProtected = takeFlag(args, "--skip-protected");
+const out = takeValue(args, "--out") ?? join(INBOX, "manifest.jsonl");
+const errorLog = takeValue(args, "--error-log") ?? join(INBOX, "triage-errors.jsonl");
+const roots = args.filter(Boolean);
 
 if (!roots.length) {
-  console.error("Usage: bkr triage <path...> [--out inbox/manifest.jsonl]");
+  console.error(
+    "Usage: bkr triage <path...> [--out inbox/manifest.jsonl] [--error-log inbox/triage-errors.jsonl] [--skip-protected] [--verbose]",
+  );
   process.exit(1);
 }
 
@@ -58,11 +67,43 @@ function head(path: string, bytes = 1024): string {
   }
 }
 
-type Row = { path: string; size: number; mtime: string; sha256: string; ext: string; kind: string; head: string };
+/** What triage will actually do to this file — shown in the progress line. */
+function opLabel(kind: Kind, ext: string): string {
+  if (kind === "skip") return "skip";
+  const ops = ["hash"];
+  if (kind === "text") ops.push("head");
+  if (PROTECTABLE.has(ext)) ops.push("password-check");
+  return ops.join("+");
+}
+
+/** Per-file verbose trail. */
+function vlog(msg: string) {
+  if (verbose) logAbove(msg);
+}
+
+type Row = {
+  path: string;
+  size: number;
+  mtime: string;
+  sha256: string;
+  ext: string;
+  kind: string;
+  head: string;
+  protected: boolean;
+};
+
+type ErrorRow = { path: string; kind: string; message: string; timestamp: string };
 
 const rows: Row[] = [];
+const errors: ErrorRow[] = [];
 const byHash = new Map<string, string[]>();
 
+function logError(path: string, kind: string, message: string) {
+  errors.push({ path: path.replaceAll("\\", "/"), kind, message, timestamp: new Date().toISOString() });
+}
+
+// Walk every root up front so the progress bar can show a true total.
+const allFiles: string[] = [];
 for (const root of roots) {
   if (!existsSync(root)) {
     console.error(`No such path: ${root}`);
@@ -70,25 +111,59 @@ for (const root of roots) {
   }
   const files = statSync(root).isDirectory() ? walk(root) : [root];
   console.log(`${root}: ${files.length} file(s)`);
-  for (const p of files) {
+  allFiles.push(...files);
+}
+
+let protectedSeen = 0;
+for (let i = 0; i < allFiles.length; i++) {
+  const p = allFiles[i];
+  const ext = extOf(p);
+  const kind = kindOf(p);
+  renderProgress(i + 1, allFiles.length, `${basename(p)} [${opLabel(kind, ext)}]`);
+
+  try {
     const st = statSync(p);
-    const kind = kindOf(p);
+
+    // Cheap check first: skip the (much more expensive) full-file hash entirely
+    // when the file is protected and the caller asked to drop those.
+    let isProtected = false;
+    if (kind !== "skip" && PROTECTABLE.has(ext)) {
+      isProtected = detectPasswordProtected(p, ext, st.size);
+      if (isProtected) {
+        protectedSeen++;
+        logError(p, "password_protected", "encrypted document detected (heuristic byte-signature check)");
+        vlog(`  [protected] ${p}`);
+        if (skipProtected) continue;
+      }
+    }
+
     const hash = await sha256File(p);
-    rows.push({
+    const row: Row = {
       path: p.replaceAll("\\", "/"),
       size: st.size,
       mtime: st.mtime.toISOString(),
       sha256: hash,
-      ext: extOf(p),
+      ext,
       kind,
       head: kind === "text" ? head(p) : "",
-    });
+      protected: isProtected,
+    };
+    rows.push(row);
     byHash.set(hash, [...(byHash.get(hash) ?? []), p]);
+    vlog(`  [ok] ${p} (${kind}${isProtected ? ", protected" : ""})`);
+  } catch (err) {
+    logError(p, "read_error", String(err));
+    vlog(`  [error] ${p}: ${err}`);
   }
 }
+endProgress();
 
 mkdirSync(INBOX, { recursive: true });
-writeFileSync(out, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+writeFileSync(out, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""));
+if (errors.length) {
+  mkdirSync(INBOX, { recursive: true });
+  writeFileSync(errorLog, errors.map((e) => JSON.stringify(e)).join("\n") + "\n");
+}
 
 // Summary — what the agent needs to size the routing job before reading the manifest.
 const byExt = new Map<string, number>();
@@ -105,4 +180,12 @@ console.log(
 console.log(
   `  top types: ${[...byExt.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([e, n]) => `${e}:${n}`).join(" ")}`,
 );
-console.log(`\nNext: read the manifest, cluster into topics, write inbox/routing.yaml, then: bkr route`);
+if (protectedSeen) {
+  console.log(
+    `  ${protectedSeen} password-protected file(s) detected` +
+      (skipProtected ? " and skipped (not in manifest)" : " (kept, \"protected\": true — re-run with --skip-protected to exclude)"),
+  );
+}
+if (errors.length) console.log(`  ${errors.length} error(s) logged to ${errorLog}`);
+console.log(`\nNext: bkr catalog   — extract text + build label batches so clustering isn't blind`);
+console.log(`  (already know the bundles? skip it: write inbox/routing.yaml, then bkr route)`);

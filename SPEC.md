@@ -187,16 +187,19 @@ agent-free refresh of a source ever becomes a real need, promote it to a script 
 
 ## 6. Extraction
 
-Same philosophy: existing CLIs do the work, the agent invokes them and applies the
-`<file>.md` sibling + provenance-header convention (commands in `AGENT.md`). Roadmap,
-one format at a time:
+Extraction is cheap and deterministic, so `bkr` owns it: the common formats are handled by
+bundled pure-JS libraries with no system install, and the results are cached hub-wide by
+content hash (`inbox/extracted/<sha256>.md`). Only the formats that cost real time stay as
+an explicit, agent-invoked pass with the `<file>.md` + provenance-header convention.
 
-| Format | Tool | Status |
-|---|---|---|
-| PDF | `pdftotext` (poppler) | v1 |
-| DOCX | pandoc or mammoth | v1 |
-| Audio | whisper CLI (installed locally) | v1 |
-| PPTX, XLSX, images/OCR | later | backlog |
+| Format | Tool | Where it runs | Status |
+|---|---|---|---|
+| PDF | `unpdf` (pdf.js), `pdftotext` if present | in `bkr` | v1 |
+| DOCX | `mammoth`, `pandoc` if present | in `bkr` | v1 |
+| ODT | `fflate` + content.xml | in `bkr` | v1 |
+| scanned PDF | `pdfium` + `tesseract.js` (WASM) | `bkr catalog --ocr`, opt-in deps | v1 |
+| Audio, video | Whisper (`openai-whisper` / `faster-whisper`) | agent-invoked | v1 |
+| PPTX, XLSX | `fflate` (both are zip+XML, same shape as ODT) | — | backlog |
 
 ## 7. Lint
 
