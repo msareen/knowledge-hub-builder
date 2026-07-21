@@ -5,6 +5,16 @@ description: Design decisions for BKR and their rationale.
 
 # Design decisions
 
+- **2026-07-21 — Protocols live inside the skills, not beside them.** `query.md`,
+  `ingest.md` and `lint.md` were folded wholesale into `skills/query/SKILL.md`,
+  `skills/ingest/SKILL.md` and `skills/lint/SKILL.md`; the root copies are gone. The
+  skills had been thin pointers at root protocol docs, so every workflow cost two file
+  reads and the contract surface was duplicated in two places that could drift. A skill
+  folder is now the unit: one `SKILL.md` holds its whole procedure. Agent-agnosticism is
+  unaffected — `SKILL.md` is plain markdown that `AGENT.md` links by path, so an agent
+  with no skill mechanism reads it as an ordinary doc. Knock-ons: `MANAGED` in
+  `scripts/lib/paths.ts` and the `files` allowlist drop the three docs, and `bkr export`
+  now injects `AGENT.md` + the whole `skills/` folder instead of the four root files.
 - **2026-07-20 — Package + hub split; shipped as `@msareen/bkr`.** Supersedes the
   clone-is-the-hub decision below. `bun install -g @msareen/bkr` installs tooling only;
   `bkr init <dir>` creates a hub (`bkr.json` + `outer.index.md` + `bundles/`) anywhere.

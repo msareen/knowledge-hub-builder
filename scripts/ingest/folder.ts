@@ -43,7 +43,7 @@ export async function ingestFolder(
     } else {
       record(entries, { source: p, sha256: hash, fetched: new Date().toISOString(), raw: "" });
       pending++;
-      console.log(`  extractable — agent: convert via CLI per ingest.md: "${p}"`);
+      console.log(`  extractable — agent: convert via CLI per skills/ingest/SKILL.md: "${p}"`);
     }
   }
   if (skipped) console.log(`  ${skipped} unchanged, skipped`);

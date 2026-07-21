@@ -18,8 +18,8 @@ BKR's own contribution is the bundle-of-bundles layer over both — see §1.
 ## 1. Core ideas
 
 1. **Bundle** — a self-contained topic unit owning its content and ingestion sources.
-   Bundles are *lean*: the common rules (AGENT.md, query.md, lint.md) live once at the
-   hub root, not duplicated per bundle. When a bundle must travel alone,
+   Bundles are *lean*: the common rules (AGENT.md and the `skills/` protocols) live once
+   at the hub root, not duplicated per bundle. When a bundle must travel alone,
    `bkr export <bundle>` produces a standalone folder with the common patterns
    injected — independence on demand rather than boilerplate everywhere.
 2. **Bundle of bundles** — the hub root is itself a bundle whose content is *routing*, not
@@ -66,10 +66,12 @@ my-knowledge/                  # ~/OneDrive/my-knowledge, a private repo, a shar
 ├── AGENT.md                   # agent entry point: how to navigate the whole space
 ├── CLAUDE.md                  # Claude shim — points at AGENT.md, nothing more
 ├── SPEC.md                    # this file
-├── query.md                   # cross-bundle query protocol
-├── ingest.md                  # ingestion protocol: acquire → raw/, curate → concept docs
-├── lint.md                    # structural rules (enforced by the linter)
-└── skills/                    # agent-agnostic workflow skills (query, ingest, lint, …)
+└── skills/<name>/SKILL.md     # one self-contained workflow protocol per folder:
+                               #   query      cross-bundle query + routing protocol
+                               #   ingest     acquire → raw/, curate → concept docs
+                               #   catalog    label a triaged corpus (subagent fan-out)
+                               #   lint       structural rules L1–L9
+                               #   new-bundle / export / visualize
 ```
 
 The contract docs are *copied into* the hub rather than read from the package because an
@@ -87,7 +89,7 @@ leaves `bundles/` and `outer.index.md` alone.
 │   ├── init.ts                # bkr init / bkr upgrade
 │   ├── new-bundle.ts          # scaffold from .bundle_template, register in outer.index.md
 │   ├── export.ts              # bundle + common patterns → standalone shareable folder
-│   ├── lint.ts                # enforce lint.md across the hub
+│   ├── lint.ts                # enforce skills/lint/SKILL.md across the hub
 │   ├── visualize.ts           # emit visualizer/graph.html from indexes + refs
 │   ├── triage.ts / route.ts   # phase-0 bulk corpus handling
 │   ├── ingest/                # folder.ts, files.ts, web.ts → bundle/raw
@@ -96,7 +98,7 @@ leaves `bundles/` and `outer.index.md` alone.
 │       └── util.ts            # hub resolution + shared helpers
 ├── .bundle_template/          # copied by `bkr new-bundle`
 ├── templates/hub/             # copied by `bkr init`
-└── AGENT.md, query.md, …      # the masters that `bkr init`/`upgrade` copy into hubs
+└── AGENT.md, skills/, …       # the masters that `bkr init`/`upgrade` copy into hubs
 ```
 
 ### 2c. Hub resolution
@@ -147,7 +149,7 @@ exempt from OKF conformance), and the outer bundle-of-bundles router.
 
 - A bundle may only reach outside itself through its `refs.md`. Each entry names the target
   bundle, the reason, and optionally the specific note.
-- **Collation protocol** (also in `query.md`): to answer a question spanning bundles A and B:
+- **Collation protocol** (also in `skills/query/SKILL.md`): to answer a question spanning bundles A and B:
   1. Resolve in A. Note where A's `refs.md` points to B.
   2. Open B **through its own index.md** — never jump straight to a B note from A's text.
   3. Join the two answers in the response, not in the files.
@@ -203,7 +205,7 @@ an explicit, agent-invoked pass with the `<file>.md` + provenance-header convent
 
 ## 7. Lint
 
-`bkr lint` enforces (details in `lint.md`):
+`bkr lint` enforces (details in `skills/lint/SKILL.md`):
 - every bundle has `index.md`, `refs.md`, `sources.yaml`
 - every bundle is registered in `outer.index.md`; nothing in `outer.index.md` is dangling
 - every concept doc is listed in an index and carries OKF frontmatter (`type` required)

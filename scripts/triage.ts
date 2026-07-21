@@ -1,5 +1,5 @@
 // bun scripts/triage.ts <path...> [--out <file>] [--error-log <file>] [--skip-protected] [--verbose]
-// Phase 0 of ingest.md. Indexes a corpus WITHOUT copying it: one JSONL row per file
+// Phase 0 of skills/ingest/SKILL.md. Indexes a corpus WITHOUT copying it: one JSONL row per file
 // (path, size, hash, head snippet). The agent reads the manifest to decide which
 // bundles exist and what routes where; only then does anything get acquired.
 // Output is gitignored scratch.

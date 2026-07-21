@@ -12,7 +12,7 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; help: string }> =
   catalog: { load: () => import("./catalog"), help: "bkr catalog [--batch N]         extract text → label batches for a model" },
   "catalog-merge": { load: () => import("./catalog-merge"), help: "bkr catalog-merge               fold labeled batches → inbox/catalog.jsonl" },
   route: { load: () => import("./route"), help: "bkr route                       apply inbox/routing.yaml → sources.yaml" },
-  lint: { load: () => import("./lint"), help: "bkr lint                        validate the hub against lint.md" },
+  lint: { load: () => import("./lint"), help: "bkr lint                        validate the hub against skills/lint/SKILL.md" },
   visualize: { load: () => import("./visualize"), help: "bkr visualize                   regenerate visualizer/graph.html" },
   export: { load: () => import("./export"), help: "bkr export <bundle> [dest]      standalone copy of one bundle" },
 };

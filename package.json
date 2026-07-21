@@ -21,9 +21,6 @@
     "AGENT.md",
     "CLAUDE.md",
     "SPEC.md",
-    "query.md",
-    "ingest.md",
-    "lint.md",
     "README.md"
   ],
   "engines": {

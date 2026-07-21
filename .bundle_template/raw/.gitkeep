@@ -1,6 +1,6 @@
 # raw/ — ingested source material, NOT canonical.
 #
-# Phase 1 of ingest.md drops faithful copies here, one subdirectory per source
+# Phase 1 of skills/ingest/SKILL.md drops faithful copies here, one subdirectory per source
 # type: raw/folder/, raw/web/, raw/confluence/, raw/ado/, raw/pdf/ ...
 # Every .md file starts with a provenance header (lint L8):
 #

@@ -6,7 +6,7 @@
 
 ## Context
 
-`bkr triage` (phase 0 of `ingest.md`) already solves "index a bulk corpus without knowing
+`bkr triage` (phase 0 of `skills/ingest/SKILL.md`) already solves "index a bulk corpus without knowing
 bundles yet" — it walks a corpus, hashes/dedups, and writes `inbox/manifest.jsonl`. But the
 agent that reads that manifest to propose a bundle set has almost nothing to go on:
 
@@ -147,7 +147,7 @@ topic histogram, which is the input to the final crunch.
 The orchestrating model reads only `inbox/catalog.jsonl` — paths and facets, never file bodies,
 so context stays bounded — collapses the topic tail into a small set of wide categories,
 proposes it to the user, runs `bkr new-bundle` per approved category, and writes
-`inbox/routing.yaml`. This is the step `ingest.md` Phase 0 already describes; only its input
+`inbox/routing.yaml`. This is the step the ingest skill's Phase 0 already describes; only its input
 improves, from a blind manifest to facets.
 
 ## Files to add / modify
@@ -173,7 +173,7 @@ improves, from a blind manifest to facets.
 - `scripts/ingest/files.ts:32-38`, `scripts/ingest/folder.ts:36-40` — before logging "pending
   extraction", check the cache; on a hit write it into `raw/` via the existing `writeRaw()`.
   A cache-copy, not a move, so `raw/` stays derived and rebuildable.
-- `ingest.md` — insert the catalog step into Phase 0 between triage and clustering, and note
+- the ingest skill — insert the catalog step into Phase 0 between triage and clustering, and note
   that `bkr ingest` now transparently reuses the extraction cache.
 
 ## Known gaps
@@ -183,7 +183,7 @@ improves, from a blind manifest to facets.
   files in the real test corpus. Both are zip+XML, exactly the shape `fflate` already
   handles for `.odt`, so this is now a small addition rather than a new dependency.
 - Audio and video stay manual: transcription is minutes of compute per file, so it is an
-  explicit Whisper pass in `ingest.md`, not a silent extractor.
+  explicit Whisper pass in the ingest skill, not a silent extractor.
 - Much of a real corpus is not knowledge at all — photos, `.vcf` contact dumps, browser cache.
   Pruning the manifest between triage and catalog is expected practice, not an edge case.
 

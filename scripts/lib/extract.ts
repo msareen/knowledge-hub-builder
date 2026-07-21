@@ -26,7 +26,7 @@ const SCANNED_CHARS_PER_PAGE = 20;
 export type Extraction =
   | { status: "ok"; path: string }        // text is in the cache, at `path`
   | { status: "scanned"; pages: number }  // renders fine, has no text layer — OCR is the only route
-  | { status: "unsupported" }             // no extractor for this format (audio/video: see ingest.md)
+  | { status: "unsupported" }             // no extractor for this format (audio/video: see skills/ingest/SKILL.md)
   | { status: "failed" };                 // tried, got nothing usable
 
 export function extractedPath(hash: string): string {
@@ -80,7 +80,7 @@ const CLI: Record<string, (file: string) => string[]> = {
 
 // Audio and video are deliberately absent: transcription is a different cost class
 // (minutes of compute per file) and belongs to an explicit, agent-run whisper pass.
-// See the Audio/Video row in ingest.md.
+// See the Audio/Video row in skills/ingest/SKILL.md.
 
 async function runCli(argv: string[]): Promise<string> {
   try {

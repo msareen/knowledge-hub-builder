@@ -1,13 +1,13 @@
 // bkr init [dir] / bkr upgrade — create a hub, or refresh a hub's package-owned files.
 //
 // A hub is the user's knowledge: bkr.json + outer.index.md + bundles/. The bkr package
-// holds no knowledge, so the contract docs an agent needs (AGENT.md, query.md, …) are
+// holds no knowledge, so the contract docs an agent needs (AGENT.md, skills/, …) are
 // copied INTO the hub — an agent opened on the hub folder must be able to read them
 // without knowing where bkr is installed. Those copies are package-owned: `upgrade`
 // overwrites them.
-import { cpSync, mkdirSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { cpSync, mkdirSync, writeFileSync, existsSync, statSync, rmSync } from "node:fs";
 import { join, resolve, basename } from "node:path";
-import { PKG, HUB_TEMPLATE, MANAGED, MARKER, version } from "./lib/paths";
+import { PKG, HUB_TEMPLATE, MANAGED, RETIRED, MARKER, version } from "./lib/paths";
 
 const upgrading = process.env.BKR_SUBCOMMAND === "upgrade";
 const [dirArg] = process.argv.slice(2);
@@ -22,6 +22,18 @@ function syncManaged(hub: string): string[] {
     done.push(statSync(src).isDirectory() ? `${f}/` : f);
   }
   return done;
+}
+
+/** Drop package-owned files that later versions stopped shipping. */
+function pruneRetired(hub: string): string[] {
+  const gone: string[] = [];
+  for (const f of RETIRED) {
+    const p = join(hub, f);
+    if (!existsSync(p)) continue;
+    rmSync(p, { recursive: true, force: true });
+    gone.push(f);
+  }
+  return gone;
 }
 
 function stamp(hub: string, created?: string) {
@@ -39,9 +51,11 @@ if (upgrading) {
   const { HUB } = await import("./lib/util"); // resolves the hub, or exits with guidance
   const before = JSON.parse(await Bun.file(join(HUB, MARKER)).text());
   const synced = syncManaged(HUB);
+  const pruned = pruneRetired(HUB);
   stamp(HUB, before.created);
   console.log(`Upgraded ${HUB}: ${before.bkr ?? "?"} -> ${version()}`);
   console.log(`  refreshed: ${synced.join(", ")}`);
+  if (pruned.length) console.log(`  removed (no longer part of the contract): ${pruned.join(", ")}`);
   console.log(`Your bundles/ and outer.index.md were not touched. Next: bkr lint`);
 } else {
   const hub = resolve(dirArg ?? process.cwd());

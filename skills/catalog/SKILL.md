@@ -5,7 +5,7 @@ description: Label a triaged corpus so a bundle set can be proposed from evidenc
 
 # Catalog a triaged corpus
 
-Phase 0 of [ingest.md](../../ingest.md), between `bkr triage` and writing
+Phase 0 of the [ingest skill](../ingest/SKILL.md), between `bkr triage` and writing
 `inbox/routing.yaml`. Only needed when the bundle set is an *output* of looking at the
 data. If you already know the bundles, skip straight to `inbox/routing.yaml`.
 
@@ -26,7 +26,7 @@ bundled libraries, cached at `inbox/extracted/<sha256>.md` — and writes
 Watch the summary for two non-failures. **Scanned PDFs** (pages, no text layer) are listed
 in `inbox/scanned.jsonl`; they need `bun add @hyzyla/pdfium sharp tesseract.js` and then
 `bkr catalog --ocr`. **Audio and video** are never extracted here at all — transcribe them
-with Whisper per `ingest.md` if the corpus needs them. Both are worth raising with the user
+with Whisper per the ingest skill if the corpus needs them. Both are worth raising with the user
 before labeling, since neither is in the batches and both cost real time.
 
 Rows already in `inbox/catalog.jsonl` are skipped, so re-running after narrowing scope is
@@ -87,4 +87,4 @@ bkr new-bundle <name> "<scope>"
 
 Write `inbox/routing.yaml` from the facets, `bkr route`, then `bkr ingest <bundle>` per
 bundle — which reuses the same extraction cache, so no PDF is converted twice. Continue with
-phase 2 curation in [ingest.md](../../ingest.md), and finish with `bkr lint`.
+phase 2 curation in [ingest skill](../ingest/SKILL.md), and finish with `bkr lint`.

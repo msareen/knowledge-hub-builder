@@ -4,14 +4,18 @@ You are inside a **BKR hub** — a bundle-of-bundles knowledge system. Full desi
 
 The hub is this folder: `bkr.json`, `outer.index.md`, and `bundles/`. The knowledge is
 here; the `bkr` tooling is installed separately and holds none of it. This file and its
-siblings (`SPEC.md`, `query.md`, `ingest.md`, `lint.md`, `skills/`) are package-owned
-copies refreshed by `bkr upgrade` — never edit them, edit bundle content instead.
+siblings (`SPEC.md`, `skills/`) are package-owned copies refreshed by `bkr upgrade` —
+never edit them, edit bundle content instead. Every workflow protocol lives wholly inside
+`skills/<name>/SKILL.md`: query, ingest, catalog, lint, new-bundle, export, visualize.
+Those files are plain markdown — any agent can read one directly, whether or not its
+runtime has a notion of "skills".
 
 ## How to navigate
 
 1. Start at `outer.index.md`. Pick exactly one bundle for the question. Do not browse.
-2. If that doesn't settle it, escalate per `query.md`: grep the bundle `index.md` files,
-   then concept front matter, then **ask the user** which bundle. Never guess silently.
+2. If that doesn't settle it, escalate per `skills/query/SKILL.md`: grep the bundle
+   `index.md` files, then concept front matter, then **ask the user** which bundle.
+   Never guess silently.
 3. Enter the bundle via its `index.md`, then read only the concepts/notes it routes you to.
 
 This file is the single common contract — bundles carry no per-bundle agent rules.
@@ -19,8 +23,8 @@ This file is the single common contract — bundles carry no per-bundle agent ru
 ## Hard rules
 
 - **One bundle at a time.** If a question spans two bundles, follow the collation protocol
-  in `query.md`: resolve in the first bundle, follow its `refs.md` to the second, and enter
-  the second **through its own index.md**. Never deep-link from one bundle's notes into
+  in `skills/query/SKILL.md`: resolve in the first bundle, follow its `refs.md` to the
+  second, and enter the second **through its own index.md**. Never deep-link from one bundle's notes into
   another's. Join answers in your response, not in the files.
 - **Indexes are routing only.** Never add knowledge content to `outer.index.md` or any
   `index.md` — add a concept doc and link it from the index.
@@ -58,7 +62,7 @@ From outside, pass `--hub <dir>` or set `$BKR_HUB`.
 
 | Command | Purpose |
 |---|---|
-| `bkr lint` | validate structure against `lint.md` |
+| `bkr lint` | validate structure against `skills/lint/SKILL.md` |
 | `bkr upgrade` | refresh this hub's package-owned contract docs |
 | `bkr visualize` | regenerate `visualizer/graph.html` |
 | `bkr new-bundle <name>` | scaffold + register a bundle |
@@ -71,8 +75,8 @@ From outside, pass `--hub <dir>` or set `$BKR_HUB`.
 
 ## Ingestion
 
-Follow `ingest.md`: phase 0 triage a bulk corpus into a manifest when the bundle set
-isn't known yet (and catalog it if filenames alone won't tell you the bundles),
+Follow `skills/ingest/SKILL.md`: phase 0 triage a bulk corpus into a manifest when the
+bundle set isn't known yet (and catalog it if filenames alone won't tell you the bundles),
 phase 1 acquire into `raw/` (scripted for folder/files/web, MCP/CLI for
 the rest, provenance header always), phase 2 curate `raw/` into concept docs and
 register them in the bundle's `index.md`. Each bundle's `log.md` is the durable ledger

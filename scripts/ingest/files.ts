@@ -50,5 +50,5 @@ export async function ingestFiles(
   }
   if (skipped) console.log(`  ${skipped} unchanged, skipped`);
   if (fromCache) console.log(`  ${fromCache} from the extraction cache (inbox/extracted/)`);
-  if (pending) console.log(`  ${pending} awaiting CLI extraction — see ingest.md`);
+  if (pending) console.log(`  ${pending} awaiting CLI extraction — see skills/ingest/SKILL.md`);
 }

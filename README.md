@@ -24,7 +24,8 @@ BKR is a synthesis of two existing ideas:
   *maintains* a markdown wiki: immutable raw sources, an LLM-curated wiki layer, and a
   schema telling it how to work, driven by three operations — ingest, query, lint.
   BKR keeps all of it: `raw/` is the immutable layer, concept docs are the wiki,
-  `AGENT.md` is the schema, and `ingest.md`/`query.md`/`lint.md` are the three operations.
+  `AGENT.md` is the schema, and the `ingest`/`query`/`lint` skills are the three
+  operations.
 - **[Google's Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)**
   — the file format. A concept is any non-reserved `.md` file with `type` frontmatter;
   grouping is free-form subdirectories; `index.md` gives progressive disclosure;
@@ -65,7 +66,7 @@ The two halves stay separate, and that separation is the point:
 | the **hub** (`bkr init`) | `outer.index.md` + `bundles/` — your knowledge | you |
 
 Nothing you write ever lands inside the package. `bkr init` copies the agent contract
-(`AGENT.md`, `query.md`, `ingest.md`, `lint.md`, `skills/`) into the hub, so an agent
+(`AGENT.md` plus the `skills/` protocols) into the hub, so an agent
 opened on that folder finds its rules without knowing where `bkr` is installed. Those
 copies are package-owned — don't hand-edit them; `bkr upgrade` refreshes them in place
 and never touches `bundles/` or `outer.index.md`.
@@ -88,8 +89,8 @@ and never touches `bundles/` or `outer.index.md`.
                   │                                                          │
                   │ bkr.json                 marker bkr walks up to          │
                   │ CLAUDE.md → AGENT.md   ┐ contract, package-owned,        │
-                  │ query.md / ingest.md   ┤ refreshed by bkr upgrade        │
-                  │ lint.md / skills/       ┘                                │
+                  │ SPEC.md                ┤ refreshed by bkr upgrade        │
+                  │ skills/<name>/SKILL.md ┘                                 │
                   │ outer.index.md            router, you + agent maintain   │
                   │ bundles/<name>/           your knowledge, yours alone    │
                   │                                                          │
@@ -146,7 +147,7 @@ the `ingest` skill fires, and the agent runs the command on your behalf:
   │  "ingest finances"    │                                │                     │
   ├──────────────────────▶│                                │                     │
   │                       │  loads skills/ingest/SKILL.md  │                     │
-  │                       │  reads ingest.md for the plan  │                     │
+  │                       │  — the phases, in one file     │                     │
   │                       │                                │                     │
   │                       │  bkr ingest finances            │                     │
   │                       ├───────────────────────────────▶│                     │
@@ -173,7 +174,7 @@ Text files land in `bundles/finances/raw/` with a `source:`/`fetched:` provenanc
 PDF, DOCX and ODT are extracted by `bkr` itself and reused from the hash-keyed cache that
 `bkr catalog` fills, so nothing converts twice. Only the expensive formats stay explicit:
 scanned PDFs need `bkr catalog --ocr`, audio and video need a Whisper pass the agent runs —
-see the table in [ingest.md](ingest.md).
+see the table in the [ingest skill](skills/ingest/SKILL.md).
 
 Every acquisition is written to `bundles/finances/log.md`, the ingest ledger. Re-running
 skips sources whose content hash hasn't changed (`--force` overrides). `raw/` is
@@ -232,7 +233,7 @@ the reason. Queries follow refs; content stays put.
 
 Just ask in natural language: **"what's my quarterly tax deadline?"**
 
-The agent follows [query.md](query.md): `outer.index.md` picks exactly one bundle, that
+The agent follows the [query skill](skills/query/SKILL.md): `outer.index.md` picks exactly one bundle, that
 bundle's `index.md` routes to concept docs, and the answer comes from concept docs only —
 never from `raw/` — with file paths cited.
 
@@ -269,7 +270,8 @@ bkr ingest <bundle>                  # then per bundle, as in Tutorial 1
 ```
 
 `inbox/` is gitignored scratch. A file appearing under two bundles gets one owner plus a
-`refs.md` entry — never a second copy. Details in [ingest.md](ingest.md).
+`refs.md` entry — never a second copy. Details in the
+[ingest skill](skills/ingest/SKILL.md).
 
 ---
 
@@ -287,7 +289,8 @@ agent, if you just ask in chat) run directly instead of through a skill:
 ### The agent runs the rest, via skills
 
 Once a hub exists, `AGENT.md` + `skills/` are in place, and every other command is
-triggered by the matching skill (see [skills/](skills)) — the agent runs the `bkr`
+triggered by the matching skill (see [skills/](skills)), each one a single self-contained
+`SKILL.md` holding its whole protocol — the agent runs the `bkr`
 CLI on your behalf. You never type these yourself:
 
 | Command | Purpose | Skill |
@@ -297,7 +300,7 @@ CLI on your behalf. You never type these yourself:
 | `bkr ingest <bundle> [--force]` | acquire declared sources → `raw/`, update `log.md` | `ingest` |
 | `bkr triage <path...>` | index a bulk corpus in place → `inbox/manifest.jsonl` | `ingest` |
 | `bkr route` | apply `inbox/routing.yaml` → each bundle's `sources.yaml` | `ingest` |
-| `bkr lint` | validate structure against [lint.md](lint.md) | `lint` |
+| `bkr lint` | validate structure against [the L1–L9 rules](skills/lint/SKILL.md) | `lint` |
 | `bkr visualize` | regenerate `visualizer/graph.html` | `visualize` |
 | `bkr export <bundle> [dest]` | standalone copy that works alone with any agent | `export` |
 
@@ -309,8 +312,9 @@ Global flag: `--hub <dir>` runs a command against a hub you aren't standing in.
 bkr.json              the marker — how bkr recognises this folder as a hub
 outer.index.md        the router — bundles only, no knowledge
 AGENT.md              common contract every agent reads first        ┐ package-owned,
-query.md / ingest.md / lint.md    protocols, also injected into exports │ refreshed by
-skills/               thin agent-facing pointers at the protocols above ┘ `bkr upgrade`
+SPEC.md               the full design                                ┤ refreshed by
+skills/<name>/SKILL.md  one self-contained protocol per workflow,    ┘ `bkr upgrade`
+                        also injected into exports
 bundles/<name>/
   index.md            routing into this bundle (routing only, no content)
   refs.md             the only way out of this bundle

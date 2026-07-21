@@ -1,7 +1,7 @@
 // bun scripts/ingest/index.ts <bundle> [--force] — run every source in the bundle's
 // sources.yaml, maintaining the log.md ledger so re-runs are incremental.
 // Only trivially-scriptable sources live here (folder, files, web). Confluence/ADO/
-// audio/PDF: the agent uses MCP servers / CLI tools directly — conventions in ingest.md.
+// audio/PDF: the agent uses MCP servers / CLI tools directly — conventions in skills/ingest/SKILL.md.
 import { parse } from "yaml";
 import { bundleDir, read, join } from "../lib/util";
 import { readLedger, writeLedger } from "../lib/ledger";
@@ -32,7 +32,7 @@ for (const s of sources) {
   if (s.type === "folder") await ingestFolder(s, rawDir, dir, entries, force);
   else if (s.type === "files") await ingestFiles(s, rawDir, dir, entries, force);
   else if (s.type === "web") await ingestWeb(s, rawDir, dir, entries, force);
-  else console.warn(`  '${(s as any).type}' is not scripted — agent ingests it via MCP/CLI (see ingest.md)`);
+  else console.warn(`  '${(s as any).type}' is not scripted — agent ingests it via MCP/CLI (see skills/ingest/SKILL.md)`);
 }
 
 writeLedger(dir, entries, bundle);

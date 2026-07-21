@@ -1,4 +1,4 @@
-// bkr lint — enforce lint.md (structural rules + OKF v0.1 conformance) across the hub
+// bkr lint — enforce skills/lint/SKILL.md (structural rules + OKF v0.1 conformance) across the hub
 import { HUB, BUNDLES, listBundles, read, mdLinks, refTargets, join, existsSync } from "./lib/util";
 import { readdirSync, statSync } from "node:fs";
 import { dirname, relative } from "node:path";

@@ -15,7 +15,9 @@ mkdirSync(dest, { recursive: true });
 cpSync(src, join(dest, "bundle"), { recursive: true });
 
 // inject common patterns from the hub's copies (kept current by `bkr upgrade`)
-for (const f of ["AGENT.md", "query.md", "lint.md", "ingest.md"]) cpSync(join(HUB, f), join(dest, f));
+// AGENT.md is the contract; skills/ carries the query/ingest/lint protocols it points at
+cpSync(join(HUB, "AGENT.md"), join(dest, "AGENT.md"));
+cpSync(join(HUB, "skills"), join(dest, "skills"), { recursive: true });
 
 // standalone router: one-bundle outer index
 const scope = (readFileSync(join(HUB, "outer.index.md"), "utf8")
@@ -24,6 +26,6 @@ writeFileSync(join(dest, "outer.index.md"),
   `# outer.index — exported bundle\n\n| Bundle | Scope | Route here when |\n|---|---|---|\n| [${name}](bundle/index.md) | ${scope} | always — single-bundle export |\n`);
 
 writeFileSync(join(dest, "README.md"),
-  `# ${name} (exported BKR bundle)\n\nExported: ${new Date().toISOString()}\nOrigin: BKR bundle-of-bundles repo.\n\nStandalone unit: start at AGENT.md → outer.index.md → bundle/index.md.\nNote: refs.md entries pointing at other bundles will not resolve here.\n`);
+  `# ${name} (exported BKR bundle)\n\nExported: ${new Date().toISOString()}\nOrigin: BKR bundle-of-bundles repo.\n\nStandalone unit: start at AGENT.md → outer.index.md → bundle/index.md.\nWorkflow protocols (query, ingest, lint, …) live in skills/<name>/SKILL.md.\nNote: refs.md entries pointing at other bundles will not resolve here.\n`);
 
-console.log(`Exported to ${dest} (bundle + AGENT.md, query.md, lint.md, single-bundle router)`);
+console.log(`Exported to ${dest} (bundle + AGENT.md, skills/, single-bundle router)`);
