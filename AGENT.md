@@ -55,6 +55,23 @@ This file is the single common contract — bundles carry no per-bundle agent ru
 - **New bundle:** `khb new-bundle <name>` — never hand-copy `_template`.
 - After structural edits run `khb lint` and fix what it reports.
 
+## Division of labor — khb vs agent
+
+One hard boundary governs every workflow and every future change to the tooling:
+
+- **`khb` is deterministic mechanics.** Hashing, caching, text extraction from
+  born-digital formats, rendering bitmaps, file plumbing, and ledger-keeping. It is fast,
+  free, reproducible, and **never contacts a model** — not directly, not by shelling out.
+- **The agent governs everything that needs judgment or a model.** Clustering a corpus,
+  proposing the bundle set, labeling catalog batches, reading images/audio/scanned pages,
+  and curating `raw/` into concept docs.
+
+The split exists so every expensive or intelligent decision is auditable: it leaves a
+provenance header and a `log.md` row. When extending khb, keep the mechanical half in the
+CLI and the intelligent half in an agent pass — e.g. khb renders a page to a bitmap; the
+agent reads it. Never add a `khb … --auto-label` / `--summarize` flag that calls a model;
+that rots the boundary.
+
 ## Tooling
 
 Run `khb` from anywhere inside the hub — it finds the hub by walking up to `khb.json`.

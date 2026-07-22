@@ -108,7 +108,8 @@ lost between runs.
 | Confluence | agent: MCP server or CLI → save pages to `raw/confluence/` |
 | Azure DevOps | agent: MCP/CLI → wiki pages / work items to `raw/ado/` |
 | PDF, DOCX, ODT | scripted: `khb` extracts these itself — no system tools to install |
-| scanned PDF | scripted but opt-in: `khb catalog --ocr` (see below) |
+| scanned PDF | agent-read (vision) or scripted OCR — both opt-in (see below) |
+| Images (png, jpg, screenshots, diagrams, charts) | agent: read with a vision model → `raw/images/`, provenance header |
 | Audio, video | agent: transcribe with Whisper (see below), then wrap as md |
 | Source code repo | do NOT copy — record location in `sources.yaml`, read in place |
 
@@ -123,21 +124,34 @@ wins on awkward layouts. Everything lands in the hash-keyed cache at
 Two cases stay explicit, because both cost real time and produce lower-fidelity text than
 direct extraction:
 
-**Scanned PDFs.** A PDF with pages but no text layer is reported as `scanned`, not `failed`
-— the file is readable, just not by a text extractor — and listed in `inbox/scanned.jsonl`.
-To actually read them:
+**Scanned PDFs and images.** A PDF with pages but no text layer is reported as `scanned`,
+not `failed` — the file is readable, just not by a text extractor — and listed in
+`inbox/scanned.jsonl`. Bare images (`.png`, `.jpg`, screenshots, photographed whiteboards,
+diagrams, charts) are the same case: pixels, no text layer. Both have two paths, and the
+division of labor in `AGENT.md` decides which half is khb's:
 
-```
-bun add @hyzyla/pdfium sharp tesseract.js    # ~75 MB, WASM, no system binary
-khb catalog --ocr
-```
+- **Vision (agent-read, higher fidelity).** khb only does the mechanical half — it renders
+  each PDF page (or normalizes an image) to a bitmap in the hash-keyed cache and records a
+  pending row with an empty `raw`. You, the agent, then read those bitmaps with a vision
+  model and write the result into `raw/images/<file>.md` (or `raw/scanned/<file>.md`) with
+  the usual provenance header, noting the model (`tool: claude-vision`). This is the only
+  way to capture what a *diagram, chart, or table-as-image* actually says — OCR drops it.
+- **OCR (scripted, offline, no tokens).** For plain scanned text where you don't want to
+  spend model calls, tesseract stays the deterministic fallback:
 
-Install them where `khb` resolves modules from, which for a global install is the khb
-package directory, not your hub — run `khb catalog --ocr` once and it prints the exact
-`cd … && bun add …` to use. First run also downloads ~5 MB of language data.
+  ```
+  bun add @hyzyla/pdfium sharp tesseract.js    # ~75 MB, WASM, no system binary
+  khb catalog --ocr
+  ```
 
-OCR text is noisier than real text, so the cache header records `tool: tesseract.js` —
-treat it with more suspicion during curation, and quote it more carefully.
+  Install them where `khb` resolves modules from, which for a global install is the khb
+  package directory, not your hub — run `khb catalog --ocr` once and it prints the exact
+  `cd … && bun add …` to use. First run also downloads ~5 MB of language data.
+
+khb never reads a bitmap itself — no `--auto-describe`, no hosted-vision flag; rendering is
+mechanical, reading is an agent pass. OCR text is noisier than real text, so its cache
+header records `tool: tesseract.js`; vision output records `tool: claude-vision`. Treat
+both with more suspicion during curation than direct extraction, and quote them carefully.
 
 **Audio and video.** Not extracted by `khb` at any setting: transcription is minutes of
 compute per file, so it stays an agent-run pass you choose to make.
