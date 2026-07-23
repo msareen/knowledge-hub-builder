@@ -10,6 +10,17 @@ never edit them, edit bundle content instead. Every workflow protocol lives whol
 Those files are plain markdown — any agent can read one directly, whether or not its
 runtime has a notion of "skills".
 
+## What a bundle is
+
+A bundle is a **logical unit defined by its owner** — a person, a team, a project, a client
+— not a subject classification. It holds as many topics as its owner has; topics are
+organized inside it with subdirectories. A bundle whose contents look heterogeneous is
+working as intended.
+
+Creating, splitting or merging bundles is a human decision, always. Never do it on your own
+initiative, in any workflow, however obviously a subject seems to want its own home. On
+explicit instruction, carve one out and move the files; otherwise leave the shape alone.
+
 ## How to navigate
 
 1. Start at `outer.index.md`. Pick exactly one bundle for the question. Do not browse.
@@ -59,18 +70,20 @@ This file is the single common contract — bundles carry no per-bundle agent ru
 
 One hard boundary governs every workflow and every future change to the tooling:
 
-- **`khb` is deterministic mechanics.** Hashing, caching, text extraction from
-  born-digital formats, rendering bitmaps, file plumbing, and ledger-keeping. It is fast,
-  free, reproducible, and **never contacts a model** — not directly, not by shelling out.
-- **The agent governs everything that needs judgment or a model.** Clustering a corpus,
-  proposing the bundle set, labeling catalog batches, reading images/audio/scanned pages,
-  and curating `raw/` into concept docs.
+- **`khb` converts bytes to text.** Hashing, caching, file plumbing, ledger-keeping, and
+  *every* local extractor: PDF/DOCX/ODT/XLSX/PPTX libraries, tesseract OCR for scans and
+  images, whisper for audio and video. All of it deterministic, offline, and free of
+  charge. It **never contacts a model** — not directly, not by shelling out.
+- **The agent decides what the text means.** Splitting a document into concepts, labeling
+  and linking them, curating `raw/` into the wiki, escalating a bad OCR to a vision read,
+  and judging when a query has produced a new concept worth keeping.
 
-The split exists so every expensive or intelligent decision is auditable: it leaves a
-provenance header and a `log.md` row. When extending khb, keep the mechanical half in the
-CLI and the intelligent half in an agent pass — e.g. khb renders a page to a bitmap; the
-agent reads it. Never add a `khb … --auto-label` / `--summarize` flag that calls a model;
-that rots the boundary.
+The line is *conversion vs. interpretation*, not cheap vs. expensive: tesseract and whisper
+belong in `khb` despite costing real CPU, because their output is reproducible and needs no
+judgement. The split exists so every intelligent decision is auditable — it leaves a
+provenance header and a `log.md` row. When extending khb, keep conversion in the CLI and
+interpretation in an agent pass. Never add a `khb … --auto-label` / `--summarize` flag that
+calls a model; that rots the boundary.
 
 ## Tooling
 
@@ -83,21 +96,28 @@ From outside, pass `--hub <dir>` or set `$KHB_HUB`.
 | `khb upgrade` | refresh this hub's package-owned contract docs |
 | `khb visualize` | regenerate `visualizer/graph.html` |
 | `khb new-bundle <name>` | scaffold + register a bundle |
-| `khb triage <path...>` | index a bulk corpus in place (no copies) → `inbox/manifest.jsonl` |
-| `khb catalog` | extract text + build label batches → `inbox/catalog/in/` |
-| `khb catalog-merge` | fold labeled batches → `inbox/catalog.jsonl` |
-| `khb route` | apply `inbox/routing.yaml` → `files` sources in each bundle |
-| `khb ingest <bundle>` | pull sources from `sources.yaml`; maintains the `log.md` ledger |
+| `khb ingest [bundle]` | acquire + extract every source in `sources.yaml` → `raw/`; maintains `log.md`. No bundle named → `default`, created if absent |
 | `khb export <bundle> [dest]` | standalone copy: bundle + common patterns, shareable alone |
 
-## Ingestion
+There is no `khb catalog` command — cataloging is entirely a judgement pass.
 
-Follow `skills/ingest/SKILL.md`: phase 0 triage a bulk corpus into a manifest when the
-bundle set isn't known yet (and catalog it if filenames alone won't tell you the bundles),
-phase 1 acquire into `raw/` (scripted for folder/files/web, MCP/CLI for
-the rest, provenance header always), phase 2 curate `raw/` into concept docs and
-register them in the bundle's `index.md`. Each bundle's `log.md` is the durable ledger
-of what has been acquired and curated — keep its `curated` column current.
+## Ingest, then catalog — two steps, in that order
+
+**Ingest** (`skills/ingest/SKILL.md`) is mechanical and flat: `khb ingest <bundle>` pulls
+every declared source into `raw/` as markdown with a provenance header, extracting
+everything it can locally — into the named bundle, or into `default` when none is named — text, PDF, DOCX, ODT, XLSX, PPTX, images by OCR, audio and
+video by whisper. Sources behind an authenticated API (Confluence, ADO, git hosts) you pull
+yourself via MCP/CLI into the same `raw/` shape. Ingest never interprets content.
+
+**Catalog** (`skills/catalog/SKILL.md`) is the judgement half, one bundle at a time: read
+each `raw/` file, split it into concepts, give each OKF frontmatter, link them, register
+them in `index.md`. Fan out Haiku subagents over the raw files; only *you* write
+`index.md`, `log.md` and `refs.md`.
+
+Each bundle's `log.md` is the durable ledger across both steps — rows with an empty
+`curated` column are the catalog backlog, so keep it current. A raw file carrying
+`quality: low` came from OCR or a transcript: distrust it, and re-read the original named in
+its `source:` header when the text looks wrong.
 
 ## Parallel work
 

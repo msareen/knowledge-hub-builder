@@ -6,11 +6,3 @@ export function takeFlag(args: string[], name: string): boolean {
   args.splice(i, 1);
   return true;
 }
-
-export function takeValue(args: string[], name: string): string | undefined {
-  const i = args.indexOf(name);
-  if (i < 0) return undefined;
-  const v = args[i + 1];
-  args.splice(i, 2);
-  return v;
-}

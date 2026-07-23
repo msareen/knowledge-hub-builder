@@ -1,7 +1,7 @@
 # Acquired source material — re-fetchable from sources.yaml; log.md keeps the record.
 bundles/*/raw/
 
-# Phase-0 triage scratch: manifest + routing decisions.
+# Extraction cache (inbox/extracted/<sha256>.md) — re-derivable from the sources.
 inbox/
 
 # Generated

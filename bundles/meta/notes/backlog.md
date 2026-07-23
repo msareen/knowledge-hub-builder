@@ -1,5 +1,6 @@
 ---
 type: Backlog
+title: KHB backlog
 description: Planned extractors, ingesters, tooling, and routing defects.
 ---
 

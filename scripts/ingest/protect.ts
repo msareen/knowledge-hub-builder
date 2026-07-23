@@ -1,6 +1,6 @@
 // Lightweight, dependency-free heuristics for detecting password-protected documents,
-// so a corpus can be triaged without silently shipping files no CLI tool downstream
-// (pdftotext/pandoc) will be able to open. Covers only the two EXTRACTABLE formats
+// so ingest can say "password-protected" instead of reporting a mystery empty extraction.
+// Covers only the two document formats
 // (exts.ts) where a cheap byte-level signal exists:
 //   .pdf  — trailer/xref carries an /Encrypt dictionary reference
 //   .docx — MS wraps an encrypted OOXML payload in an OLE2 (CFB) container instead

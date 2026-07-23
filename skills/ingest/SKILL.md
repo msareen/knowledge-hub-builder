@@ -1,194 +1,170 @@
 ---
 name: ingest
-description: Ingest external material (folders, web pages, Confluence, ADO, PDF, DOCX, audio) into a KHB bundle and curate it into concept docs, including triaging a large mixed corpus across multiple bundles. Use when the user wants to add, import, dump, or refresh data in the knowledge base.
+description: Acquire external material (folders, files, web pages, Confluence, ADO, git) into a KHB bundle's raw/ folder as markdown with provenance — one flat mechanical phase, no interpretation. Use when the user wants to add, import, dump, pull, or refresh source data in the knowledge base.
 ---
 
 # Ingest into KHB
 
-Phases, always in this order. Phase 0 is only for bulk corpora whose bundles aren't
-known yet. Phase 1 is mechanical (get faithful copies into `raw/`); phase 2 is agentic
-(distill `raw/` into concept docs). Never skip to 2 — curation must trace back to
-provenance.
+**Ingest gets bytes into `bundles/<bundle>/raw/` as markdown with a provenance header.
+That is all it does.** It is one flat phase, it is mechanical, and it ends the moment the
+text exists. Deciding what the text *means* — splitting it into concepts, titling,
+tagging, linking, indexing — is the [catalog skill](../catalog/SKILL.md), a separate step
+you run afterwards.
 
-Keep each bundle's `log.md` ledger current throughout — its empty `raw`/`curated`
-columns are the worklist, and nothing else records it. Finish with `khb lint` and fix
-every error.
+Do not curate here. Do not decide bundles here. If you find yourself reading a document to
+understand it, you have left this skill.
 
-## Phase 0 — triage a bulk corpus (only when bundles are unknown)
+## 1. Declare the sources
 
-Normal ingest is bundle-first: you know the bundle, you declare a source. A large mixed
-corpus is the reverse — the bundle set is an *output* of inspecting the data. Triage
-resolves that without duplicating anything.
-
-```
-khb triage <path...>     # index in place: path, size, sha256, head snippet → inbox/manifest.jsonl
-                             # copies 0 bytes; reports duplicate groups by content hash
-```
-
-Triage is free — `stat` + hash + a 1KB peek, no external tools — so it is safe to point at
-an unknown multi-GB corpus. Read the manifest and **prune what isn't knowledge** (browser
-caches, photo dumps, contact exports) before spending anything on the next step.
-
-### Catalog (optional, but the manifest alone is thin)
-
-The `head` snippet is only populated for text files, so every PDF and DOCX — exactly the
-formats most likely to carry content — reaches clustering blank. `khb catalog` fixes that:
-
-```
-khb catalog              # extract text (cached by hash) → inbox/catalog/in/NNNN.jsonl
-                             # then label the batches with cheap subagents
-khb catalog-merge        # → inbox/catalog.jsonl: {path, sha256, topic, doc_type, project, summary}
-```
-
-`khb` never contacts a model; labeling is a documented subagent fan-out over the batch
-files, spelled out in the [catalog skill](../catalog/SKILL.md). Extracted text is cached
-hub-wide at `inbox/extracted/<sha256>.md`, and phase 1 reuses it — nothing is converted
-twice.
-
-Then, as the agent: cluster on the catalog facets if you have them, otherwise on the
-manifest's `head` (do not open the corpus either way), propose the bundle set to the user,
-`khb new-bundle` each approved one, and write the assignment:
+Ingest is bundle-first: you know which bundle the material belongs to, and you say where it
+comes from. Edit `bundles/<bundle>/sources.yaml`:
 
 ```yaml
-# inbox/routing.yaml
-routes:
-  <bundle>:
-    - /abs/path/to/file.pdf
-unrouted: []          # anything you deliberately declined to ingest
+sources:
+  - type: folder          # walk a directory tree
+    path: /abs/path/to/project-x
+  - type: files           # a scattered, explicitly named set
+    paths:
+      - /abs/path/to/one.pdf
+      - /abs/path/to/two.xlsx
+  - type: web
+    urls:
+      - https://example.com/design-doc
+  # Types with no scripted ingester are still declared here, for the record —
+  # you pull them yourself in step 3.
+  - type: confluence
+    space: PROJX
 ```
 
-`khb route` merges each list into that bundle's `sources.yaml` as a `files` source.
-Nothing is acquired yet — phase 1 does that, per bundle.
+If the user has not said which bundle, ask. If no bundle fits, `khb new-bundle <name>
+"<scope>"` first. Nothing is copied by declaring a source.
 
-Triage is the one phase that legitimately looks across all bundles. That does not
-violate the one-bundle-at-a-time rule in `AGENT.md`: it is routing, not answering.
-`inbox/` is gitignored scratch — the durable record is each bundle's `log.md`.
+**The `default` bundle.** When no bundle is named, ingest targets `default` and creates it
+if the hub has none — a first `khb ingest` never fails for want of a destination. Use it
+when the owning bundle genuinely isn't known yet; don't use it to avoid asking. What lands
+there is ordinary bundle content: catalog it like any other. Do **not** graduate it into new
+bundles on your own — a bundle is a logical unit the user defines (a person, a team, a
+project), so material leaves `default` only when the user says which bundle owns it. An
+explicitly named bundle that doesn't exist is still an error — only `default` is conjured.
 
-A hash appearing under two bundles means one bundle owns the source; the other gets a
-`refs.md` entry, never a second copy.
-
-## Phase 1 — acquire → `raw/`
-
-Target layout: `bundles/<bundle>/raw/<source-type>/<file>.md`. Every file starts with:
+## 2. Run it
 
 ```
----
-source: <url | path | tool query>
-fetched: <ISO timestamp>
----
+khb ingest                          # no bundle named → the 'default' bundle
+khb ingest <bundle>                 # incremental: unchanged content hashes are skipped
+khb ingest <bundle> --force         # re-acquire everything
+khb ingest <bundle> --skip-ocr      # leave scans and images unread
+khb ingest <bundle> --skip-audio    # leave audio/video untranscribed
 ```
 
-Re-acquiring is incremental: a source whose content hash is unchanged and whose `raw/`
-file still exists is skipped. `khb ingest <bundle> --force` re-acquires everything.
-`raw/` is gitignored and never canonical.
+One command handles every scripted source in `sources.yaml` and extracts everything it can,
+locally. Read the summary it prints — the counts are the state of the world:
 
-### The ledger — `log.md`
+| line | meaning |
+|---|---|
+| `unchanged, skipped` | already acquired at this exact content hash |
+| `extracted` / `reused from the extraction cache` | converted now / converted by an earlier run or another bundle |
+| `read by OCR` / `transcribed` | lossy routes — see quality, below |
+| `marked quality: low` | verify these against the source when cataloging |
+| `not extracted` | got a ledger row with an empty `raw`; the per-file line says why |
 
-Every bundle keeps an ingest ledger in `log.md` (OKF-reserved, so it is never a concept
-doc, and committed, so it survives `raw/` being deleted and re-derived).
+### What khb extracts
 
-| column | owner | meaning |
+All of it runs locally and none of it contacts a model — that is the `AGENT.md` division of
+labor. khb converts bytes to text as cheaply as possible; your judgement is spent on
+curation, not transcription.
+
+| Format | Tool | Quality |
 |---|---|---|
-| `source` | script | origin URI: absolute path, url, or tool query |
-| `sha256` | script | content hash (12-char prefix) — drives skip-unchanged and dedup |
-| `fetched` | script | ISO timestamp of last acquisition |
-| `raw` | script | bundle-relative `raw/` path; **empty = extraction still pending** |
-| `curated` | agent | concept doc(s) distilled from it; **empty = not yet curated** |
+| `.md .txt .rst .adoc .html .csv .json .yaml` | copied verbatim | high |
+| `.pdf` (born-digital) | `unpdf`, then `pdftotext` if on PATH | high |
+| `.docx` / `.odt` / `.pptx` | `mammoth` / `fflate` / `fflate`, `pandoc` if on PATH | high |
+| `.xlsx` | `fflate` → one markdown table per sheet | high |
+| `.pdf` (scanned, no text layer) | `pdfium` + `tesseract.js`, automatically | **low** |
+| `.png .jpg .webp .tif .gif` | `tesseract.js`, automatically | **low** |
+| `.mp3 .wav .m4a .mp4 .mov .mkv` | local `whisper` / `faster-whisper` | **low** |
 
-`khb ingest` maintains the first four and never touches `curated`. Fill `curated`
-yourself in phase 2 — it is the only record of what work remains, and the empty-column
-counts printed after each run are your worklist. Binary sources are recorded with an
-empty `raw` the moment they are seen, so a pending `pdftotext`/`whisper` pass is never
-lost between runs.
+Extracted text is cached hub-wide by content hash at `inbox/extracted/<sha256>.md`, so the
+same file appearing in two bundles converts once.
+
+OCR and transcription need optional dependencies. When they are missing khb says so once and
+records the affected files as pending rather than failing the run:
+
+```
+bun add @hyzyla/pdfium sharp tesseract.js    # OCR — ~75 MB WASM, no system binary
+pip install -U openai-whisper                # transcription (faster-whisper also works)
+```
+
+Install them where `khb` resolves modules from — for a global install that is the khb
+package directory, not your hub. khb prints the exact `cd … && bun add …` to use.
+
+## 3. Sources khb cannot reach
+
+Anything behind an authenticated API has no scripted ingester, because maintaining API
+wrappers is not what this tool is for. Pull those yourself with the site's MCP server or
+official CLI, and write the result into `raw/<type>/` **in exactly the format khb
+produces** — same folder shape, same header — so the catalog pass cannot tell the
+difference:
 
 | Source | How |
 |---|---|
-| local folder, web urls | scripted: declare in `sources.yaml`, run `khb ingest <bundle>` |
-| explicit file list | scripted: `files` source, usually written by `khb route` after triage |
-| Confluence | agent: MCP server or CLI → save pages to `raw/confluence/` |
-| Azure DevOps | agent: MCP/CLI → wiki pages / work items to `raw/ado/` |
-| PDF, DOCX, ODT | scripted: `khb` extracts these itself — no system tools to install |
-| scanned PDF | agent-read (vision) or scripted OCR — both opt-in (see below) |
-| Images (png, jpg, screenshots, diagrams, charts) | agent: read with a vision model → `raw/images/`, provenance header |
-| Audio, video | agent: transcribe with Whisper (see below), then wrap as md |
-| Source code repo | do NOT copy — record location in `sources.yaml`, read in place |
+| Confluence | MCP server or `confluence` CLI → `raw/confluence/<page>.md` |
+| Azure DevOps | MCP/CLI → wiki pages, work items → `raw/ado/<item>.md` |
+| GitHub / GitLab issues, PRs, wikis | `gh` / `glab` CLI → `raw/git/<thing>.md` |
+| Source code repository | do **not** copy — record the location in `sources.yaml` and read it in place |
+| A diagram or chart no OCR can read | vision read the image → `raw/images/<file>.md`, `extract_tool: claude-vision` |
 
-### Extraction: what `khb` does and doesn't do for you
+Then add the row to `log.md` yourself (`source`, `sha256` if you have it, `fetched`, `raw`),
+so the ledger stays the complete record regardless of who did the fetching.
 
-`khb` carries its own extractors (`unpdf`, `mammoth`, `fflate` — all pure JS), so PDF, DOCX
-and ODT work on a bare machine with no `pdftotext` or `pandoc` install. If those CLIs *are*
-on PATH they get a second attempt at anything the libraries can't read, since poppler still
-wins on awkward layouts. Everything lands in the hash-keyed cache at
-`inbox/extracted/<sha256>.md`, and `khb ingest` copies out of it, so nothing converts twice.
+### The provenance header — the contract
 
-Two cases stay explicit, because both cost real time and produce lower-fidelity text than
-direct extraction:
+Every file in `raw/` starts with it. This is the reason ingest is a separate phase from
+catalog: extraction is sometimes lossy, and curation must always be able to walk back to the
+original bytes.
 
-**Scanned PDFs and images.** A PDF with pages but no text layer is reported as `scanned`,
-not `failed` — the file is readable, just not by a text extractor — and listed in
-`inbox/scanned.jsonl`. Bare images (`.png`, `.jpg`, screenshots, photographed whiteboards,
-diagrams, charts) are the same case: pixels, no text layer. Both have two paths, and the
-division of labor in `AGENT.md` decides which half is khb's:
-
-- **Vision (agent-read, higher fidelity).** khb only does the mechanical half — it renders
-  each PDF page (or normalizes an image) to a bitmap in the hash-keyed cache and records a
-  pending row with an empty `raw`. You, the agent, then read those bitmaps with a vision
-  model and write the result into `raw/images/<file>.md` (or `raw/scanned/<file>.md`) with
-  the usual provenance header, noting the model (`tool: claude-vision`). This is the only
-  way to capture what a *diagram, chart, or table-as-image* actually says — OCR drops it.
-- **OCR (scripted, offline, no tokens).** For plain scanned text where you don't want to
-  spend model calls, tesseract stays the deterministic fallback:
-
-  ```
-  bun add @hyzyla/pdfium sharp tesseract.js    # ~75 MB, WASM, no system binary
-  khb catalog --ocr
-  ```
-
-  Install them where `khb` resolves modules from, which for a global install is the khb
-  package directory, not your hub — run `khb catalog --ocr` once and it prints the exact
-  `cd … && bun add …` to use. First run also downloads ~5 MB of language data.
-
-khb never reads a bitmap itself — no `--auto-describe`, no hosted-vision flag; rendering is
-mechanical, reading is an agent pass. OCR text is noisier than real text, so its cache
-header records `tool: tesseract.js`; vision output records `tool: claude-vision`. Treat
-both with more suspicion during curation than direct extraction, and quote them carefully.
-
-**Audio and video.** Not extracted by `khb` at any setting: transcription is minutes of
-compute per file, so it stays an agent-run pass you choose to make.
-
-```
-pip install -U openai-whisper                       # the reference implementation
-whisper <file> --model base --output_format txt     # writes <file>.txt next to the source
+```yaml
+---
+source: /abs/path/to/original.pdf     # or the url, or the tool query
+fetched: 2026-07-23T09:14:02Z
+sha256: db2ee470c95d
+extract_tool: tesseract.js            # what produced the text below
+quality: low                          # high = real text; low = OCR or a transcript
+---
 ```
 
-`faster-whisper` (also pip) is a drop-in with far lower runtime if the corpus is large, and
-OpenAI's hosted transcription API is an option when local compute isn't. Whichever you use,
-write the result into `raw/<type>/<file>.md` with the usual provenance header and note the
-model in it — transcripts are lossy, and later curation needs to know which one produced it.
-Video is the same job: Whisper reads the audio track directly, no separate demux step.
+`quality: low` is a standing invitation to distrust the body. When cataloging one of these
+and the text reads thin, garbled, or contradictory, **open the `source:` file and read it
+directly** — a vision pass over a chart or a scanned table recovers what OCR drops. Rewrite
+the `raw/` file with `extract_tool: claude-vision` and `quality: high` when you do.
 
-## Phase 2 — curate `raw/` → concept docs (agent)
+## 4. The ledger — `log.md`
 
-1. Read the acquired files in `raw/`. Work the ledger: rows with an empty `raw` need a
-   CLI extraction pass first; rows with an empty `curated` are the backlog.
-2. Distill into concept docs: one concept per `.md` file, OKF frontmatter (`type`
-   required; `title`, `description`, `tags` recommended), placed in whatever
-   subdirectory grouping fits the domain. Keep the `source:` of the raw material
-   as a `# Citations` entry.
-3. Register every new doc in the bundle's `index.md` (`* [Title](path.md) - description`),
-   and record it in the `curated` column of `log.md`.
-4. Anything belonging to a different topic → that other bundle via its own curation,
-   plus a `refs.md` entry here. Never inline-link across bundles.
-5. `khb lint` — fix errors before finishing.
+Every bundle keeps its ingest ledger in `log.md` (OKF-reserved, so it is never mistaken for
+a concept doc, and committed, so it survives `raw/` being deleted and re-derived).
+
+| column | owner | meaning |
+|---|---|---|
+| `source` | khb | origin URI: absolute path, url, or tool query |
+| `sha256` | khb | content hash (12-char prefix) — drives skip-unchanged and dedup |
+| `fetched` | khb | ISO timestamp of last acquisition |
+| `raw` | khb | bundle-relative `raw/` path; **empty = never extracted** |
+| `curated` | agent | concept doc(s) distilled from it; **empty = catalog backlog** |
+
+`khb ingest` maintains the first four and never touches `curated`.
+
+## Hand off
+
+Ingest is done when the summary shows nothing unexpectedly pending. Report to the user what
+landed, what didn't and why, and how many rows are uncurated — then continue with the
+[catalog skill](../catalog/SKILL.md) to turn `raw/` into concept docs.
 
 ## Hygiene
 
-- Curate selectively: raw is bulk, concepts are distilled. Not every raw file
-  becomes a concept.
-- Deduplicate against existing concepts before creating new ones; update instead.
-- Large re-ingests: re-run phase 1 (it skips unchanged sources), then curate the rows
-  the ledger reports as changed or uncurated.
-- Never copy a bulk corpus into `raw/`. Record locations and let extraction shrink it —
-  the original stays where it is, as with source-code repos.
-- `log.md` records absolute source paths. If those paths are themselves sensitive,
-  gitignore it before the first commit.
+- `raw/` is gitignored, derived, and **never canonical**. Never cite it in an answer.
+- Never copy a bulk corpus into a bundle wholesale. Extraction shrinks documents to text;
+  source-code repos and media libraries stay where they are and get a `sources.yaml` entry.
+- The same file in two bundles: one bundle owns it, the other gets a `refs.md` entry. Never
+  two copies. The content hash in `log.md` is how you spot it.
+- `log.md` records absolute source paths. If those paths are themselves sensitive, gitignore
+  it before the first commit.

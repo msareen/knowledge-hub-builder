@@ -7,7 +7,7 @@ Routing only. One line of scope + when to route there. No knowledge content here
 | Bundle | Scope | Route here when |
 |---|---|---|
 
-## Larger topics
+## Groups
 
-Group related bundles under a heading as they accumulate; a topic heading routes to
-multiple bundles, never to notes directly.
+Group related bundles under a heading as they accumulate — by org, by client, by
+whatever line matters. A heading routes to bundles, never to notes.

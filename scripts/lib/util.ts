@@ -62,11 +62,29 @@ export function refTargets(refsMd: string): string[] {
   return out;
 }
 
+/**
+ * Provenance recorded on every raw/ file. `source` is the whole point of the phase:
+ * extraction is sometimes lossy, so curation must always be able to walk back to the
+ * original bytes. `tool` and `quality` say how much to trust what follows — `low` means
+ * OCR or a transcript guessed at it, and re-reading the source is the remedy.
+ */
+export type RawMeta = {
+  source: string;
+  sha256?: string;
+  tool?: string;
+  quality?: "high" | "low";
+};
+
 /** Write a raw/ file with provenance front matter. Returns its bundle-relative path. */
-export function writeRaw(dir: string, name: string, source: string, body: string): string {
+export function writeRaw(dir: string, name: string, meta: RawMeta, body: string): string {
   mkdirSync(dir, { recursive: true });
   const safe = name.replace(/[^\w.-]+/g, "_");
-  const fm = `---\nsource: ${source}\nfetched: ${new Date().toISOString()}\n---\n\n`;
+  const fm =
+    `---\nsource: ${meta.source}\nfetched: ${new Date().toISOString()}\n` +
+    (meta.sha256 ? `sha256: ${meta.sha256}\n` : "") +
+    (meta.tool ? `extract_tool: ${meta.tool}\n` : "") +
+    (meta.quality ? `quality: ${meta.quality}\n` : "") +
+    `---\n\n`;
   writeFileSync(join(dir, safe), fm + body);
   console.log(`  raw/ <- ${safe}`);
   // dir is <bundle>/raw/<type>; report the path as the ledger stores it

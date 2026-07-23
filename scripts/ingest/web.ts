@@ -3,6 +3,7 @@
 // unchanged body still short-circuits the rewrite and keeps the ledger row stable.
 import { writeRaw, sha256 } from "../lib/util";
 import { record, isFresh, type Entry } from "../lib/ledger";
+import type { Options } from "./acquire";
 import type { Source } from "./index";
 
 export async function ingestWeb(
@@ -10,7 +11,7 @@ export async function ingestWeb(
   rawDir: string,
   bundleDir: string,
   entries: Map<string, Entry>,
-  force: boolean,
+  { force }: Options,
 ) {
   let skipped = 0;
   for (const url of s.urls) {
@@ -31,7 +32,7 @@ export async function ingestWeb(
         continue;
       }
       const name = new URL(url).pathname.split("/").filter(Boolean).pop() || new URL(url).hostname;
-      const raw = writeRaw(rawDir, `${name}.md`, url, text);
+      const raw = writeRaw(rawDir, `${name}.md`, { source: url, sha256: hash.slice(0, 12), tool: "html-strip", quality: "high" }, text);
       record(entries, { source: url, sha256: hash, fetched: new Date().toISOString(), raw });
     } catch (e) {
       console.error(`  failed ${url}: ${e}`);
