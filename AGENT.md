@@ -10,6 +10,17 @@ never edit them, edit bundle content instead. Every workflow protocol lives whol
 Those files are plain markdown — any agent can read one directly, whether or not its
 runtime has a notion of "skills".
 
+## What a bundle is
+
+A bundle is a **logical unit defined by its owner** — a person, a team, a project, a client
+— not a subject classification. It holds as many topics as its owner has; topics are
+organized inside it with subdirectories. A bundle whose contents look heterogeneous is
+working as intended.
+
+Creating, splitting or merging bundles is a human decision, always. Never do it on your own
+initiative, in any workflow, however obviously a subject seems to want its own home. On
+explicit instruction, carve one out and move the files; otherwise leave the shape alone.
+
 ## How to navigate
 
 1. Start at `outer.index.md`. Pick exactly one bundle for the question. Do not browse.
@@ -85,7 +96,7 @@ From outside, pass `--hub <dir>` or set `$KHB_HUB`.
 | `khb upgrade` | refresh this hub's package-owned contract docs |
 | `khb visualize` | regenerate `visualizer/graph.html` |
 | `khb new-bundle <name>` | scaffold + register a bundle |
-| `khb ingest <bundle>` | acquire + extract every source in `sources.yaml` → `raw/`; maintains `log.md` |
+| `khb ingest [bundle]` | acquire + extract every source in `sources.yaml` → `raw/`; maintains `log.md`. No bundle named → `default`, created if absent |
 | `khb export <bundle> [dest]` | standalone copy: bundle + common patterns, shareable alone |
 
 There is no `khb catalog` command — cataloging is entirely a judgement pass.
@@ -94,7 +105,7 @@ There is no `khb catalog` command — cataloging is entirely a judgement pass.
 
 **Ingest** (`skills/ingest/SKILL.md`) is mechanical and flat: `khb ingest <bundle>` pulls
 every declared source into `raw/` as markdown with a provenance header, extracting
-everything it can locally — text, PDF, DOCX, ODT, XLSX, PPTX, images by OCR, audio and
+everything it can locally — into the named bundle, or into `default` when none is named — text, PDF, DOCX, ODT, XLSX, PPTX, images by OCR, audio and
 video by whisper. Sources behind an authenticated API (Confluence, ADO, git hosts) you pull
 yourself via MCP/CLI into the same `raw/` shape. Ingest never interprets content.
 

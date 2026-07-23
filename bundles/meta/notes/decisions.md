@@ -1,10 +1,49 @@
 ---
 type: Decision Log
-description: Design decisions for BKR and their rationale.
+title: KHB design decisions
+description: Design decisions for KHB and their rationale.
 ---
 
 # Design decisions
 
+- **2026-07-23 — Frontmatter is validated as data (L9 hardened, L8 extended).** L9 checked
+  only that a frontmatter block existed and carried a non-empty `type`; everything else the
+  catalog pass writes — `title`, `description`, `tags`, `resource`, `timestamp` — was
+  declared in `AGENT.md`, written on every concept, and then read by nothing and checked by
+  nothing. A doc with `titel:` or `tags: "a, b"` linted clean. L9 now parses the block
+  (malformed YAML is an error, since it loses every field at once), errors on a non-list
+  `tags`, and warns on missing `title`/`description`, a non-ISO `timestamp`, and unknown
+  keys. L8 likewise now requires a non-empty `source:` in raw provenance and checks
+  `quality:` reads `high|low`. Prompted by a question about GitHub Docs' frontmatter
+  conventions; those fields themselves (`versions`, `redirect_from`, `showMiniToc`) were
+  deliberately **not** adopted — they are static-site rendering directives for one docs
+  pipeline, not knowledge metadata. What transferred was the discipline: a documented field
+  set, enforced at lint time and written down in the README, rather than a convention that
+  drifts. Value types stay free-form — `type` has no closed enum, unlike GitHub's.
+- **2026-07-23 — A bundle is a logical unit, not a topic.** Supersedes "one topic per
+  bundle" wherever it appeared (`SPEC.md` core idea 1, `README.md`, `skills/new-bundle`).
+  A bundle is defined by whoever owns its material — a person, a team, a project, a client
+  — and holds as many topics as that owner has, grouped by subdirectory. Reason: the old
+  rule ("if the scope sentence needs *and*, make two bundles") shatters exactly the unit
+  that matters. A team's roadmap, incidents and vendor notes share a custodian, a context
+  and an access story; splitting them by subject scatters one person's world across the
+  router and makes every question a cross-bundle join. Subject is what `type`, `tags` and
+  subdirectories are for — inside a bundle, where classification is cheap and reversible.
+  Corollary, now stated in `AGENT.md` and repeated in the catalog skill: **no workflow
+  creates, splits or merges bundles on its own initiative.** Cataloging classifies concepts
+  and links them within one bundle; heterogeneous contents are the expected case, not a
+  defect to fix. An agent restructures bundles only when explicitly told to.
+- **2026-07-23 — `default` is the landing bundle when none is named.** `khb ingest` with no
+  bundle argument targets `bundles/default/`, scaffolding it if the hub has none. Dropping
+  phase 0 left the first ingest in a fresh hub with nowhere to put bytes — it exited 1 and
+  told you to go create a bundle, which is the routing question the user often can't answer
+  before reading the material. `default` answers it provisionally: content lands, gets
+  cataloged normally, and material leaves it only when the user says which bundle owns it
+  (amended 2026-07-23 by the bundle-is-a-logical-unit decision above). Deliberately
+  *not* a revival of triage — there is no manifest, no routing table, no second pipeline,
+  just one conventional bundle name. Only `default` is auto-created; a misspelled explicit
+  bundle still errors, since that is a typo rather than a request. Scaffolding moved out of
+  `new-bundle.ts` into `scripts/lib/scaffold.ts` so both entry points build identical bundles.
 - **2026-07-23 — Ingest / catalog / query re-cut into three sharp jobs.** Supersedes the
   2026-07-19 triage decision below and the "script only the trivial" scope from
   2026-07-19.

@@ -39,9 +39,18 @@ sources:
 If the user has not said which bundle, ask. If no bundle fits, `khb new-bundle <name>
 "<scope>"` first. Nothing is copied by declaring a source.
 
+**The `default` bundle.** When no bundle is named, ingest targets `default` and creates it
+if the hub has none — a first `khb ingest` never fails for want of a destination. Use it
+when the owning bundle genuinely isn't known yet; don't use it to avoid asking. What lands
+there is ordinary bundle content: catalog it like any other. Do **not** graduate it into new
+bundles on your own — a bundle is a logical unit the user defines (a person, a team, a
+project), so material leaves `default` only when the user says which bundle owns it. An
+explicitly named bundle that doesn't exist is still an error — only `default` is conjured.
+
 ## 2. Run it
 
 ```
+khb ingest                          # no bundle named → the 'default' bundle
 khb ingest <bundle>                 # incremental: unchanged content hashes are skipped
 khb ingest <bundle> --force         # re-acquire everything
 khb ingest <bundle> --skip-ocr      # leave scans and images unread

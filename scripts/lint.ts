@@ -2,6 +2,15 @@
 import { HUB, BUNDLES, listBundles, read, mdLinks, refTargets, join, existsSync } from "./lib/util";
 import { readdirSync, statSync } from "node:fs";
 import { dirname, relative } from "node:path";
+import { parse as parseYaml } from "yaml";
+
+/** OKF v0.1 concept frontmatter. Unknown keys are warned, not rejected — OKF is permissive,
+ *  but a `titel:` typo silently loses the field, so it is worth one line of noise. */
+const OKF_FIELDS = new Set(["type", "title", "description", "resource", "tags", "timestamp"]);
+
+/** Accepts a YAML-parsed Date (unquoted) or an ISO-8601 string (quoted). */
+const isTimestamp = (v: unknown) =>
+  v instanceof Date ? !isNaN(v.getTime()) : typeof v === "string" && !isNaN(Date.parse(v));
 
 let errors = 0, warnings = 0;
 const err = (rule: string, msg: string) => { errors++; console.error(`ERROR ${rule}: ${msg}`); };
@@ -62,10 +71,35 @@ for (const b of bundles) {
   for (const c of concepts) {
     const body = read(join(dir, c));
 
-    // L9 OKF conformance: frontmatter with non-empty type
+    // L9 OKF conformance: frontmatter must parse and carry a usable field set.
+    // Frontmatter is the machine-readable half of a concept — routing, filtering and any
+    // future index generator read it — so a typo'd key is a silent data loss, not a style nit.
     const fm = body.match(/^---\n([\s\S]*?)\n---/)?.[1];
-    if (!fm) err("L9", `${b}: ${c} has no YAML frontmatter (OKF requires it)`);
-    else if (!/^type:\s*\S/m.test(fm)) err("L9", `${b}: ${c} frontmatter missing required 'type'`);
+    if (fm === undefined) err("L9", `${b}: ${c} has no YAML frontmatter (OKF requires it)`);
+    else {
+      let meta: Record<string, unknown> | undefined;
+      try {
+        meta = (parseYaml(fm) ?? {}) as Record<string, unknown>;
+      } catch (e) {
+        err("L9", `${b}: ${c} frontmatter is not valid YAML — ${(e as Error).message.split("\n")[0]}`);
+      }
+      if (meta) {
+        const str = (k: string) => (typeof meta![k] === "string" ? (meta![k] as string).trim() : "");
+        // type is the one OKF hard requirement; the rest degrade to warnings so an
+        // in-progress hub still lints clean while its authors fill things in.
+        if (!str("type")) err("L9", `${b}: ${c} frontmatter missing required 'type'`);
+        for (const k of ["title", "description"])
+          if (!str(k)) warn("L9", `${b}: ${c} frontmatter missing '${k}'`);
+        if ("tags" in meta && !Array.isArray(meta.tags))
+          err("L9", `${b}: ${c} 'tags' must be a YAML list, not ${typeof meta.tags}`);
+        if (Array.isArray(meta.tags) && meta.tags.some((t) => typeof t !== "string"))
+          err("L9", `${b}: ${c} 'tags' must contain only strings`);
+        if ("timestamp" in meta && !isTimestamp(meta.timestamp))
+          warn("L9", `${b}: ${c} 'timestamp' is not an ISO-8601 datetime`);
+        for (const k of Object.keys(meta))
+          if (!OKF_FIELDS.has(k)) warn("L9", `${b}: ${c} unknown frontmatter key '${k}'`);
+      }
+    }
 
     // L6 no cross-bundle links from concept docs
     for (const l of mdLinks(stripComments(body))) {
@@ -85,8 +119,15 @@ for (const b of bundles) {
   if (existsSync(rawDir)) {
     for (const f of readdirSync(rawDir, { recursive: true }) as string[]) {
       try {
-        if (f.endsWith(".md") && !read(join(rawDir, f)).startsWith("---"))
-          warn("L8", `${b}: raw/${f} missing provenance header`);
+        if (!f.endsWith(".md")) continue;
+        const head = read(join(rawDir, f));
+        const rfm = head.match(/^---\n([\s\S]*?)\n---/)?.[1];
+        if (rfm === undefined) { warn("L8", `${b}: raw/${f} missing provenance header`); continue; }
+        // `source` is the whole point of the header: it is how a bad extraction gets re-read.
+        if (!/^source:\s*\S/m.test(rfm)) warn("L8", `${b}: raw/${f} provenance missing 'source'`);
+        const q = rfm.match(/^quality:\s*(\S+)/m)?.[1];
+        if (q && q !== "high" && q !== "low")
+          warn("L8", `${b}: raw/${f} quality '${q}' is not high|low`);
       } catch {}
     }
   }

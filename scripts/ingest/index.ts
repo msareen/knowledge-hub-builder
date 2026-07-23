@@ -10,7 +10,8 @@
 // step. Sources that need an authenticated API (Confluence, ADO, git hosts) stay with the
 // agent via MCP/CLI, which is a plugin boundary, not a phase.
 import { parse } from "yaml";
-import { bundleDir, read, join } from "../lib/util";
+import { read, join } from "../lib/util";
+import { bundleForIngest, DEFAULT_BUNDLE } from "../lib/scaffold";
 import { readLedger, writeLedger } from "../lib/ledger";
 import { takeFlag } from "../lib/args";
 import { ingestFolder } from "./folder";
@@ -31,13 +32,19 @@ const opts: Options = {
   ocr: !takeFlag(argv, "--skip-ocr"),
   audio: !takeFlag(argv, "--skip-audio"),
 };
-const bundle = argv.find((a) => !a.startsWith("--"));
-if (!bundle) { console.error("Usage: khb ingest <bundle> [--force] [--skip-ocr] [--skip-audio]"); process.exit(1); }
+// No bundle named → `default`, created on the spot if the hub has none. Bytes always have
+// somewhere to land; sorting them into real bundles is a later, cheaper decision (a concept
+// is one file, and moving it is a `git mv`). Naming a bundle explicitly stays the norm.
+const bundle = argv.find((a) => !a.startsWith("--")) ?? DEFAULT_BUNDLE;
 
-const dir = bundleDir(bundle);
+const dir = bundleForIngest(bundle);
 const cfg = parse(read(join(dir, "sources.yaml"))) as { sources?: Source[] } | null;
 const sources = cfg?.sources ?? [];
-if (!sources.length) { console.log(`${bundle}: no sources configured in sources.yaml`); process.exit(0); }
+if (!sources.length) {
+  console.log(`${bundle}: no sources configured.`);
+  console.log(`Declare them in bundles/${bundle}/sources.yaml, then re-run: khb ingest ${bundle}`);
+  process.exit(0);
+}
 
 const entries = readLedger(dir);
 

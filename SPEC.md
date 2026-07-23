@@ -17,7 +17,13 @@ KHB's own contribution is the bundle-of-bundles layer over both — see §1.
 
 ## 1. Core ideas
 
-1. **Bundle** — a self-contained topic unit owning its content and ingestion sources.
+1. **Bundle** — a self-contained *logical* unit owning its content and ingestion sources.
+   What makes a bundle is a human decision about ownership, not a classification of subject
+   matter: a person, a team, a client, a project. One bundle holds as many topics as its
+   owner has — a team bundle carries its roadmap, its incidents and its vendor notes
+   together, grouped by subdirectory, because they share a custodian and a context.
+   Bundles are never split automatically; splitting is an explicit instruction, never a
+   default behavior of ingest, catalog or query.
    Bundles are *lean*: the common rules (AGENT.md and the `skills/` protocols) live once
    at the hub root, not duplicated per bundle. When a bundle must travel alone,
    `khb export <bundle>` produces a standalone folder with the common patterns
@@ -187,6 +193,13 @@ sources:
 can, and writes `raw/<type>/<file>.md` with a provenance header. It does not interpret
 content — that is §5b. Re-running is incremental: a source whose content hash is unchanged
 and whose `raw/` copy still exists is skipped; `--force` re-acquires.
+
+The bundle argument is optional. With none, ingest targets `default` and scaffolds it if the
+hub has no such bundle, so a hub with zero bundles still has a landing path. Only that name
+is auto-created — an explicit name that doesn't resolve is an error, not a scaffold request.
+`default` is a holding area, not a tier: its contents are cataloged like any bundle's. Its
+material moves only when a human says which bundle should own it — a topic emerging inside
+it is not itself a reason to move anything.
 
 Every raw file carries its origin, so a lossy extraction is always recoverable:
 

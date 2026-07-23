@@ -15,6 +15,14 @@ whole job, and it is why this pass needs a model and `khb ingest` does not.
 
 `khb` has no `catalog` command. Nothing here is mechanical enough to script.
 
+**Catalog classifies concepts and links them. It never reorganizes bundles.** The splitting
+it does is *within* a bundle — raw files into concepts, concepts into subdirectories. A
+bundle is a logical unit its owner defined (a person, a team, a project) and it holds many
+topics by design, so finding three unrelated subjects in one bundle is the expected case,
+not a problem to fix. Never create a bundle, move material to another bundle, or propose a
+split because the contents look heterogeneous. If material clearly belongs to someone else,
+it gets a `refs.md` line and stays where it is.
+
 ## 1. Scope the work
 
 ```

@@ -1,14 +1,15 @@
 # knowledge-hub-builder
 
 <p align="center">
-  <img src="images/demo.gif" alt="Terminal demo: khb init creates a hub, new-bundle scaffolds a topic, ingest pulls sources into raw/, an agent routes a question through outer.index.md to a concept doc, and khb lint reports 0 errors" width="544">
+  <img src="images/demo.gif" alt="Terminal demo: khb init creates a hub, new-bundle scaffolds a bundle, ingest pulls sources into raw/, an agent routes a question through outer.index.md to a concept doc, and khb lint reports 0 errors" width="544">
 </p>
 
 **KHB — Knowledge Hub Builder.**
 
 A personal knowledge base you build *with* an agent and query *through* one.
 
-Knowledge lives in independent **bundles** (one topic each) joined by a thin router.
+Knowledge lives in independent **bundles** — one per owner: you, a team, a project, a
+client — joined by a thin router. Each holds as many topics as its owner does.
 An agent answers by routing — outer index → one bundle's index → concept docs — instead
 of grepping the whole tree. Content is plain markdown, so nothing here is locked in.
 
@@ -116,12 +117,19 @@ fine (personal + work); they don't know about each other.
 
 ### Step 1. Create a bundle
 
-One bundle = one topic you'd want answered in isolation. Err toward *fewer, broader*
-bundles at first; splitting later is cheap, merging is not.
+A bundle is a **logical unit you define** — yourself, a team, a project, a client. It is
+not a subject: one bundle carries as many topics as its owner has, organized inside it with
+subdirectories. Err toward *fewer, broader* bundles; a scope line listing several topics is
+normal, not a signal to split.
 
 ```bash
 khb new-bundle finances "Personal finances: accounts, budgets, tax"
+khb new-bundle team-payments "Payments team: roadmap, incidents, vendor evals"
 ```
+
+Nothing splits a bundle on its own. If you later want a slice carved out into its own
+bundle, you ask for it — no ingest, catalog or query step will reorganize your bundles
+behind your back.
 
 This scaffolds `bundles/finances/` and registers it in `outer.index.md`. Fill in that
 row's "Route here when" column — it's how the agent decides to enter this bundle, so
@@ -219,8 +227,29 @@ tags: [tax, recurring]
 - raw/folder/tax-notes.md
 ```
 
-`type` is required; everything else is recommended. Group files into whatever
-subdirectories fit (`accounts/`, `playbooks/`, `notes/`) — structure carries no meaning.
+Group files into whatever subdirectories fit (`accounts/`, `playbooks/`, `notes/`) —
+structure carries no meaning.
+
+#### The frontmatter schema
+
+Frontmatter is the machine-readable half of a concept: it's what routing, filtering and any
+index generator read, so `khb lint` validates it as data rather than glancing at it.
+
+| Field | Required | Type | What it's for |
+|---|---|---|---|
+| `type` | **yes** | string, free-form | What kind of thing this is — `Metric`, `Playbook`, `Runbook`, `Decision Log`. No closed list; use your domain's words |
+| `title` | recommended | string | Display name. Missing → lint warning |
+| `description` | recommended | string | One line, reused verbatim in index entries. Missing → lint warning |
+| `tags` | optional | **list of strings** | Filtering. Must be `[a, b]` — `"a, b"` is one opaque tag and lint errors on it |
+| `resource` | optional | URI | Canonical location of the underlying asset, if there is one |
+| `timestamp` | optional | ISO-8601 | When the concept was written or last held true |
+
+Unknown keys are legal — OKF v0.1 is permissive — but lint warns on them, because `titel:`
+is a typo that silently drops a field rather than failing loudly. Malformed YAML is an
+error: a frontmatter block that doesn't parse loses *every* field at once.
+
+This is [OKF v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf),
+not a KHB invention, so your concepts stay readable by anything else that speaks OKF.
 
 One raw file usually becomes *several* concepts: a 40-page contract is a dozen ideas, and
 three meeting transcripts about one decision are a single idea. That splitting and merging
@@ -311,14 +340,16 @@ CLI on your behalf. You never type these yourself:
 |---|---|---|
 | `khb upgrade` | refresh the hub's package-owned contract docs after a `khb` update | — (run ad hoc when you ask to update) |
 | `khb new-bundle <name> ["scope"]` | scaffold a bundle + register it in `outer.index.md` | `new-bundle` |
-| `khb ingest <bundle> [--force]` | acquire + extract declared sources → `raw/`, update `log.md` | `ingest` |
+| `khb ingest [bundle] [--force]` | acquire + extract declared sources → `raw/`, update `log.md` | `ingest` |
 | `khb lint` | validate structure against [the L1–L9 rules](skills/lint/SKILL.md) | `lint` |
 | `khb visualize` | regenerate `visualizer/graph.html` | `visualize` |
 | `khb export <bundle> [dest]` | standalone copy that works alone with any agent | `export` |
 
 Global flag: `--hub <dir>` runs a command against a hub you aren't standing in.
 `khb ingest` also takes `--skip-ocr` and `--skip-audio` for a fast first pass over a corpus
-full of scans or recordings.
+full of scans or recordings. Its bundle argument is optional: with none it uses a `default`
+bundle, creating it if the hub has none, so material always has somewhere to land when you
+don't yet know which bundle should own it.
 
 There is deliberately **no `khb catalog`**. Cataloging is pure judgement — reading a
 document and deciding what ideas are in it — so it lives entirely in

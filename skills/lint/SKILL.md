@@ -44,11 +44,23 @@ is a **concept document**.
 
 ### Provenance
 
-- L8. Files under `raw/` carry a provenance header (`source:` + `fetched:` front
-  matter). (warning)
+- L8. Files under `raw/` carry a provenance header (warning): frontmatter present, a
+  non-empty `source:`, and `quality:` — if set — reading exactly `high` or `low`.
+  `source` is what makes a bad extraction recoverable, so a raw file without one is
+  uncatalogable, not merely untidy.
 
 ### OKF conformance
 
-- L9. Every concept doc has YAML frontmatter with a non-empty `type` field
-  (OKF v0.1 §9). Recommended fields: `title`, `description`, `resource`, `tags`,
-  `timestamp`. Unknown types and extra keys are always allowed.
+- L9. Concept frontmatter is the machine-readable half of a concept, so it is validated
+  as data rather than glanced at:
+  - frontmatter block present, and **parses as YAML** (error) — a malformed block means
+    every field is silently lost.
+  - non-empty `type` (error) — the one OKF v0.1 §9 requirement. Its *value* stays
+    free-form: `Metric`, `Playbook`, `Runbook`, anything the domain needs.
+  - `title` and `description` present (warning) — indexes and index generators read them.
+  - `tags`, if present, is a YAML list of strings (error). `tags: "a, b"` is a string and
+    filters as one opaque value; `tags: [a, b]` is two tags.
+  - `timestamp`, if present, parses as an ISO-8601 datetime (warning).
+  - unknown top-level keys (warning). OKF is permissive and extra keys are legal, but
+    `titel:` is a typo that silently drops the field, and one warning line is cheaper than
+    a field nobody notices is missing.
