@@ -32,10 +32,15 @@ KHB's own contribution is the bundle-of-bundles layer over both — see §1.
 4. **Ingest, don't wiki-sprawl** — external material (folders on disk, Confluence, Azure
    DevOps, internet links) is pulled *into* a bundle by ingesters rather than being linked as
    living parts of the wiki. The wiki stays canonical; sources are provenance.
-5. **Extract to markdown** — binary/opaque formats (PDF, DOCX, audio) are converted to
-   markdown by extractors so every bundle's knowledge is plain, greppable text. Audio uses
-   whisper. Extraction is incremental — formats are added one by one.
-6. **Bun** is the scripting language for all tooling and third-party interfaces.
+5. **Acquisition and interpretation are separate steps.** `khb ingest` converts bytes to
+   markdown in `raw/` and stops. `catalog` — an agent pass, no command — turns that text
+   into concepts. Splitting them means a bad extraction is a re-run, not a re-think, and
+   every concept traces back through a provenance header to the original file.
+6. **Extract to markdown, locally** — binary/opaque formats (PDF, DOCX, XLSX, images,
+   audio) are converted to markdown so every bundle's knowledge is plain, greppable text.
+   Every extractor is local and deterministic: pure-JS libraries, tesseract WASM, whisper.
+   Lossy routes (OCR, ASR) are marked `quality: low` rather than hidden.
+7. **Bun** is the scripting language for all tooling and third-party interfaces.
 
 ## 2. Two directories, one of them yours
 
@@ -59,7 +64,7 @@ my-knowledge/                  # ~/OneDrive/my-knowledge, a private repo, a shar
 │       │   ├── index.md       #   (each may carry its own index)
 │       │   └── <concept>.md
 │       └── raw/               # ingested/extracted material, pre-curation (gitignored)
-├── inbox/                     # phase-0 triage scratch (gitignored)
+├── inbox/extracted/           # hub-wide extraction cache, keyed by content hash (gitignored)
 ├── visualizer/graph.html      # generated
 │
 │   ── below: package-owned copies, refreshed by `khb upgrade`, never hand-edited ──
@@ -67,9 +72,9 @@ my-knowledge/                  # ~/OneDrive/my-knowledge, a private repo, a shar
 ├── CLAUDE.md                  # Claude shim — points at AGENT.md, nothing more
 ├── SPEC.md                    # this file
 └── skills/<name>/SKILL.md     # one self-contained workflow protocol per folder:
-                               #   query      cross-bundle query + routing protocol
-                               #   ingest     acquire → raw/, curate → concept docs
-                               #   catalog    label a triaged corpus (subagent fan-out)
+                               #   query      routing, reading, and query-time learning
+                               #   ingest     acquire + extract → raw/ (mechanical)
+                               #   catalog    raw/ → concept docs (subagent fan-out)
                                #   lint       structural rules L1–L9
                                #   new-bundle / export / visualize
 ```
@@ -91,9 +96,10 @@ leaves `bundles/` and `outer.index.md` alone.
 │   ├── export.ts              # bundle + common patterns → standalone shareable folder
 │   ├── lint.ts                # enforce skills/lint/SKILL.md across the hub
 │   ├── visualize.ts           # emit visualizer/graph.html from indexes + refs
-│   ├── triage.ts / route.ts   # phase-0 bulk corpus handling
-│   ├── ingest/                # folder.ts, files.ts, web.ts → bundle/raw
+│   ├── ingest/                # folder.ts / files.ts / web.ts → acquire.ts → bundle/raw
 │   └── lib/
+│       ├── extract.ts         # every local extractor + the content-hash cache
+│       ├── ledger.ts          # log.md read/write
 │       ├── paths.ts           # package-side paths — importing it never needs a hub
 │       └── util.ts            # hub resolution + shared helpers
 ├── .bundle_template/          # copied by `khb new-bundle`
@@ -177,31 +183,60 @@ sources:
     project: ProjectX
 ```
 
-Ingested material lands in `raw/<type>/…` with a provenance header (source URL/path,
-fetched-at). Raw material is input for curation into concept docs — never cited as
-canonical directly. Re-running ingestion overwrites `raw/` idempotently.
+`khb ingest <bundle>` is **one flat phase**: it walks every scripted source, extracts what it
+can, and writes `raw/<type>/<file>.md` with a provenance header. It does not interpret
+content — that is §5b. Re-running is incremental: a source whose content hash is unchanged
+and whose `raw/` copy still exists is skipped; `--force` re-acquires.
 
-**Scripting philosophy: script only what's trivial and deterministic.** Folder and web
-ingestion are scripted (`khb ingest`). Confluence and ADO are reached through their
-MCP servers or official CLIs by the agent itself, following the conventions in
-`AGENT.md §Ingestion` — no API wrapper code to maintain here. If bulk, repeated,
-agent-free refresh of a source ever becomes a real need, promote it to a script then.
+Every raw file carries its origin, so a lossy extraction is always recoverable:
+
+```yaml
+---
+source: /abs/path/to/original.pdf
+fetched: 2026-07-23T09:14:02Z
+sha256: db2ee470c95d
+extract_tool: tesseract.js
+quality: low          # high = real text; low = OCR or transcript, verify against source
+---
+```
+
+**Scripting philosophy: script every deterministic conversion, script no API wrappers.**
+Folder, files and web are scripted, as is every extractor (§6). Confluence, ADO and git
+hosts are reached through their MCP servers or official CLIs by the agent, which writes into
+the same `raw/` shape — no API wrapper code to maintain here. If agent-free refresh of one
+of those ever becomes a real need, promote it to a script then.
+
+## 5b. Catalog
+
+Turning `raw/` into concept docs is a separate, agent-only step — `skills/catalog/SKILL.md`,
+with no CLI command, because nothing about it is mechanical. Per bundle: read each raw file,
+split it into concepts, give each OKF frontmatter, link them, register them in `index.md`,
+and fill the `curated` column of `log.md`. Parallelized by fanning cheap subagents over the
+raw files, with one hard rule — subagents write concept docs, the orchestrator alone writes
+`index.md`, `log.md` and `refs.md`.
 
 ## 6. Extraction
 
-Extraction is cheap and deterministic, so `khb` owns it: the common formats are handled by
-bundled pure-JS libraries with no system install, and the results are cached hub-wide by
-content hash (`inbox/extracted/<sha256>.md`). Only the formats that cost real time stay as
-an explicit, agent-invoked pass with the `<file>.md` + provenance-header convention.
+Extraction is deterministic, so `khb` owns all of it. Common formats use bundled pure-JS
+libraries with no system install; results are cached hub-wide by content hash
+(`inbox/extracted/<sha256>.md`) and reused across bundles. Nothing here contacts a model:
+tesseract and whisper are local binaries, expensive in CPU but reproducible, which is what
+puts them on the CLI side of the §Division-of-labor line.
 
-| Format | Tool | Where it runs | Status |
+| Format | Tool | Deps | Quality |
 |---|---|---|---|
-| PDF | `unpdf` (pdf.js), `pdftotext` if present | in `khb` | v1 |
-| DOCX | `mammoth`, `pandoc` if present | in `khb` | v1 |
-| ODT | `fflate` + content.xml | in `khb` | v1 |
-| scanned PDF | `pdfium` + `tesseract.js` (WASM) | `khb catalog --ocr`, opt-in deps | v1 |
-| Audio, video | Whisper (`openai-whisper` / `faster-whisper`) | agent-invoked | v1 |
-| PPTX, XLSX | `fflate` (both are zip+XML, same shape as ODT) | — | backlog |
+| PDF | `unpdf` (pdf.js), `pdftotext` if present | bundled | high |
+| DOCX | `mammoth`, `pandoc` if present | bundled | high |
+| ODT, PPTX | `fflate` + XML | bundled | high |
+| XLSX | `fflate` → one markdown table per sheet | bundled | high |
+| scanned PDF | `pdfium` + `tesseract.js` (WASM) | opt-in, ~75 MB | low |
+| Images (png/jpg/webp/tif) | `tesseract.js` | opt-in, ~75 MB | low |
+| Audio, video | `whisper` / `faster-whisper` | opt-in, pip | low |
+
+Missing optional deps degrade to a ledger row with an empty `raw` and a printed install
+hint — never to a failed run. `quality: low` output is a standing invitation for the catalog
+pass to re-read the original: a vision read of a chart or a scanned table recovers what OCR
+drops, and rewrites the raw file with `extract_tool: claude-vision`.
 
 ## 7. Lint
 
@@ -221,8 +256,16 @@ refs as directed edges, note counts as node size. No server, open in any browser
 ## 9. Agent workflow summary
 
 ```
-question → AGENT.md → outer.index.md → bundle/index.md → concept docs
-                                    ↘ (spanning?) refs.md → other bundle via ITS index
-new material → sources.yaml → ingest (script or MCP/CLI) → raw/ → curate into
-concept docs (+ index entries) → khb lint
+build:  sources.yaml → khb ingest → raw/*.md (+ provenance, + log.md row)
+                     → catalog (agent) → concept docs + index.md entries + curated column
+                     → khb lint
+
+query:  question → AGENT.md → outer.index.md → bundle/index.md → concept docs
+                           ↘ (spanning?) refs.md → other bundle via ITS index
+                           ↘ (durable synthesis?) propose a new concept → on confirm,
+                             write it, link it both ways, index it, log it
 ```
+
+The query arm writing back is what makes the hub denser with use rather than merely larger:
+a question answered by joining two concepts leaves that join behind for the next one. It is
+always proposed and never silent — see `skills/query/SKILL.md`.

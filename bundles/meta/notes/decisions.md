@@ -5,6 +5,39 @@ description: Design decisions for BKR and their rationale.
 
 # Design decisions
 
+- **2026-07-23 — Ingest / catalog / query re-cut into three sharp jobs.** Supersedes the
+  2026-07-19 triage decision below and the "script only the trivial" scope from
+  2026-07-19.
+  - **Ingest is one flat mechanical phase.** `khb ingest <bundle>` acquires *and* fully
+    extracts into `raw/`, then stops. Everything locally convertible is converted in that
+    one pass — text, PDF, DOCX, ODT, plus new XLSX and PPTX parsers, tesseract OCR for
+    scans *and* bare images, and local whisper for audio/video. Reason: extraction had
+    been split across `khb ingest`, `khb catalog --ocr` and an agent-run whisper pass, so
+    ingesting a mixed corpus was a multi-round negotiation and half of it reliably got
+    forgotten. OCR and whisper moved *into* khb without breaking the division of labor —
+    the line is conversion vs. interpretation, not cheap vs. expensive, and both are local
+    binaries producing reproducible output.
+  - **Provenance carries `extract_tool` and `quality`.** Lossy routes (OCR, ASR) are
+    marked `quality: low` rather than hidden, and the raw header always names the original
+    file. That is the whole reason acquisition is separate from interpretation: a bad OCR
+    is a re-read of the source, not a re-think of the concept written on top of it.
+  - **Catalog now means curation, one bundle at a time.** `raw/` → concept docs with OKF
+    frontmatter, links, and index entries, fanned out over cheap Haiku subagents with one
+    hard rule: subagents write concept docs, the orchestrator alone writes `index.md`,
+    `log.md` and `refs.md`. There is deliberately **no `khb catalog` command** — nothing
+    about the step is mechanical.
+  - **Phase 0 deleted entirely.** `khb triage`, `khb route`, the old batch-labeling
+    `khb catalog`, `khb catalog-merge`, `inbox/manifest.jsonl` and `inbox/routing.yaml`
+    are gone; `scripts/lib/progress.ts` went with them. Ingest is bundle-first, always:
+    you name the bundle before you name the source. Reason: bundle discovery from an
+    unknown corpus was a whole second pipeline serving a one-off case, and it made the
+    common path read as "phase 1 of 3". `inbox/` survives only as the extraction cache.
+  - **Query may write back.** When answering requires synthesizing across concepts and the
+    result is durable, the agent *proposes* a new concept, and on confirmation writes it,
+    links it in both directions, indexes it, and logs it with the question as its source.
+    Never silent — a hub that accumulates restated one-off answers is worse than a thin
+    one. Reason: the join between two concepts was being recomputed on every ask and
+    thrown away each time.
 - **2026-07-22 — Renamed BKR → KHB throughout.** Supersedes the 2026-07-20 naming
   decision below. CLI `bkr` → `khb`, package `@msareen/bkr` → `@msareen/khb`,
   `$BKR_HUB` → `$KHB_HUB`, and the expansion is now *Knowledge Hub Builder*, matching
@@ -66,7 +99,7 @@ description: Design decisions for BKR and their rationale.
   aimed at a person; `AGENT.md` stays the agent contract and the protocols stay the
   single source of truth. Reason: every root doc addressed agents, so a newcomer had no
   on-ramp. README links to the protocols rather than restating rules.
-- **2026-07-19 — Triage before routing (phase 0).** Bulk corpora are indexed in place
+- **2026-07-19 — Triage before routing (phase 0).** *(superseded 2026-07-23 — removed.)* Bulk corpora are indexed in place
   into a gitignored `inbox/manifest.jsonl` (path, size, sha256, head snippet) and routed
   to bundles via `inbox/routing.yaml` → `bun run route`. Reason: bundle-first ingest
   can't express "I don't know the bundles yet," and a global staging `raw/` would

@@ -14,8 +14,8 @@ of grepping the whole tree. Content is plain markdown, so nothing here is locked
 
 - **Why bundles?** They stay small enough to read fully, never collide, and can be worked
   in parallel or exported to travel alone.
-- **Why an agent?** Ingestion is bulk and mechanical; curation is judgement. The scripts
-  do the first, the agent does the second.
+- **Why an agent?** Getting bytes into text is mechanical; deciding what the text means is
+  judgement. `khb ingest` does the first and stops; the agent does the second.
 
 Full design: [SPEC.md](SPEC.md). Agent contract: [AGENT.md](AGENT.md).
 
@@ -42,10 +42,12 @@ bundles stay readable, parallelizable, and individually exportable.
 
 ## Setup
 
-Requires [Bun](https://bun.sh). Nothing else: PDF, DOCX and ODT extraction is built in.
-Optional, only for the formats that genuinely need more: `bun add @hyzyla/pdfium sharp
-tesseract.js` for OCR of scanned PDFs, and `whisper` for audio/video transcription.
-`pdftotext` (poppler) / `pandoc` are used automatically if present, but never required.
+Requires [Bun](https://bun.sh). Nothing else: PDF, DOCX, ODT, XLSX and PPTX extraction is
+built in. Two optional add-ons cover the formats that genuinely need more —
+`bun add @hyzyla/pdfium sharp tesseract.js` for OCR of scanned PDFs and images, and
+`pip install -U openai-whisper` for audio and video. Without them those files are recorded
+as pending rather than failing the run. `pdftotext` (poppler) / `pandoc` are used
+automatically if present, but never required.
 
 Install the tooling once:
 
@@ -141,7 +143,7 @@ sources:
 
 Nothing is copied yet — this only declares provenance.
 
-### Step 3. Acquire
+### Step 3. Ingest — bytes to text
 
 You never type `khb ingest` yourself — you ask in chat ("ingest the finances bundle"),
 the `ingest` skill fires, and the agent runs the command on your behalf:
@@ -151,7 +153,6 @@ the `ingest` skill fires, and the agent runs the command on your behalf:
   │  "ingest finances"    │                                │                     │
   ├──────────────────────▶│                                │                     │
   │                       │  loads skills/ingest/SKILL.md  │                     │
-  │                       │  — the phases, in one file     │                     │
   │                       │                                │                     │
   │                       │  khb ingest finances           │                     │
   │                       ├───────────────────────────────▶│                     │
@@ -159,36 +160,48 @@ the `ingest` skill fires, and the agent runs the command on your behalf:
   │                       │                                ├────────────────────▶│
   │                       │                                │  fetch/copy sources │
   │                       │                                ├────────────────────▶│
+  │                       │                                │  extract everything:│
+  │                       │                                │  pdf docx xlsx pptx │
+  │                       │                                │  ocr images/scans   │
+  │                       │                                │  whisper audio/video│
+  │                       │                                ├────────────────────▶│
   │                       │                                │  write raw/*, log.md│
   │                       │                                ├────────────────────▶│
-  │                       │◀───────────────────────────────┤ done + log summary  │
+  │                       │◀───────────────────────────────┤ counts + what failed│
   │                       │                                │                     │
-  │                       │  (scans + audio only) runs     │                     │
-  │                       │  khb catalog --ocr / whisper ──┼────────────────────▶│
-  │                       │                                │                     │
-  │                       │  curates raw/ → concept docs ──┼────────────────────▶│
-  │                       │  updates index.md + log.md     │                     │
-  │                       │                                │                     │
-  │                       │  khb lint                      │                     │
-  │                       ├───────────────────────────────▶│                     │
-  │◀──────────────────────┤  "0 errors, curated N docs"    │                     │
+  │                       │  (Confluence/ADO/git only)     │                     │
+  │                       │  pulls via MCP/CLI → raw/ ─────┼────────────────────▶│
+  │◀──────────────────────┤  "N files in raw/, M pending"  │                     │
 ```
 
-Text files land in `bundles/finances/raw/` with a `source:`/`fetched:` provenance header.
-PDF, DOCX and ODT are extracted by `khb` itself and reused from the hash-keyed cache that
-`khb catalog` fills, so nothing converts twice. Only the expensive formats stay explicit:
-scanned PDFs need `khb catalog --ocr`, audio and video need a Whisper pass the agent runs —
-see the table in the [ingest skill](skills/ingest/SKILL.md).
+Everything lands in `bundles/finances/raw/` as markdown with a provenance header naming the
+original file, the tool that read it, and whether the result is trustworthy:
+
+```yaml
+---
+source: /abs/path/to/statement.pdf
+fetched: 2026-07-23T09:14:02Z
+sha256: db2ee470c95d
+extract_tool: tesseract.js
+quality: low          # OCR guessed at this — re-read the source if it looks wrong
+---
+```
+
+That header is why ingest is its own step. Extraction is sometimes lossy, and the next step
+must always be able to walk back to the original bytes rather than curating garbled text.
 
 Every acquisition is written to `bundles/finances/log.md`, the ingest ledger. Re-running
-skips sources whose content hash hasn't changed (`--force` overrides). `raw/` is
+skips sources whose content hash hasn't changed (`--force` overrides). Extracted text is
+cached hub-wide by content hash, so the same PDF in two bundles converts once. `raw/` is
 gitignored; `log.md` is committed, so the record survives deleting `raw/`.
 
-### Step 4. Curate — the part that matters
+**Ingest never interprets content.** It ends the moment the text exists.
 
-Ask the agent: **"curate the finances bundle."**
+### Step 4. Catalog — the part that matters
 
-`raw/` is not knowledge, it's evidence. Curation distills it into **concept docs** — one
+Ask the agent: **"catalog the finances bundle."**
+
+`raw/` is not knowledge, it's evidence. Cataloging distills it into **concept docs** — one
 idea per markdown file, anywhere in the bundle, with frontmatter:
 
 ```markdown
@@ -209,12 +222,18 @@ tags: [tax, recurring]
 `type` is required; everything else is recommended. Group files into whatever
 subdirectories fit (`accounts/`, `playbooks/`, `notes/`) — structure carries no meaning.
 
+One raw file usually becomes *several* concepts: a 40-page contract is a dozen ideas, and
+three meeting transcripts about one decision are a single idea. That splitting and merging
+is the whole job, and it's why this step needs a model and step 3 doesn't. The agent fans
+cheap Haiku subagents across the raw files to do it in parallel.
+
 Then the two bookkeeping rules that make queries work:
 - list each new doc in the bundle's `index.md` — **an unindexed doc is invisible to
   queries**, and lint will flag it;
 - fill its `curated` column in `log.md`. Rows with an empty `curated` are your backlog.
 
-Not every raw file deserves a concept doc. Curate selectively.
+Not every raw file deserves a concept doc. Most corpora are 80% receipts and boilerplate;
+declining a file is a real outcome, recorded as `declined` in the ledger.
 
 ### Step 5. Verify
 
@@ -245,37 +264,28 @@ For a cross-bundle question ("how did travel spending affect my Q3 budget?") it 
 one side fully, follows `refs.md` into the other bundle **through that bundle's own
 index**, and joins the two answers in its response rather than in the files.
 
+### The hub gets denser as you use it
+
+Sometimes answering means joining two concepts that were never joined before — and that
+join is worth more than the single answer it just produced. When the agent judges the
+synthesis durable, it offers to keep it:
+
+> *"Answering that meant combining `accounts/joint-account.md` with
+> `playbooks/quarterly-tax.md`. Save it as `playbooks/joint-account-tax-split.md`, linked
+> to both? "*
+
+On yes it writes the concept, links it **both ways** so the original docs point at the
+synthesis too, registers it in `index.md`, and records it in `log.md` with the question as
+its source. Next time, the same question is answered directly from a doc.
+
+It always asks. A knowledge base that silently accumulates restated one-off answers is
+worse than one that stays thin.
+
 Two symptoms worth acting on:
 - **The agent picked the wrong bundle** → your "Route here when" hint in `outer.index.md`
   is weak. Fix it there.
-- **The agent grepped instead of navigating** → something isn't in an index. Fix the
+- **The agent grepped to read rather than to route** → something isn't in an index. Fix the
   index, not the query.
-
----
-
-## Bulk ingest — when you don't know the bundles yet
-
-The flow above is bundle-first. Dumping a large mixed corpus (a whole Documents folder)
-is the reverse: the bundle set is an *output* of looking at the data.
-
-```bash
-khb triage /abs/path/to/corpus      # indexes IN PLACE — copies 0 bytes
-```
-
-This writes `inbox/manifest.jsonl` (path, size, sha256, head snippet per file) and reports
-duplicate groups by content hash. The agent reads the manifest — snippets only, not the
-corpus — proposes a bundle set, you approve, then:
-
-```bash
-khb new-bundle <each approved bundle>
-# agent writes inbox/routing.yaml assigning paths to bundles
-khb route                            # merges into each bundle's sources.yaml
-khb ingest <bundle>                  # then per bundle, as in Tutorial 1
-```
-
-`inbox/` is gitignored scratch. A file appearing under two bundles gets one owner plus a
-`refs.md` entry — never a second copy. Details in the
-[ingest skill](skills/ingest/SKILL.md).
 
 ---
 
@@ -301,14 +311,19 @@ CLI on your behalf. You never type these yourself:
 |---|---|---|
 | `khb upgrade` | refresh the hub's package-owned contract docs after a `khb` update | — (run ad hoc when you ask to update) |
 | `khb new-bundle <name> ["scope"]` | scaffold a bundle + register it in `outer.index.md` | `new-bundle` |
-| `khb ingest <bundle> [--force]` | acquire declared sources → `raw/`, update `log.md` | `ingest` |
-| `khb triage <path...>` | index a bulk corpus in place → `inbox/manifest.jsonl` | `ingest` |
-| `khb route` | apply `inbox/routing.yaml` → each bundle's `sources.yaml` | `ingest` |
+| `khb ingest <bundle> [--force]` | acquire + extract declared sources → `raw/`, update `log.md` | `ingest` |
 | `khb lint` | validate structure against [the L1–L9 rules](skills/lint/SKILL.md) | `lint` |
 | `khb visualize` | regenerate `visualizer/graph.html` | `visualize` |
 | `khb export <bundle> [dest]` | standalone copy that works alone with any agent | `export` |
 
 Global flag: `--hub <dir>` runs a command against a hub you aren't standing in.
+`khb ingest` also takes `--skip-ocr` and `--skip-audio` for a fast first pass over a corpus
+full of scans or recordings.
+
+There is deliberately **no `khb catalog`**. Cataloging is pure judgement — reading a
+document and deciding what ideas are in it — so it lives entirely in
+[the catalog skill](skills/catalog/SKILL.md) with no command behind it. The dividing line
+throughout: `khb` converts bytes to text, the agent decides what the text means.
 
 ## Hub layout
 
