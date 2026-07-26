@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { basename } from "../lib/util";
 import type { Entry } from "../lib/ledger";
 import { acquireFile, newCounters, report, type Options } from "./acquire";
+import { detail, item, outcome, pos } from "../lib/log";
 import type { Source } from "./index";
 
 export async function ingestFiles(
@@ -13,13 +14,16 @@ export async function ingestFiles(
   entries: Map<string, Entry>,
   opts: Options,
 ) {
+  detail(`${s.paths.length} file(s) declared`);
   const c = newCounters();
-  for (const p of s.paths) {
+  for (const [i, p] of s.paths.entries()) {
+    const at = pos(i + 1, s.paths.length);
     if (!existsSync(p)) {
-      console.warn(`  missing, skipped: ${p}`);
+      item(at, p);
+      outcome("missing, skipped");
       continue;
     }
-    await acquireFile(p, basename(p), rawDir, bundleDir, entries, c, opts);
+    await acquireFile(at, p, basename(p), rawDir, bundleDir, entries, c, opts);
   }
   report(c);
 }

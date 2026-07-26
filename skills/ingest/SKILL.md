@@ -89,6 +89,22 @@ locally. Read the summary it prints — the counts are the state of the world:
 | `marked quality: low` | verify these against the source when cataloging |
 | `not extracted` | got a ledger row with an empty `raw`; the per-file line says why |
 
+Above that summary, every file gets its own trace — announced *before* the work starts, so a
+run that is taking minutes always names the file it is taking them on:
+
+```
+[ 7/94] D:\corpus\board-pack.pdf
+        extracting pdf …
+        no text layer, 12p — scanned, running OCR (seconds per page)
+          page 1/12 — 1843 chars
+          …
+        extracted → raw/folder/board-pack.pdf.md  [tesseract.js @ 216dpi, quality: low] (48.1s)
+```
+
+There is no quiet mode, and this is deliberate: the trace is the audit trail for a pass that
+rewrites `raw/`. When something looks wrong later, that line — tool, quality, elapsed — is
+what tells you which file to distrust and which extractor to blame.
+
 ### What khb extracts
 
 All of it runs locally and none of it contacts a model — that is the `AGENTS.md` division of

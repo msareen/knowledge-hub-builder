@@ -22,6 +22,7 @@
 // source instead of trusting garbled text.
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from "node:fs";
 import { INBOX, join, basename } from "./util";
+import { note } from "./log";
 
 export const EXTRACTED = join(INBOX, "extracted");
 
@@ -213,8 +214,10 @@ export async function extractCached(path: string, hash: string, ext: string): Pr
   }
 
   if (!text.trim() && CLI[ext]) {
+    const bin = CLI[ext](path)[0];
+    note(`built-in reader recovered nothing — retrying with ${bin} if installed …`);
     text = await runCli(CLI[ext](path));
-    if (text.trim()) tool = CLI[ext](path)[0];
+    if (text.trim()) tool = bin;
   }
 
   // Pages but (near-)no characters is the signature of a scan. Check before declaring
@@ -276,15 +279,20 @@ export async function ocrCached(path: string, hash: string, dpi = 216): Promise<
   const tool = `tesseract.js @ ${dpi}dpi`;
   try {
     const doc = await lib.loadDocument(readFileSync(path));
+    // Materialize the page list for the denominator: this loop is the longest thing khb
+    // does, and "page 7/94" is the difference between waiting and killing the process.
+    const all = [...doc.pages()];
     const pages: string[] = [];
-    for (const page of doc.pages()) {
+    for (const [i, page] of all.entries()) {
       const img = await page.render({
         scale: dpi / 72,
         render: (o: { data: Buffer; width: number; height: number }) =>
           sharp(o.data, { raw: { width: o.width, height: o.height, channels: 4 } }).png().toBuffer(),
       });
       const { data } = await worker.recognize(Buffer.from(img.data));
-      pages.push(data.text.trim());
+      const text = data.text.trim();
+      note(`  page ${i + 1}/${all.length} — ${text.length} chars`);
+      pages.push(text);
     }
     doc.destroy();
     const text = pages.filter(Boolean).join("\n\n---\n\n");

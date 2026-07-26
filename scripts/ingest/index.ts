@@ -10,7 +10,8 @@
 // step. Sources that need an authenticated API (Confluence, ADO, git hosts) stay with the
 // agent via MCP/CLI, which is a plugin boundary, not a phase.
 import { parse } from "yaml";
-import { read, join } from "../lib/util";
+import { read, join, HUB } from "../lib/util";
+import { detail, section, totalElapsed } from "../lib/log";
 import { bundleForIngest, DEFAULT_BUNDLE } from "../lib/scaffold";
 import { readLedger, writeLedger } from "../lib/ledger";
 import { takeFlag } from "../lib/args";
@@ -89,8 +90,22 @@ if (!sources.length) {
 
 const entries = readLedger(dir);
 
-for (const s of sources) {
-  console.log(`[${s.type}]`);
+// State the whole plan before doing any of it: which hub (a --hub/$KHB_HUB run can target a
+// folder you did not expect), which bundle, and which of the expensive extractors are armed.
+console.log(`khb ingest → bundle '${bundle}'`);
+detail(`hub:      ${HUB}`);
+detail(`bundle:   ${dir}`);
+detail(`sources:  ${sources.length} declared in bundles/${bundle}/sources.yaml`);
+detail(`options:  ocr=${opts.ocr ? "on" : "off"}  audio=${opts.audio ? "on" : "off"}  force=${opts.force ? "on" : "off"}`);
+detail(`ledger:   ${entries.size} existing row(s) in log.md`);
+
+for (const [i, s] of sources.entries()) {
+  const label =
+    s.type === "folder" ? s.path
+    : s.type === "files" ? `${s.paths.length} path(s)`
+    : s.type === "web" ? `${s.urls.length} url(s)`
+    : "";
+  section(`[${i + 1}/${sources.length}] ${s.type}${label ? ` — ${label}` : ""} → bundles/${bundle}/raw/${s.type}/`);
   const rawDir = join(dir, "raw", s.type);
   if (s.type === "folder") await ingestFolder(s, rawDir, dir, entries, opts);
   else if (s.type === "files") await ingestFiles(s, rawDir, dir, entries, opts);
@@ -103,7 +118,8 @@ writeLedger(dir, entries, bundle);
 const all = [...entries.values()];
 const pending = all.filter((e) => !e.raw).length;
 const uncurated = all.filter((e) => e.raw && !e.curated).length;
-console.log(`\nledger: ${all.length} source(s) in log.md`);
+console.log(`\ndone in ${totalElapsed()}`);
+console.log(`ledger: ${all.length} source(s) in ${join(dir, "log.md")}`);
 if (pending) console.log(`  ${pending} with an empty 'raw' — not extracted; see the reasons above`);
 console.log(`  ${uncurated} in raw/ but not yet cataloged (empty 'curated')`);
 console.log(`Next: catalog ${bundle} — turn raw/ into concept docs (skills/catalog/SKILL.md).`);

@@ -1,5 +1,6 @@
 // khb lint — enforce skills/lint/SKILL.md (structural rules + OKF v0.1 conformance) across the hub
 import { HUB, BUNDLES, listBundles, read, mdLinks, refTargets, join, existsSync } from "./lib/util";
+import { detail, section, totalElapsed } from "./lib/log";
 import { readdirSync, statSync } from "node:fs";
 import { dirname, relative } from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -30,8 +31,14 @@ function walk(dir: string, base = dir): string[] {
   });
 }
 
-for (const b of bundles) {
+console.log(`khb lint → ${HUB}`);
+detail(`${bundles.length} bundle(s): ${bundles.join(", ") || "none"}`);
+
+for (const [bi, b] of bundles.entries()) {
   const dir = join(BUNDLES, b);
+  // Name the bundle before its findings: an unattributed "ERROR L4" in a fifty-bundle hub
+  // sends you grepping, and a clean bundle should still show that it was actually checked.
+  section(`[${bi + 1}/${bundles.length}] ${b}`);
 
   // L2 name
   if (!/^[a-z0-9][a-z0-9-]*$/.test(b)) err("L2", `bad bundle name '${b}'`);
@@ -47,6 +54,7 @@ for (const b of bundles) {
   const mdFiles = files.filter((f) => f.endsWith(".md"));
   const concepts = mdFiles.filter((f) => !RESERVED.includes(f.split("/").pop()!));
   const indexes = mdFiles.filter((f) => f.split("/").pop() === "index.md");
+  detail(`${concepts.length} concept doc(s), ${indexes.length} index file(s)`);
 
   // Collect all index link targets, resolved to bundle-relative paths
   const indexed = new Set<string>();
@@ -117,6 +125,8 @@ for (const b of bundles) {
   // L8 raw provenance (warning)
   const rawDir = join(dir, "raw");
   if (existsSync(rawDir)) {
+    const rawFiles = (readdirSync(rawDir, { recursive: true }) as string[]).filter((f) => f.endsWith(".md"));
+    detail(`${rawFiles.length} raw/ file(s) checked for provenance`);
     for (const f of readdirSync(rawDir, { recursive: true }) as string[]) {
       try {
         if (!f.endsWith(".md")) continue;
@@ -151,5 +161,5 @@ proseCheck("outer.index.md", outerIndex);
 for (const b of bundles)
   if (existsSync(join(BUNDLES, b, "index.md"))) proseCheck(`${b}/index.md`, read(join(BUNDLES, b, "index.md")));
 
-console.log(`\nlint: ${errors} error(s), ${warnings} warning(s) across ${bundles.length} bundle(s)`);
+console.log(`\nlint: ${errors} error(s), ${warnings} warning(s) across ${bundles.length} bundle(s) in ${totalElapsed()}`);
 process.exit(errors ? 1 : 0);

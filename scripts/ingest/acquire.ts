@@ -16,6 +16,7 @@ import {
 } from "../lib/extract";
 import { kindOf, extOf, mdName } from "./exts";
 import { detectPasswordProtected, PROTECTABLE } from "./protect";
+import { item, note, outcome } from "../lib/log";
 
 export type Options = {
   force: boolean;   // re-acquire even when the content hash is unchanged
@@ -46,10 +47,12 @@ export const newCounters = (): Counters => ({
 function pend(entries: Map<string, Entry>, path: string, hash: string, c: Counters, why: string) {
   record(entries, { source: path, sha256: hash, fetched: new Date().toISOString(), raw: "" });
   c.pending++;
-  console.log(`  pending — ${why}: ${path}`);
+  // The path is already on this item's own line; say only why it stopped.
+  outcome(`pending — ${why}`);
 }
 
 export async function acquireFile(
+  at: string,
   path: string,
   name: string,
   rawDir: string,
@@ -58,6 +61,9 @@ export async function acquireFile(
   c: Counters,
   opts: Options,
 ): Promise<void> {
+  // Announce the file first: hashing a multi-GB binary and every extractor below can take
+  // real time, and a run that printed only successes left the slow file unnamed.
+  item(at, path);
   const kind = kindOf(path);
   const hash = await sha256File(path);
   if (kind === "skip") {
@@ -66,6 +72,7 @@ export async function acquireFile(
   }
   if (!opts.force && isFresh(entries, bundleDir, path, hash)) {
     c.skipped++;
+    outcome("unchanged, skipped");
     return;
   }
 
@@ -73,8 +80,10 @@ export async function acquireFile(
   const stamp = (raw: string) => record(entries, { source: path, sha256: hash, fetched: new Date().toISOString(), raw });
 
   if (kind === "text") {
-    stamp(writeRaw(rawDir, file, { source: path, sha256: hash.slice(0, 12), tool: "copy", quality: "high" }, readFileSync(path, "utf8")));
+    const raw = writeRaw(rawDir, file, { source: path, sha256: hash.slice(0, 12), tool: "copy", quality: "high" }, readFileSync(path, "utf8"));
+    stamp(raw);
     c.copied++;
+    outcome(`copied → ${raw}`);
     return;
   }
 
@@ -91,6 +100,7 @@ export async function acquireFile(
   let res: Extraction;
 
   if (kind === "doc") {
+    note(hit ? `${ext.slice(1)} — reusing cached extraction` : `extracting ${ext.slice(1)} …`);
     res = await extractCached(path, hash, ext);
     // Pages but no text layer: the file is fine, the reader was wrong. OCR is the remedy,
     // and running it here is what keeps ingest a single pass instead of a hunt afterwards.
@@ -99,7 +109,7 @@ export async function acquireFile(
         pend(entries, path, hash, c, `scanned, ${res.pages}p (--skip-ocr)`);
         return;
       }
-      console.log(`  ocr — scanned, ${res.pages}p: ${path}`);
+      note(`no text layer, ${res.pages}p — scanned, running OCR (seconds per page)`);
       res = await ocrCached(path, hash);
       if (res.status === "ok") c.ocrd++;
     }
@@ -108,6 +118,7 @@ export async function acquireFile(
       pend(entries, path, hash, c, "image (--skip-ocr)");
       return;
     }
+    note(hit ? "image — reusing cached OCR" : "image — running OCR …");
     res = await ocrImageCached(path, hash);
     if (res.status === "ok" && !hit) c.ocrd++;
   } else {
@@ -115,7 +126,7 @@ export async function acquireFile(
       pend(entries, path, hash, c, "audio/video (--skip-audio)");
       return;
     }
-    console.log(`  transcribing: ${path}`);
+    note(hit ? "audio/video — reusing cached transcript" : "transcribing with whisper (minutes per file) …");
     res = await transcribeCached(path, hash);
     if (res.status === "ok" && !hit) c.transcribed++;
   }
@@ -127,10 +138,14 @@ export async function acquireFile(
 
   // Copy out of the hash-keyed cache rather than moving: raw/ stays derived and the cache
   // stays reusable by any other bundle that holds the same content.
-  stamp(writeRaw(rawDir, file, { source: path, sha256: hash.slice(0, 12), tool: res.tool, quality: res.quality }, extractedBody(res.path)));
+  const raw = writeRaw(rawDir, file, { source: path, sha256: hash.slice(0, 12), tool: res.tool, quality: res.quality }, extractedBody(res.path));
+  stamp(raw);
   if (hit) c.fromCache++;
   else if (kind === "doc") c.extracted++;
   if (res.quality === "low") c.lowQuality++;
+  // Name the tool and the quality on the line: `quality: low` is the flag that tells
+  // curation to re-read the original, and burying it in the file made it easy to miss.
+  outcome(`${hit ? "cached" : "extracted"} → ${raw}  [${res.tool}, quality: ${res.quality}]`);
 }
 
 export function report(c: Counters) {
