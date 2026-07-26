@@ -29,6 +29,10 @@ it gets a `refs.md` line and stays where it is.
 khb ingest <bundle>          # if the user asked to catalog something not yet ingested
 ```
 
+That only moves bytes for sources already declared in the bundle's `sources.yaml`; if the
+material isn't declared yet, you are at the start of the [ingest skill](../ingest/SKILL.md),
+not this one.
+
 The worklist is `bundles/<bundle>/log.md`: **every row with a `raw` path and an empty
 `curated` column.** Nothing else records what is outstanding, so work from the ledger rather
 than from a directory listing — a `raw/` file whose row is already filled has been done.

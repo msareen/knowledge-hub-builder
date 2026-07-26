@@ -64,7 +64,7 @@ Claude loads it through `CLAUDE.md`; Codex loads it directly.
   gets a dated line in `bundles/meta/notes/decisions.md`.
 - **`raw/` is not canonical.** It's ingested source material awaiting curation. Cite
   concept docs; use `raw/` only when curating.
-- **New bundle:** `khb new-bundle <name>` — never hand-copy `_template`.
+- **New bundle:** `khb new-bundle <name>` — never hand-copy `.bundle_template`.
 - After structural edits run `khb lint` and fix what it reports.
 
 ## Division of labor — khb vs agent
@@ -85,6 +85,47 @@ judgement. The split exists so every intelligent decision is auditable — it le
 provenance header and a `log.md` row. When extending khb, keep conversion in the CLI and
 interpretation in an agent pass. Never add a `khb … --auto-label` / `--summarize` flag that
 calls a model; that rots the boundary.
+
+## Where skills live — one canonical file, thin adapters
+
+A skill exists **once**, in `skills/<name>/SKILL.md`, and that one file carries the entire
+protocol. Runtimes that have a notion of "skills" discover it through a parallel adapter
+that only points at it:
+
+```
+skills/<name>/SKILL.md            ← canonical: the whole protocol
+.claude/skills/<name>/SKILL.md    ← adapter: frontmatter + a link
+.agents/skills/<name>/SKILL.md    ← adapter: frontmatter + a link
+```
+
+Each adapter is the same handful of lines — nothing else belongs in one:
+
+```markdown
+---
+name: <name>
+description: <one line; this is what the runtime matches on when deciding to load the skill>
+---
+
+Read and follow the [canonical workflow](../../../skills/<name>/SKILL.md) in full; treat all
+of its instructions as part of this skill.
+```
+
+The `../../../` climbs from `.claude/skills/<name>/` back to the hub root. The two adapters
+are byte-identical to each other; only the canonical file differs from them.
+
+**Adding a hub-specific skill** follows the same shape — create all three files, keep
+`<name>` identical across them, and put every instruction in the canonical file only. The
+adapter `description` is a triggering surface, so write it as *when to reach for this*, not
+as a summary of what it does; the canonical file's own frontmatter can be longer and more
+precise, since it is read after the decision to load has been made.
+
+Never let protocol text drift into an adapter: two copies of a workflow means an agent can
+load the stale one and have no way to tell. If a runtime needs something the link cannot
+express, extend the canonical file and keep the adapter a pointer.
+
+`khb upgrade` refreshes all three trees, so the built-in skills are package-owned — but it
+overwrites paths it ships and does not delete unknown ones, so a skill you add to a hub
+under a name khb does not use survives upgrades intact.
 
 ## Tooling
 
