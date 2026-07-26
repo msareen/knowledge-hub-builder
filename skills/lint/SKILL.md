@@ -5,11 +5,12 @@ description: Validate KHB structure (routing integrity, bundle shape, OKF confor
 
 # Lint KHB
 
-1. Run `khb lint` from the hub root.
+1. Run `khb lint` from anywhere inside the hub — it walks up to `khb.json` to find the root.
 2. Fix every ERROR (structure, routing, OKF frontmatter); judge warnings case by case
    (broken index links may be intentional not-yet-written knowledge).
-3. Re-run until 0 errors. If a fix changes root files, log it in
-   `bundles/meta/notes/decisions.md`.
+3. Re-run until 0 errors. If a fix changes root files **and the hub has a `meta` bundle**,
+   log it in `bundles/meta/notes/decisions.md`. No meta bundle means no decision log — do
+   not create one to have somewhere to write.
 
 ## The rules (L1–L9)
 
@@ -61,6 +62,8 @@ is a **concept document**.
   - `tags`, if present, is a YAML list of strings (error). `tags: "a, b"` is a string and
     filters as one opaque value; `tags: [a, b]` is two tags.
   - `timestamp`, if present, parses as an ISO-8601 datetime (warning).
-  - unknown top-level keys (warning). OKF is permissive and extra keys are legal, but
-    `titel:` is a typo that silently drops the field, and one warning line is cheaper than
-    a field nobody notices is missing.
+  - unknown top-level keys (warning). The known set is `type`, `title`, `description`,
+    `resource`, `tags`, `timestamp` — `resource` is optional and unvalidated, but it is
+    known, so it costs no warning. OKF is permissive and extra keys are legal, but `titel:`
+    is a typo that silently drops the field, and one warning line is cheaper than a field
+    nobody notices is missing.

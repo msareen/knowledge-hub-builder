@@ -47,7 +47,10 @@ export function bundleForIngest(name: string): string {
     console.error(`Create it:   khb new-bundle ${name} "<scope>"`);
     process.exit(1);
   }
-  createBundle(DEFAULT_BUNDLE, "Unsorted material — split into real bundles as it earns them");
+  // The scope line lands in outer.index.md, where every agent reads it — so it must not
+  // read as an instruction to reorganize the hub. Splitting `default` into real bundles is
+  // the user's call, exactly like any other bundle decision.
+  createBundle(DEFAULT_BUNDLE, "Unsorted material — where an ingest with no named bundle lands; moves out when you say which bundle owns it");
   console.log(`Created bundles/${DEFAULT_BUNDLE}/ — the landing bundle for unrouted material.`);
   return dir;
 }

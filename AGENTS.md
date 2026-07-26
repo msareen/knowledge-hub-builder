@@ -64,7 +64,7 @@ Claude loads it through `CLAUDE.md`; Codex loads it directly.
   gets a dated line in `bundles/meta/notes/decisions.md`.
 - **`raw/` is not canonical.** It's ingested source material awaiting curation. Cite
   concept docs; use `raw/` only when curating.
-- **New bundle:** `khb new-bundle <name>` — never hand-copy `_template`.
+- **New bundle:** `khb new-bundle <name>` — never hand-copy `.bundle_template`.
 - After structural edits run `khb lint` and fix what it reports.
 
 ## Division of labor — khb vs agent
