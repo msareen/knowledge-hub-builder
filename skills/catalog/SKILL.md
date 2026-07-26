@@ -1,6 +1,6 @@
 ---
 name: catalog
-description: Turn one bundle's raw/ material into OKF concept docs — read each raw file, split it into sub-topics, label each with type/title/description/tags, link them, and register them in index.md. Fans out cheap Haiku subagents over the raw files. Use after khb ingest, or when the user asks to curate, catalog, organize, or write up a bundle.
+description: Turn one bundle's raw/ material into OKF concept docs — read each raw file, split it into sub-topics, label each with type/title/description/tags, link them, and register them in index.md. Uses parallel subagents when the runtime supports them. Use after khb ingest, or when the user asks to curate, catalog, organize, or write up a bundle.
 ---
 
 # Catalog a bundle
@@ -50,17 +50,20 @@ Inventing a new subdirectory per raw file is the classic failure here.
 
 ## 3. Seed wave — one file, checked by hand
 
-Pick the most representative raw file and run **one** `Agent(model: "haiku")` on it with the
-prompt below. Then read what it wrote. You are checking the shape, not the facts: right
-granularity, frontmatter complete, titles that read like knowledge rather than like
-filenames. Correct the prompt if it is off, and take the concept titles it produced into
-your vocabulary before going wide.
+Pick the most representative raw file and delegate it to **one subagent** with the prompt
+below. Use a fast, economical model when the runtime exposes model selection; otherwise use
+its default subagent. If subagents are unavailable, do the same work in the current thread.
+Then read what it wrote. You are checking the shape, not the facts: right granularity,
+frontmatter complete, titles that read like knowledge rather than filenames. Correct the
+prompt if it is off, and take the concept titles it produced into your vocabulary before
+going wide.
 
 ## 4. Bulk wave — the rest in parallel
 
-One `Agent(model: "haiku")` per remaining raw file, **all issued in one message** so they
-run concurrently. Group several small files into one call when they are obviously the same
-subject; never split one file across two calls.
+Use one subagent per remaining raw file and start them concurrently when the runtime
+supports parallel delegation. Group several small files into one task when they are
+obviously the same subject; never split one file across two tasks. Without subagents,
+process the files sequentially in the current thread and keep the same single-writer rules.
 
 Parallel subagents cannot see each other's output, so two rules are absolute:
 

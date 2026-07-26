@@ -21,8 +21,8 @@ is a **concept document**.
 ### Bundle shape
 
 - L1. Every `bundles/<name>/` has: `index.md`, `refs.md`, `sources.yaml`. Concept docs
-  live in whatever subdirectory grouping fits the domain. No per-bundle AGENT.md —
-  root `AGENT.md` is the common contract; `khb export` injects it for standalone
+  live in whatever subdirectory grouping fits the domain. No per-bundle AGENTS.md —
+  root `AGENTS.md` is the common contract; `khb export` injects it for standalone
   sharing.
 - L2. Bundle names: lowercase, digits, hyphens (`^[a-z0-9][a-z0-9-]*$`).
 

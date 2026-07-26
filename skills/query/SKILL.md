@@ -23,10 +23,10 @@ order and stop at the first step that yields a single bundle:
 3. **Grep concept front matter.** Still inconclusive → search `title`, `description` and
    `tags` across concept docs. Then, if still nothing, full text across concept bodies.
    Never grep `raw/` — it is uncurated, and a hit there is not an answer.
-4. **Ask the user.** Two or more bundles still plausible → ask, one option per candidate
-   bundle with its scope line, rather than picking one and hoping. In Claude Code that is
-   `AskUserQuestion`. A wrong silent guess costs a whole wasted traversal and an answer from
-   the wrong domain; the question costs one turn.
+4. **Ask the user.** Two or more bundles still plausible → use the runtime's user-input
+   facility, or ask directly in chat, with one option per candidate bundle and its scope
+   line. A wrong silent guess costs a whole wasted traversal and an answer from the wrong
+   domain; the question costs one turn.
 
 Text search is a legitimate way to *find the door*. It is not a way to answer: whatever a
 grep hits, go back to the winning bundle's `index.md` and enter through it, so the index

@@ -1,4 +1,4 @@
-# AGENT.md — entry point for any agent
+# AGENTS.md — common contract for Claude, Codex, and other agents
 
 You are inside a **KHB hub** — a bundle-of-bundles knowledge system. Full design: `SPEC.md`.
 
@@ -30,6 +30,7 @@ explicit instruction, carve one out and move the files; otherwise leave the shap
 3. Enter the bundle via its `index.md`, then read only the concepts/notes it routes you to.
 
 This file is the single common contract — bundles carry no per-bundle agent rules.
+Claude loads it through `CLAUDE.md`; Codex loads it directly.
 
 ## Hard rules
 
@@ -111,8 +112,8 @@ yourself via MCP/CLI into the same `raw/` shape. Ingest never interprets content
 
 **Catalog** (`skills/catalog/SKILL.md`) is the judgement half, one bundle at a time: read
 each `raw/` file, split it into concepts, give each OKF frontmatter, link them, register
-them in `index.md`. Fan out Haiku subagents over the raw files; only *you* write
-`index.md`, `log.md` and `refs.md`.
+them in `index.md`. When the runtime supports parallel agents, fan them out over the raw
+files; only the orchestrating agent writes `index.md`, `log.md` and `refs.md`.
 
 Each bundle's `log.md` is the durable ledger across both steps — rows with an empty
 `curated` column are the catalog backlog, so keep it current. A raw file carrying

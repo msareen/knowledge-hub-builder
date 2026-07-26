@@ -1,396 +1,286 @@
 # knowledge-hub-builder
 
 <p align="center">
-  <img src="images/demo.gif" alt="Terminal demo: khb init creates a hub, new-bundle scaffolds a bundle, ingest pulls sources into raw/, an agent routes a question through outer.index.md to a concept doc, and khb lint reports 0 errors" width="544">
+  <img src="images/demo.gif" alt="KHB creates a hub, ingests sources, routes a question to a concept, and validates the result" width="544">
 </p>
 
-**KHB — Knowledge Hub Builder.**
+**KHB (Knowledge Hub Builder)** is a local, markdown-based knowledge base maintained with
+Claude Code, Codex, or another coding agent.
 
-A personal knowledge base you build *with* an agent and query *through* one.
+Knowledge is divided into **bundles** owned by a person, team, project, or client. Each
+bundle can contain many topics. A small outer index routes the agent to one bundle, and the
+bundle index routes it to the relevant concept documents.
 
-Knowledge lives in independent **bundles** — one per owner: you, a team, a project, a
-client — joined by a thin router. Each holds as many topics as its owner does.
-An agent answers by routing — outer index → one bundle's index → concept docs — instead
-of grepping the whole tree. Content is plain markdown, so nothing here is locked in.
+KHB keeps two jobs separate:
 
-- **Why bundles?** They stay small enough to read fully, never collide, and can be worked
-  in parallel or exported to travel alone.
-- **Why an agent?** Getting bytes into text is mechanical; deciding what the text means is
-  judgement. `khb ingest` does the first and stops; the agent does the second.
+- `khb ingest` converts source files into markdown. It is mechanical and does not call a
+  model.
+- The agent catalogs that material into concepts, links, and indexes. This requires
+  judgement and has no CLI command.
 
-Full design: [SPEC.md](SPEC.md). Agent contract: [AGENT.md](AGENT.md).
+Full design: [SPEC.md](SPEC.md). Agent contract: [AGENTS.md](AGENTS.md). Common workflow
+questions: [FAQ](document/faq.md).
 
-## Prior art
+## Quick Start
 
-KHB is a synthesis of two existing ideas:
-
-- **[Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)**
-  — the operating model. Rather than RAG-ing raw documents on every query, the LLM
-  *maintains* a markdown wiki: immutable raw sources, an LLM-curated wiki layer, and a
-  schema telling it how to work, driven by three operations — ingest, query, lint.
-  KHB keeps all of it: `raw/` is the immutable layer, concept docs are the wiki,
-  `AGENT.md` is the schema, and the `ingest`/`query`/`lint` skills are the three
-  operations.
-- **[Google's Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)**
-  — the file format. A concept is any non-reserved `.md` file with `type` frontmatter;
-  grouping is free-form subdirectories; `index.md` gives progressive disclosure;
-  `index.md`/`log.md`/`refs.md` are reserved. Bundles are OKF v0.1 conformant.
-
-What KHB adds is the **bundle-of-bundles** layer: many small wikis instead of one
-growing one, joined by a router, with cross-bundle links allowed only through `refs.md`.
-A single wiki gets slower to navigate and more collision-prone as it grows; bounded
-bundles stay readable, parallelizable, and individually exportable.
-
-## Setup
-
-Requires [Bun](https://bun.sh). Nothing else: PDF, DOCX, ODT, XLSX and PPTX extraction is
-built in. Two optional add-ons cover the formats that genuinely need more —
-`bun add @hyzyla/pdfium sharp tesseract.js` for OCR of scanned PDFs and images, and
-`pip install -U openai-whisper` for audio and video. Without them those files are recorded
-as pending rather than failing the run. `pdftotext` (poppler) / `pandoc` are used
-automatically if present, but never required.
-
-Install the tooling once:
+KHB requires [Bun](https://bun.sh).
 
 ```bash
-bun install -g @msareen/khb
+bun install -g @msareen/knowledge-hub-builder
+
+khb init ~/my-knowledge
+cd ~/my-knowledge
+
+khb new-bundle personal "My accounts, plans, records, and reference material"
 ```
 
-Then create a **hub** wherever the knowledge should live — OneDrive, a synced folder, a
-shared drive, a private repo:
-
-```bash
-khb init ~/OneDrive/my-knowledge
-cd ~/OneDrive/my-knowledge
-khb lint                             # should print 0 errors
-```
-
-The two halves stay separate, and that separation is the point:
-
-| | holds | who owns it |
-|---|---|---|
-| the **package** (`@msareen/khb`) | the CLI and the rules | upgraded with `bun update -g` |
-| the **hub** (`khb init`) | `outer.index.md` + `bundles/` — your knowledge | you |
-
-Nothing you write ever lands inside the package. `khb init` copies the agent contract
-(`AGENT.md` plus the `skills/` protocols) into the hub, so an agent
-opened on that folder finds its rules without knowing where `khb` is installed. Those
-copies are package-owned — don't hand-edit them; `khb upgrade` refreshes them in place
-and never touches `bundles/` or `outer.index.md`.
-
-```
-  npm registry                          your machine
-
-  ┌────────────────────┐                ┌──────────────────────────────────────────┐
-  │ @msareen/khb       │ bun install    │ khb CLI (global, on $PATH)               │
-  │ (the package)      │ ───────▶       │                                          │
-  │                    │ bun update     │ finds a hub by walking up to khb.json    │
-  └────────────────────┘                └──────────────────────────────────────────┘
-                                                            │
-                                                            │ khb init <dir>
-                                                            │ (copies contract docs in,
-                                                            │  never copies your data out)
-                                                            ▼
-                  ┌──────────────────────────────────────────────────────────┐
-                  │ the hub  (~/OneDrive/my-knowledge, a repo, ...)          │
-                  │                                                          │
-                  │ khb.json                 marker khb walks up to          │
-                  │ CLAUDE.md → AGENT.md   ┐ contract, package-owned,        │
-                  │ SPEC.md                ┤ refreshed by khb upgrade        │
-                  │ skills/<name>/SKILL.md ┘                                 │
-                  │ outer.index.md            router, you + agent maintain   │
-                  │ bundles/<name>/           your knowledge, yours alone    │
-                  │                                                          │
-                  └──────────────────────────────────────────────────────────┘
-```
-
-Open the hub folder in Claude Code (or any agent) — `CLAUDE.md` → `AGENT.md` takes it
-from there. Run `khb` from anywhere inside the hub; it finds the hub by walking up to
-`khb.json`. From outside, pass `--hub <dir>` or set `$KHB_HUB`.
-
-Your hub is a normal folder — `git init` it, sync it, or leave it be. Multiple hubs are
-fine (personal + work); they don't know about each other.
-
----
-
-## Tutorial 1 — build a knowledge base
-
-### Step 1. Create a bundle
-
-A bundle is a **logical unit you define** — yourself, a team, a project, a client. It is
-not a subject: one bundle carries as many topics as its owner has, organized inside it with
-subdirectories. Err toward *fewer, broader* bundles; a scope line listing several topics is
-normal, not a signal to split.
-
-```bash
-khb new-bundle finances "Personal finances: accounts, budgets, tax"
-khb new-bundle team-payments "Payments team: roadmap, incidents, vendor evals"
-```
-
-Nothing splits a bundle on its own. If you later want a slice carved out into its own
-bundle, you ask for it — no ingest, catalog or query step will reorganize your bundles
-behind your back.
-
-This scaffolds `bundles/finances/` and registers it in `outer.index.md`. Fill in that
-row's "Route here when" column — it's how the agent decides to enter this bundle, so
-write it as a trigger ("question mentions money, budget, tax, a specific account"), not
-as a description.
-
-### Step 2. Point it at your sources
-
-Edit `bundles/finances/sources.yaml`:
+Add sources to `bundles/personal/sources.yaml`:
 
 ```yaml
 sources:
   - type: folder
-    path: /abs/path/to/finance-docs
+    path: /absolute/path/to/documents
+  - type: files
+    paths:
+      - /absolute/path/to/one.pdf
+      - /absolute/path/to/two.xlsx
   - type: web
     urls:
-      - https://example.com/tax-guide
+      - https://example.com/reference
 ```
 
-Nothing is copied yet — this only declares provenance.
+Then either run the workflow directly:
 
-### Step 3. Ingest — bytes to text
-
-You never type `khb ingest` yourself — you ask in chat ("ingest the finances bundle"),
-the `ingest` skill fires, and the agent runs the command on your behalf:
-
-```
- you                    agent                          khb CLI              filesystem
-  │  "ingest finances"    │                                │                     │
-  ├──────────────────────▶│                                │                     │
-  │                       │  loads skills/ingest/SKILL.md  │                     │
-  │                       │                                │                     │
-  │                       │  khb ingest finances           │                     │
-  │                       ├───────────────────────────────▶│                     │
-  │                       │                                │  read sources.yaml  │
-  │                       │                                ├────────────────────▶│
-  │                       │                                │  fetch/copy sources │
-  │                       │                                ├────────────────────▶│
-  │                       │                                │  extract everything:│
-  │                       │                                │  pdf docx xlsx pptx │
-  │                       │                                │  ocr images/scans   │
-  │                       │                                │  whisper audio/video│
-  │                       │                                ├────────────────────▶│
-  │                       │                                │  write raw/*, log.md│
-  │                       │                                ├────────────────────▶│
-  │                       │◀───────────────────────────────┤ counts + what failed│
-  │                       │                                │                     │
-  │                       │  (Confluence/ADO/git only)     │                     │
-  │                       │  pulls via MCP/CLI → raw/ ─────┼────────────────────▶│
-  │◀──────────────────────┤  "N files in raw/, M pending"  │                     │
+```bash
+khb ingest personal
 ```
 
-Everything lands in `bundles/finances/raw/` as markdown with a provenance header naming the
-original file, the tool that read it, and whether the result is trustworthy:
+or ask the agent:
+
+> Ingest and catalog the personal bundle, then run the KHB lint.
+
+The agent discovers the KHB workflow skills from the hub and performs the catalog pass
+after ingestion.
+
+## How It Works
+
+### 1. Ingest
+
+`khb ingest <bundle>` reads `sources.yaml` and writes extracted markdown under
+`bundles/<bundle>/raw/`.
+
+Supported without additional system tools:
+
+- text, markdown, CSV, JSON, and YAML
+- PDF and DOCX
+- ODT, XLSX, and PPTX
+
+Optional local tools add:
+
+- OCR for images and scanned PDFs: `@hyzyla/pdfium`, `sharp`, and `tesseract.js`
+- audio and video transcription: a `whisper` or `faster-whisper` executable on `PATH`
+
+If an optional extractor is missing, KHB leaves a pending row in `log.md` and prints the
+required setup. OCR packages must be installed where the KHB package resolves modules; the
+CLI prints that location.
+
+Every raw markdown file carries provenance:
 
 ```yaml
 ---
-source: /abs/path/to/statement.pdf
+source: "/absolute/path/to/statement.pdf"
 fetched: 2026-07-23T09:14:02Z
 sha256: db2ee470c95d
-extract_tool: tesseract.js
-quality: low          # OCR guessed at this — re-read the source if it looks wrong
+extract_tool: "tesseract.js"
+quality: low
 ---
 ```
 
-That header is why ingest is its own step. Extraction is sometimes lossy, and the next step
-must always be able to walk back to the original bytes rather than curating garbled text.
+`quality: low` means OCR or transcription may be inaccurate. The agent can return to the
+original `source` during cataloging.
 
-Every acquisition is written to `bundles/finances/log.md`, the ingest ledger. Re-running
-skips sources whose content hash hasn't changed (`--force` overrides). Extracted text is
-cached hub-wide by content hash, so the same PDF in two bundles converts once. `raw/` is
-gitignored; `log.md` is committed, so the record survives deleting `raw/`.
+KHB also maintains `bundles/<bundle>/log.md`:
 
-**Ingest never interprets content.** It ends the moment the text exists.
+- unchanged source hashes are skipped on later runs;
+- `raw` identifies the extracted file;
+- an empty `raw` means extraction is pending;
+- an empty `curated` means the raw file has not been cataloged.
 
-### Step 4. Catalog — the part that matters
+Authenticated systems such as Confluence, Azure DevOps, or private git hosts remain an
+agent integration boundary. Declare them in `sources.yaml`; the agent acquires them through
+the available MCP server or CLI and preserves the same raw-file provenance shape.
 
-Ask the agent: **"catalog the finances bundle."**
+### 2. Catalog
 
-`raw/` is not knowledge, it's evidence. Cataloging distills it into **concept docs** — one
-idea per markdown file, anywhere in the bundle, with frontmatter:
+Ask the agent to catalog one bundle. It reads uncataloged rows from `log.md`, turns the raw
+material into concept documents, and updates the bundle index.
+
+A concept is one markdown file with OKF frontmatter:
 
 ```markdown
 ---
 type: Playbook
 title: Quarterly tax filing
-description: Steps and deadlines for filing estimated quarterly tax.
+description: Steps and deadlines for estimated quarterly tax.
 tags: [tax, recurring]
 ---
 
 # Steps
+
 ...
 
 # Citations
+
 - raw/folder/tax-notes.md
 ```
 
-Group files into whatever subdirectories fit (`accounts/`, `playbooks/`, `notes/`) —
-structure carries no meaning.
+Only `type` is required. `title` and `description` are recommended. `tags`, when present,
+must be a YAML list of strings.
 
-#### The frontmatter schema
+The catalog workflow:
 
-Frontmatter is the machine-readable half of a concept: it's what routing, filtering and any
-index generator read, so `khb lint` validates it as data rather than glancing at it.
+1. Reuses the bundle's existing vocabulary and directories.
+2. Splits or merges source material by concept, not by source filename.
+3. Links related concepts inside the same bundle.
+4. Lists every concept in an `index.md`.
+5. Fills the source row's `curated` value in `log.md`.
+6. Runs `khb lint`.
 
-| Field | Required | Type | What it's for |
-|---|---|---|---|
-| `type` | **yes** | string, free-form | What kind of thing this is — `Metric`, `Playbook`, `Runbook`, `Decision Log`. No closed list; use your domain's words |
-| `title` | recommended | string | Display name. Missing → lint warning |
-| `description` | recommended | string | One line, reused verbatim in index entries. Missing → lint warning |
-| `tags` | optional | **list of strings** | Filtering. Must be `[a, b]` — `"a, b"` is one opaque tag and lint errors on it |
-| `resource` | optional | URI | Canonical location of the underlying asset, if there is one |
-| `timestamp` | optional | ISO-8601 | When the concept was written or last held true |
+When the runtime supports subagents, cataloging may process independent raw files in
+parallel. The orchestrating agent remains the only writer of shared index and ledger files.
 
-Unknown keys are legal — OKF v0.1 is permissive — but lint warns on them, because `titel:`
-is a typo that silently drops a field rather than failing loudly. Malformed YAML is an
-error: a frontmatter block that doesn't parse loses *every* field at once.
+### 3. Query
 
-This is [OKF v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf),
-not a KHB invention, so your concepts stay readable by anything else that speaks OKF.
+Ask a question in natural language. The query workflow follows:
 
-One raw file usually becomes *several* concepts: a 40-page contract is a dozen ideas, and
-three meeting transcripts about one decision are a single idea. That splitting and merging
-is the whole job, and it's why this step needs a model and step 3 doesn't. The agent fans
-cheap Haiku subagents across the raw files to do it in parallel.
-
-Then the two bookkeeping rules that make queries work:
-- list each new doc in the bundle's `index.md` — **an unindexed doc is invisible to
-  queries**, and lint will flag it;
-- fill its `curated` column in `log.md`. Rows with an empty `curated` are your backlog.
-
-Not every raw file deserves a concept doc. Most corpora are 80% receipts and boilerplate;
-declining a file is a real outcome, recorded as `declined` in the ledger.
-
-### Step 5. Verify
-
-```bash
-khb lint        # structure, frontmatter, index coverage, ref targets
-khb visualize   # → visualizer/graph.html, bundles as nodes, refs as edges
+```text
+outer.index.md -> bundles/<name>/index.md -> concept documents
 ```
 
-Fix every lint error before moving on. Warnings are advisory.
+The agent answers from curated concepts, not `raw/`. For a question that genuinely spans
+bundles, it follows `refs.md` and enters the second bundle through its own index.
 
-### Step 6. When a second bundle is involved
+Indexes contain routing only. Knowledge belongs in concept documents.
 
-Bundles never link into each other inline — that's a lint error. If `finances` needs
-something from `travel`, add a row to `bundles/finances/refs.md` naming the bundle and
-the reason. Queries follow refs; content stays put.
+## Bundles
 
----
+A bundle is a unit of ownership, not a subject category. Examples:
 
-## Tutorial 2 — query it
+- `personal`
+- `team-payments`
+- `client-acme`
+- `project-atlas`
 
-Just ask in natural language: **"what's my quarterly tax deadline?"**
+Create one only when you intend to:
 
-The agent follows the [query skill](skills/query/SKILL.md): `outer.index.md` picks exactly one bundle, that
-bundle's `index.md` routes to concept docs, and the answer comes from concept docs only —
-never from `raw/` — with file paths cited.
+```bash
+khb new-bundle team-payments "Payments team roadmap, incidents, and vendor decisions"
+```
 
-For a cross-bundle question ("how did travel spending affect my Q3 budget?") it resolves
-one side fully, follows `refs.md` into the other bundle **through that bundle's own
-index**, and joins the two answers in its response rather than in the files.
+KHB never creates, splits, or merges named bundles based on their contents. When
+`khb ingest` is run without a bundle name, it uses a `default` landing bundle and creates it
+if needed.
 
-### The hub gets denser as you use it
+Cross-bundle relationships belong in `refs.md`; concept documents must not link directly
+into another bundle.
 
-Sometimes answering means joining two concepts that were never joined before — and that
-join is worth more than the single answer it just produced. When the agent judges the
-synthesis durable, it offers to keep it:
+## Claude And Codex
 
-> *"Answering that meant combining `accounts/joint-account.md` with
-> `playbooks/quarterly-tax.md`. Save it as `playbooks/joint-account-tax-split.md`, linked
-> to both? "*
+KHB has one source of truth for agent behavior:
 
-On yes it writes the concept, links it **both ways** so the original docs point at the
-synthesis too, registers it in `index.md`, and records it in `log.md` with the question as
-its source. Next time, the same question is answered directly from a doc.
+- `AGENTS.md` is the common contract. Codex loads it directly.
+- `CLAUDE.md` imports `AGENTS.md` for Claude Code.
+- `skills/<name>/SKILL.md` contains each canonical workflow.
+- `.agents/skills/` contains Codex discovery adapters.
+- `.claude/skills/` contains Claude discovery adapters.
 
-It always asks. A knowledge base that silently accumulates restated one-off answers is
-worse than one that stays thin.
+The adapter files are small pointers, not copies of the workflows. Edit only the canonical
+files under `skills/` when developing KHB.
 
-Two symptoms worth acting on:
-- **The agent picked the wrong bundle** → your "Route here when" hint in `outer.index.md`
-  is weak. Fix it there.
-- **The agent grepped to read rather than to route** → something isn't in an index. Fix the
-  index, not the query.
-
----
+`khb init` copies this managed contract into a hub. `khb upgrade` refreshes it without
+changing `bundles/` or `outer.index.md`. `khb export` includes the same compatibility
+layout in a standalone bundle export.
 
 ## Commands
 
-### You run this one
-
-There's no hub yet for a skill to live in, so this is the one command you (or the
-agent, if you just ask in chat) run directly instead of through a skill:
+Commands can be run directly or requested through the matching agent skill.
 
 | Command | Purpose |
 |---|---|
-| `khb init [dir]` | create a hub (default: current directory) |
+| `khb init [dir]` | Create a hub |
+| `khb upgrade` | Refresh package-owned contracts and skills |
+| `khb new-bundle <name> ["scope"]` | Create and register a bundle |
+| `khb ingest [bundle] [--force]` | Acquire and extract declared sources |
+| `khb lint` | Validate routing, bundle structure, and OKF metadata |
+| `khb visualize` | Generate `visualizer/graph.html` |
+| `khb export <bundle> [dest]` | Export one standalone bundle |
 
-### The agent runs the rest, via skills
+Additional ingest flags:
 
-Once a hub exists, `AGENT.md` + `skills/` are in place, and every other command is
-triggered by the matching skill (see [skills/](skills)), each one a single self-contained
-`SKILL.md` holding its whole protocol — the agent runs the `khb`
-CLI on your behalf. You never type these yourself:
+- `--skip-ocr`
+- `--skip-audio`
 
-| Command | Purpose | Skill |
-|---|---|---|
-| `khb upgrade` | refresh the hub's package-owned contract docs after a `khb` update | — (run ad hoc when you ask to update) |
-| `khb new-bundle <name> ["scope"]` | scaffold a bundle + register it in `outer.index.md` | `new-bundle` |
-| `khb ingest [bundle] [--force]` | acquire + extract declared sources → `raw/`, update `log.md` | `ingest` |
-| `khb lint` | validate structure against [the L1–L9 rules](skills/lint/SKILL.md) | `lint` |
-| `khb visualize` | regenerate `visualizer/graph.html` | `visualize` |
-| `khb export <bundle> [dest]` | standalone copy that works alone with any agent | `export` |
+Run against a hub outside the current directory with `--hub <dir>` or `$KHB_HUB`.
 
-Global flag: `--hub <dir>` runs a command against a hub you aren't standing in.
-`khb ingest` also takes `--skip-ocr` and `--skip-audio` for a fast first pass over a corpus
-full of scans or recordings. Its bundle argument is optional: with none it uses a `default`
-bundle, creating it if the hub has none, so material always has somewhere to land when you
-don't yet know which bundle should own it.
-
-There is deliberately **no `khb catalog`**. Cataloging is pure judgement — reading a
-document and deciding what ideas are in it — so it lives entirely in
-[the catalog skill](skills/catalog/SKILL.md) with no command behind it. The dividing line
-throughout: `khb` converts bytes to text, the agent decides what the text means.
-
-## Hub layout
-
-```
-khb.json              the marker — how khb recognises this folder as a hub
-outer.index.md        the router — bundles only, no knowledge
-AGENT.md              common contract every agent reads first        ┐ package-owned,
-SPEC.md               the full design                                ┤ refreshed by
-skills/<name>/SKILL.md  one self-contained protocol per workflow,    ┘ `khb upgrade`
-                        also injected into exports
-bundles/<name>/
-  index.md            routing into this bundle (routing only, no content)
-  refs.md             the only way out of this bundle
-  sources.yaml        declared ingestion sources
-  log.md              ingest ledger: source → hash → raw → curated
-  <group>/*.md        concept docs
-  raw/                uncurated acquired material (gitignored)
-```
-
-## Working on KHB itself
-
-This repo is the package. It is also its own hub — `khb.json` at the root, with
-`bundles/meta/` holding KHB's design decisions and backlog — so the tooling can be
-exercised in place:
+To update the installed package and then refresh a hub:
 
 ```bash
-bun install
-bun run lint                         # == khb lint, against this repo's own hub
-bun scripts/cli.ts init /tmp/scratch-hub   # try the CLI without installing it
+bun update -g @msareen/knowledge-hub-builder
+cd ~/my-knowledge
+khb upgrade
 ```
 
-`khb.json`, `bundles/` and `outer.index.md` are excluded from the published tarball by
-the `files` allowlist in `package.json` — the package ships no knowledge.
+## Hub Layout
+
+```text
+khb.json
+outer.index.md
+AGENTS.md
+CLAUDE.md
+SPEC.md
+skills/<name>/SKILL.md
+.agents/skills/<name>/SKILL.md
+.claude/skills/<name>/SKILL.md
+bundles/<name>/
+  index.md
+  refs.md
+  sources.yaml
+  log.md
+  <group>/<concept>.md
+  raw/
+```
+
+The package owns the contract files and skill directories. You own `outer.index.md` and
+everything under `bundles/`.
 
 ## Privacy
 
-`raw/` and `inbox/` are gitignored. `log.md` **is committed and records absolute source
-paths** — if those paths are themselves sensitive, gitignore it before your first commit.
-`khb export` copies the whole bundle directory, `log.md` included.
+`raw/` and the extraction cache under `inbox/` are gitignored. `log.md` is committed and
+records source paths, which may be absolute. Ignore `log.md` before the first commit if
+those paths are sensitive.
+
+`khb export` copies the complete bundle, including `log.md`.
+
+KHB extraction runs locally and does not call a model. Agent cataloging and querying use
+the model provider configured in Claude Code, Codex, or the active agent runtime.
+
+## Development
+
+This repository is both the npm package and a small KHB hub used to exercise the tooling.
+
+```bash
+bun install
+bun run lint
+bun scripts/cli.ts help
+bun scripts/cli.ts init /tmp/scratch-hub
+```
+
+`khb.json`, `bundles/`, and `outer.index.md` are excluded from the published package by the
+`files` allowlist in `package.json`.
+
+## Lineage
+
+KHB combines [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+with [Google's Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf).
+KHB adds the bundle router, cross-bundle reference rules, local ingestion tooling, and
+standalone bundle export.

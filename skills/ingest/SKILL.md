@@ -36,6 +36,12 @@ sources:
     space: PROJX
 ```
 
+If the user has not explicitly named the source locations, inspect the bundle's current
+`sources.yaml`, then ask which files, folders, URLs, or services to ingest. Include any
+existing declarations in the question so the user can confirm or replace them. Do not
+infer sources from nearby files, edit `sources.yaml`, or run `khb ingest` until the user
+answers.
+
 If the user has not said which bundle, ask. If no bundle fits, `khb new-bundle <name>
 "<scope>"` first. Nothing is copied by declaring a source.
 
@@ -70,7 +76,7 @@ locally. Read the summary it prints — the counts are the state of the world:
 
 ### What khb extracts
 
-All of it runs locally and none of it contacts a model — that is the `AGENT.md` division of
+All of it runs locally and none of it contacts a model — that is the `AGENTS.md` division of
 labor. khb converts bytes to text as cheaply as possible; your judgement is spent on
 curation, not transcription.
 

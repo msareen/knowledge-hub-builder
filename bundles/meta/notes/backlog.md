@@ -8,7 +8,7 @@ description: Planned extractors, ingesters, tooling, and routing defects.
 
 ## Extraction conventions (agent-run CLIs, one format at a time)
 
-- [x] PDF (pdftotext), DOCX (pandoc/mammoth), Audio (whisper) — documented in AGENT.md
+- [x] PDF (pdftotext), DOCX (pandoc/mammoth), Audio (whisper) — documented in AGENTS.md
 - [ ] PPTX
 - [ ] XLSX
 - [ ] Images / OCR

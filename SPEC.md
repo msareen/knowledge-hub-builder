@@ -1,14 +1,15 @@
 # KHB — Specification
 
 **KHB — Knowledge Hub Builder.** Distributed as
-`@msareen/khb`. Install the tooling once; run `khb init` wherever the knowledge should
+`@msareen/knowledge-hub-builder`. Install the tooling once; run `khb init` wherever the knowledge should
 live (OneDrive, a shared drive, a private repo) to create a **hub**. KHB supplies the
 rules and tooling and holds no knowledge; the hub holds all of it and is yours.
 
 A personal knowledge system built as a **bundle of bundles**: independent knowledge bundles
 joined by a thin router, navigable by any coding/knowledge agent (Claude, Codex, or other).
-Agent-facing files are agent-agnostic — no vendor-specific conventions in content, only in
-optional entry-point shims (`CLAUDE.md` / `AGENTS.md` may symlink or point to `AGENT.md`).
+The common contract and canonical workflows are agent-agnostic. Runtime-specific shims
+only handle discovery: Codex reads `AGENTS.md` and `.agents/skills/`; Claude imports the
+contract through `CLAUDE.md` and discovers `.claude/skills/`.
 
 Lineage: the operating model (immutable raw sources → LLM-curated wiki → schema, driven
 by ingest/query/lint) is [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f);
@@ -24,7 +25,7 @@ KHB's own contribution is the bundle-of-bundles layer over both — see §1.
    together, grouped by subdirectory, because they share a custodian and a context.
    Bundles are never split automatically; splitting is an explicit instruction, never a
    default behavior of ingest, catalog or query.
-   Bundles are *lean*: the common rules (AGENT.md and the `skills/` protocols) live once
+   Bundles are *lean*: the common rules (AGENTS.md and the `skills/` protocols) live once
    at the hub root, not duplicated per bundle. When a bundle must travel alone,
    `khb export <bundle>` produces a standalone folder with the common patterns
    injected — independence on demand rather than boilerplate everywhere.
@@ -74,8 +75,10 @@ my-knowledge/                  # ~/OneDrive/my-knowledge, a private repo, a shar
 ├── visualizer/graph.html      # generated
 │
 │   ── below: package-owned copies, refreshed by `khb upgrade`, never hand-edited ──
-├── AGENT.md                   # agent entry point: how to navigate the whole space
-├── CLAUDE.md                  # Claude shim — points at AGENT.md, nothing more
+├── AGENTS.md                  # common contract; Codex discovers this directly
+├── CLAUDE.md                  # Claude shim — imports AGENTS.md
+├── .agents/skills/<name>/     # Codex discovery adapter → canonical skill
+├── .claude/skills/<name>/     # Claude discovery adapter → canonical skill
 ├── SPEC.md                    # this file
 └── skills/<name>/SKILL.md     # one self-contained workflow protocol per folder:
                                #   query      routing, reading, and query-time learning
@@ -90,10 +93,10 @@ agent is opened on the hub folder and must find its rules there, without knowing
 `khb` is installed. They are package-owned: `khb upgrade` overwrites them in place and
 leaves `bundles/` and `outer.index.md` alone.
 
-### 2b. The package — `@msareen/khb`, installed once
+### 2b. The package — `@msareen/knowledge-hub-builder`, installed once
 
 ```
-@msareen/khb/
+@msareen/knowledge-hub-builder/
 ├── package.json               # bin: khb → scripts/cli.ts
 ├── scripts/
 │   ├── cli.ts                 # subcommand dispatch; owns the global --hub flag
@@ -110,7 +113,7 @@ leaves `bundles/` and `outer.index.md` alone.
 │       └── util.ts            # hub resolution + shared helpers
 ├── .bundle_template/          # copied by `khb new-bundle`
 ├── templates/hub/             # copied by `khb init`
-└── AGENT.md, skills/, …       # the masters that `khb init`/`upgrade` copy into hubs
+└── AGENTS.md, skills/, …      # the masters that `khb init`/`upgrade` copy into hubs
 ```
 
 ### 2c. Hub resolution
@@ -128,7 +131,7 @@ hubs may be renamed or moved freely, and nested hubs resolve to the innermost on
 ## 3. Routing model
 
 - `outer.index.md` lists every bundle with a one-line scope and "route here when" hints.
-  It contains **no knowledge**, only routing. An agent always starts at `AGENT.md`, which
+  It contains **no knowledge**, only routing. An agent always starts at `AGENTS.md`, which
   sends it to `outer.index.md`, which sends it into exactly one bundle.
 - Inside a bundle, `index.md` routes to concept docs and subdirectory indexes
   (progressive disclosure, OKF §6). Same rule: index = routing only.
@@ -273,7 +276,7 @@ build:  sources.yaml → khb ingest → raw/*.md (+ provenance, + log.md row)
                      → catalog (agent) → concept docs + index.md entries + curated column
                      → khb lint
 
-query:  question → AGENT.md → outer.index.md → bundle/index.md → concept docs
+query:  question → AGENTS.md → outer.index.md → bundle/index.md → concept docs
                            ↘ (spanning?) refs.md → other bundle via ITS index
                            ↘ (durable synthesis?) propose a new concept → on confirm,
                              write it, link it both ways, index it, log it

@@ -32,14 +32,55 @@ const opts: Options = {
   ocr: !takeFlag(argv, "--skip-ocr"),
   audio: !takeFlag(argv, "--skip-audio"),
 };
+const unknownFlag = argv.find((a) => a.startsWith("--"));
+if (unknownFlag) {
+  console.error(`Unknown ingest flag: ${unknownFlag}`);
+  process.exit(1);
+}
+const positional = argv.filter((a) => !a.startsWith("--"));
+if (positional.length > 1) {
+  console.error("Usage: khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]");
+  process.exit(1);
+}
 // No bundle named → `default`, created on the spot if the hub has none. Bytes always have
 // somewhere to land; sorting them into real bundles is a later, cheaper decision (a concept
 // is one file, and moving it is a `git mv`). Naming a bundle explicitly stays the norm.
-const bundle = argv.find((a) => !a.startsWith("--")) ?? DEFAULT_BUNDLE;
+const bundle = positional[0] ?? DEFAULT_BUNDLE;
 
 const dir = bundleForIngest(bundle);
-const cfg = parse(read(join(dir, "sources.yaml"))) as { sources?: Source[] } | null;
-const sources = cfg?.sources ?? [];
+let cfg: unknown;
+try {
+  cfg = parse(read(join(dir, "sources.yaml")));
+} catch (e) {
+  console.error(`${bundle}: sources.yaml is not valid YAML: ${(e as Error).message}`);
+  process.exit(1);
+}
+const declared =
+  cfg && typeof cfg === "object" && "sources" in cfg
+    ? (cfg as { sources?: unknown }).sources
+    : undefined;
+if (declared !== undefined && !Array.isArray(declared)) {
+  console.error(`${bundle}: sources.yaml 'sources' must be a list`);
+  process.exit(1);
+}
+const sources = (declared ?? []) as any[];
+for (const [i, s] of sources.entries()) {
+  const at = `sources.yaml sources[${i}]`;
+  if (!s || typeof s !== "object" || typeof s.type !== "string") {
+    console.error(`${bundle}: ${at} must be an object with a string 'type'`);
+    process.exit(1);
+  }
+  if (s.type === "folder" && typeof s.path !== "string") {
+    console.error(`${bundle}: ${at}.path must be a string`);
+    process.exit(1);
+  }
+  for (const [type, field] of [["files", "paths"], ["web", "urls"]] as const) {
+    if (s.type === type && (!Array.isArray(s[field]) || s[field].some((v: unknown) => typeof v !== "string"))) {
+      console.error(`${bundle}: ${at}.${field} must be a list of strings`);
+      process.exit(1);
+    }
+  }
+}
 if (!sources.length) {
   console.log(`${bundle}: no sources configured.`);
   console.log(`Declare them in bundles/${bundle}/sources.yaml, then re-run: khb ingest ${bundle}`);

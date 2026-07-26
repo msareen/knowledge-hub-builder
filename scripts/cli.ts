@@ -32,6 +32,9 @@ const cmd = argv.shift();
 
 if (!cmd || cmd === "help" || cmd === "--help" || cmd === "-h") {
   console.log(`khb ${version()} — Knowledge Hub Builder\n`);
+  console.log(`khb is the supporting tool: it handles deterministic extraction, file plumbing,`);
+  console.log(`validation, and export. Your AI agent — Claude, Codex, Gemini, or another`);
+  console.log(`compatible agent — follows the workflow skills and orchestrates the knowledge work.\n`);
   for (const c of Object.values(COMMANDS)) console.log("  " + c.help);
   console.log(`\nGlobal:  --hub <dir>   operate on that hub instead of searching upward from cwd`);
   console.log(`Docs:    https://github.com/msareen/knowledge-hub-builder`);

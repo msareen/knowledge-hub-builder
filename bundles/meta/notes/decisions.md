@@ -6,10 +6,18 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-07-26 — One common contract, native discovery for Claude and Codex.**
+  `AGENTS.md` is the only common contract; the accidental singular `AGENT.md` is retired
+  and removed by `khb upgrade`. Claude imports `AGENTS.md` through `CLAUDE.md`, while Codex
+  reads it directly. Canonical workflow bodies remain in root `skills/`; thin adapters in
+  `.claude/skills/` and `.agents/skills/` make those workflows automatically discoverable
+  without duplicating their instructions. Model names and tool calls are not part of the
+  common protocols: catalog uses runtime-provided subagents when available and falls back
+  to sequential work. Init, upgrade, export, and the npm package all carry the same layout.
 - **2026-07-23 — Frontmatter is validated as data (L9 hardened, L8 extended).** L9 checked
   only that a frontmatter block existed and carried a non-empty `type`; everything else the
   catalog pass writes — `title`, `description`, `tags`, `resource`, `timestamp` — was
-  declared in `AGENT.md`, written on every concept, and then read by nothing and checked by
+  declared in `AGENTS.md`, written on every concept, and then read by nothing and checked by
   nothing. A doc with `titel:` or `tags: "a, b"` linted clean. L9 now parses the block
   (malformed YAML is an error, since it loses every field at once), errors on a non-list
   `tags`, and warns on missing `title`/`description`, a non-ISO `timestamp`, and unknown
@@ -29,7 +37,7 @@ description: Design decisions for KHB and their rationale.
   and an access story; splitting them by subject scatters one person's world across the
   router and makes every question a cross-bundle join. Subject is what `type`, `tags` and
   subdirectories are for — inside a bundle, where classification is cheap and reversible.
-  Corollary, now stated in `AGENT.md` and repeated in the catalog skill: **no workflow
+  Corollary, now stated in `AGENTS.md` and repeated in the catalog skill: **no workflow
   creates, splits or merges bundles on its own initiative.** Cataloging classifies concepts
   and links them within one bundle; heterogeneous contents are the expected case, not a
   defect to fix. An agent restructures bundles only when explicitly told to.
@@ -61,7 +69,7 @@ description: Design decisions for KHB and their rationale.
     file. That is the whole reason acquisition is separate from interpretation: a bad OCR
     is a re-read of the source, not a re-think of the concept written on top of it.
   - **Catalog now means curation, one bundle at a time.** `raw/` → concept docs with OKF
-    frontmatter, links, and index entries, fanned out over cheap Haiku subagents with one
+    frontmatter, links, and index entries, fanned out over economical subagents with one
     hard rule: subagents write concept docs, the orchestrator alone writes `index.md`,
     `log.md` and `refs.md`. There is deliberately **no `khb catalog` command** — nothing
     about the step is mechanical.
@@ -102,10 +110,10 @@ description: Design decisions for KHB and their rationale.
   skills had been thin pointers at root protocol docs, so every workflow cost two file
   reads and the contract surface was duplicated in two places that could drift. A skill
   folder is now the unit: one `SKILL.md` holds its whole procedure. Agent-agnosticism is
-  unaffected — `SKILL.md` is plain markdown that `AGENT.md` links by path, so an agent
+  unaffected — `SKILL.md` is plain markdown that `AGENTS.md` links by path, so an agent
   with no skill mechanism reads it as an ordinary doc. Knock-ons: `MANAGED` in
   `scripts/lib/paths.ts` and the `files` allowlist drop the three docs, and `bkr export`
-  now injects `AGENT.md` + the whole `skills/` folder instead of the four root files.
+  now injects `AGENTS.md` + the whole `skills/` folder instead of the four root files.
 - **2026-07-20 — Package + hub split; shipped as `@msareen/bkr`.** Supersedes the
   clone-is-the-hub decision below. `bun install -g @msareen/bkr` installs tooling only;
   `bkr init <dir>` creates a hub (`bkr.json` + `outer.index.md` + `bundles/`) anywhere.
@@ -135,7 +143,7 @@ description: Design decisions for KHB and their rationale.
   (immutable raw → LLM-curated wiki → schema, driven by ingest/query/lint); file format
   from Google's OKF v0.1. BKR's own contribution is the bundle-of-bundles layer.
 - **2026-07-20 — `README.md` is the human entry point.** Setup + a build/query tutorial,
-  aimed at a person; `AGENT.md` stays the agent contract and the protocols stay the
+  aimed at a person; `AGENTS.md` stays the agent contract and the protocols stay the
   single source of truth. Reason: every root doc addressed agents, so a newcomer had no
   on-ramp. README links to the protocols rather than restating rules.
 - **2026-07-19 — Triage before routing (phase 0).** *(superseded 2026-07-23 — removed.)* Bulk corpora are indexed in place
@@ -153,7 +161,7 @@ description: Design decisions for KHB and their rationale.
   checks only `.md` under `raw/`) doesn't warn on every new bundle.
 
 - **2026-07-19 — Claude compatibility layer.** `CLAUDE.md` is a shim importing
-  `AGENT.md`. Workflow skills live agent-agnostically in root `skills/` only —
+  `AGENTS.md`. Workflow skills live agent-agnostically in root `skills/` only —
   no `.claude/skills` wrappers; all agents (Claude included) read `skills/` directly.
 - **2026-07-19 — ingest.md protocol.** Ingestion documented as its own root file:
   phase 1 acquire → `raw/` (with provenance), phase 2 agent curates → concept docs.
@@ -167,13 +175,13 @@ description: Design decisions for KHB and their rationale.
   parallelizable and collision-free.
 - **2026-07-18 — Collation by reference, not by copy.** Cross-topic questions resolve via
   `refs.md` → other bundle's index. Content is never merged across bundles.
-- **2026-07-18 — Agent-agnostic.** `AGENT.md` everywhere; `CLAUDE.md`/`AGENTS.md` are
-  optional shims pointing at it. Works for Claude, Codex, or any agent.
+- **2026-07-18 — Agent-agnostic.** One common agent contract everywhere, with optional
+  runtime shims pointing at it. Superseded by the 2026-07-26 discovery decision.
 - **2026-07-18 — Bun for all tooling.** Single runtime for ingesters, extractors, lint,
   visualizer.
 - **2026-07-19 — Concept layer (OKF-style).** Bundles gain optional `concepts/`: atomic,
   one-concept-per-file units with typed relations, bundle-local. Notes stay narrative.
-- **2026-07-19 — Lean bundles + export.** No per-bundle AGENT.md/query.md/lint.md;
+- **2026-07-19 — Lean bundles + export.** No per-bundle AGENTS.md/query.md/lint.md;
   common patterns live once at root. Template moved to `.bundle_template/` outside
   `bundles/`. `bun run export <bundle>` injects common patterns for standalone sharing.
 - **2026-07-19 — Script only the trivial.** Confluence/ADO via MCP/CLI by the agent;

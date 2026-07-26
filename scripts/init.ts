@@ -1,12 +1,12 @@
 // khb init [dir] / khb upgrade — create a hub, or refresh a hub's package-owned files.
 //
 // A hub is the user's knowledge: khb.json + outer.index.md + bundles/. The khb package
-// holds no knowledge, so the contract docs an agent needs (AGENT.md, skills/, …) are
+// holds no knowledge, so the contract docs an agent needs (AGENTS.md, skills/, …) are
 // copied INTO the hub — an agent opened on the hub folder must be able to read them
 // without knowing where khb is installed. Those copies are package-owned: `upgrade`
 // overwrites them.
 import { cpSync, mkdirSync, writeFileSync, existsSync, statSync, rmSync } from "node:fs";
-import { join, resolve, basename } from "node:path";
+import { join, resolve, basename, dirname } from "node:path";
 import { PKG, HUB_TEMPLATE, MANAGED, RETIRED, MARKER, markerIn, version } from "./lib/paths";
 
 const upgrading = process.env.KHB_SUBCOMMAND === "upgrade";
@@ -18,7 +18,9 @@ function syncManaged(hub: string): string[] {
   for (const f of MANAGED) {
     const src = join(PKG, f);
     if (!existsSync(src)) continue;
-    cpSync(src, join(hub, f), { recursive: true, force: true });
+    const dest = join(hub, f);
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(src, dest, { recursive: true, force: true });
     done.push(statSync(src).isDirectory() ? `${f}/` : f);
   }
   return done;
@@ -87,5 +89,5 @@ if (upgrading) {
   console.log(`  cd ${basename(hub)}`);
   console.log(`  git init                              # optional, but recommended`);
   console.log(`  khb new-bundle <name> "<scope>"       # your first bundle`);
-  console.log(`\nThen open this folder with your agent — CLAUDE.md -> AGENT.md tells it the rules.`);
+  console.log(`\nThen open this folder with Claude or Codex — both load AGENTS.md and the workflow skills.`);
 }

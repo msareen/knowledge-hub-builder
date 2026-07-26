@@ -1,7 +1,7 @@
 // Local folder → raw/folder/. Walks the tree and hands every file to acquireFile, which
 // owns the extraction decisions. Unchanged files (same content hash, raw/ copy still
 // present) are skipped.
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "../lib/util";
 import type { Entry } from "../lib/ledger";
 import { acquireFile, newCounters, report, type Options } from "./acquire";
@@ -14,6 +14,11 @@ export async function ingestFolder(
   entries: Map<string, Entry>,
   opts: Options,
 ) {
+  if (!existsSync(s.path)) {
+    console.warn(`  missing folder, skipped: ${s.path}`);
+    return;
+  }
+
   const walk = (d: string): string[] =>
     readdirSync(d).flatMap((f) => {
       const p = join(d, f);

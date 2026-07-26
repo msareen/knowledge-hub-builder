@@ -1,8 +1,8 @@
 {
-  "name": "@msareen/khb",
+  "name": "@msareen/knowledge-hub-builder",
   "version": "0.1.0",
   "description": "Knowledge Hub Builder — a bundle-of-bundles knowledge base you build with an agent",
-  "keywords": ["knowledge-base", "okf", "agent", "wiki", "bundles", "claude", "rag"],
+  "keywords": ["knowledge-base", "okf", "agent", "wiki", "bundles", "claude", "codex", "rag"],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -18,10 +18,13 @@
     "skills/",
     "templates/",
     ".bundle_template/",
-    "AGENT.md",
+    ".agents/skills/",
+    ".claude/skills/",
+    "AGENTS.md",
     "CLAUDE.md",
     "SPEC.md",
-    "README.md"
+    "README.md",
+    "document/"
   ],
   "engines": {
     "bun": ">=1.0.0"

@@ -1,6 +1,9 @@
 # Acquired source material — re-fetchable from sources.yaml; log.md keeps the record.
 bundles/*/raw/
 
+# Agent-specific machine-local permissions; shared skills remain tracked.
+.claude/settings.local.json
+
 # Extraction cache (inbox/extracted/<sha256>.md) — re-derivable from the sources.
 inbox/
 

@@ -1,4 +1,5 @@
 node_modules/
+.claude/settings.local.json
 bundles/*/raw/
 visualizer/graph.html
 # Extraction cache, keyed by content hash — re-derivable from the sources. log.md is

@@ -1,6 +1,6 @@
 # Ingestion sources for {{name}}.
 # folder/web: scripted — bun run ingest {{name}}
-# confluence/ado: listed as provenance; agent ingests via MCP/CLI (AGENT.md §Ingestion)
+# confluence/ado: listed as provenance; agent ingests via MCP/CLI (AGENTS.md §Ingestion)
 sources: []
 # - type: folder
 #   path: /abs/path/to/some-folder

@@ -8,7 +8,7 @@
 // Nothing here interprets content. Ingest ends the moment bytes have become text — deciding
 // what the text *says* is the catalog pass (skills/catalog/SKILL.md).
 import { readFileSync, existsSync } from "node:fs";
-import { writeRaw, sha256File } from "../lib/util";
+import { writeRaw, sha256File, rawNameFor } from "../lib/util";
 import { record, isFresh, type Entry } from "../lib/ledger";
 import {
   extractCached, ocrCached, ocrImageCached, transcribeCached,
@@ -59,15 +59,17 @@ export async function acquireFile(
   opts: Options,
 ): Promise<void> {
   const kind = kindOf(path);
-  if (kind === "skip") return;
-
   const hash = await sha256File(path);
+  if (kind === "skip") {
+    pend(entries, path, hash, c, "no extractor for this format");
+    return;
+  }
   if (!opts.force && isFresh(entries, bundleDir, path, hash)) {
     c.skipped++;
     return;
   }
 
-  const file = mdName(name);
+  const file = rawNameFor(rawDir, mdName(name), path, entries.values());
   const stamp = (raw: string) => record(entries, { source: path, sha256: hash, fetched: new Date().toISOString(), raw });
 
   if (kind === "text") {

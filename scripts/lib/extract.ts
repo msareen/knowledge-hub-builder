@@ -12,7 +12,7 @@
 // anything the library couldn't read, because poppler still wins on gnarly layouts.
 //
 // Every route out of here is LOCAL and deterministic — pure-JS libraries, tesseract WASM,
-// a whisper binary. None of it contacts a model. That is the AGENT.md division of labor:
+// a whisper binary. None of it contacts a model. That is the AGENTS.md division of labor:
 // khb converts bytes to text as cheaply as possible, and the agent's judgement is spent on
 // curation, not on transcription.
 //

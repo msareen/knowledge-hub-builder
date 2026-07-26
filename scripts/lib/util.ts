@@ -75,14 +75,35 @@ export type RawMeta = {
   quality?: "high" | "low";
 };
 
+const safeRawName = (name: string) => name.replace(/[^\w.-]+/g, "_") || "source.md";
+
+/**
+ * Keep the readable filename unless another source already owns it. The suffix is based on
+ * source identity, not content, so identical bytes acquired from two origins retain honest
+ * provenance instead of overwriting each other.
+ */
+export function rawNameFor(
+  dir: string,
+  name: string,
+  source: string,
+  entries: Iterable<{ source: string; raw: string }>,
+): string {
+  const safe = safeRawName(name);
+  const rel = `raw/${basename(dir)}/${safe}`;
+  const owner = [...entries].find((e) => e.raw === rel);
+  if ((!owner || owner.source === source) && (owner || !existsSync(join(dir, safe)))) return safe;
+  const stem = safe.toLowerCase().endsWith(".md") ? safe.slice(0, -3) : safe;
+  return `${stem}--${sha256(source).slice(0, 12)}.md`;
+}
+
 /** Write a raw/ file with provenance front matter. Returns its bundle-relative path. */
 export function writeRaw(dir: string, name: string, meta: RawMeta, body: string): string {
   mkdirSync(dir, { recursive: true });
-  const safe = name.replace(/[^\w.-]+/g, "_");
+  const safe = safeRawName(name);
   const fm =
-    `---\nsource: ${meta.source}\nfetched: ${new Date().toISOString()}\n` +
+    `---\nsource: ${JSON.stringify(meta.source)}\nfetched: ${new Date().toISOString()}\n` +
     (meta.sha256 ? `sha256: ${meta.sha256}\n` : "") +
-    (meta.tool ? `extract_tool: ${meta.tool}\n` : "") +
+    (meta.tool ? `extract_tool: ${JSON.stringify(meta.tool)}\n` : "") +
     (meta.quality ? `quality: ${meta.quality}\n` : "") +
     `---\n\n`;
   writeFileSync(join(dir, safe), fm + body);
