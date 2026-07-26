@@ -11,13 +11,14 @@ text exists. Deciding what the text *means* — splitting it into concepts, titl
 tagging, linking, indexing — is the [catalog skill](../catalog/SKILL.md), a separate step
 you run afterwards.
 
-Do not curate here. Do not decide bundles here. If you find yourself reading a document to
-understand it, you have left this skill.
+Do not curate here. Do not create, split, or merge bundles here — routing material to a
+bundle that exists is fine, reshaping the hub is not. If you find yourself reading a document
+to understand it, you have left this skill.
 
 ## 1. Declare the sources
 
-Ingest is bundle-first: you know which bundle the material belongs to, and you say where it
-comes from. Edit `bundles/<bundle>/sources.yaml`:
+Ingest is bundle-first: material lands in one bundle, and you say where it comes from. Edit
+`bundles/<bundle>/sources.yaml`:
 
 ```yaml
 sources:
@@ -42,13 +43,27 @@ existing declarations in the question so the user can confirm or replace them. D
 infer sources from nearby files, edit `sources.yaml`, or run `khb ingest` until the user
 answers.
 
-If the user has not said which bundle, ask. If no bundle fits, `khb new-bundle <name>
-"<scope>"` first. Nothing is copied by declaring a source.
+Nothing is copied by declaring a source.
+
+**Which bundle — take the first of these that applies, and do not go further:**
+
+1. **The user named a bundle** → use it. A named bundle that does not exist is an error,
+   not an invitation to create one.
+2. **The hub has bundles and exactly one plainly owns the material** → use it, and say
+   which you picked. If several could own it, ask which — this is the only bundle question
+   ingest ever asks.
+3. **Anything else** — no bundle named, or the hub has no bundles at all → `default`,
+   created on the spot, without asking.
+
+Never ask the user to name or create a bundle *for the ingest to land in*. `default` exists
+so that question never has to be asked at this stage: bytes always have somewhere to go, and
+which bundle owns them is a cheaper decision later, once the text exists and the user can see
+what they actually have.
 
 **The `default` bundle.** When no bundle is named, ingest targets `default` and creates it
-if the hub has none — a first `khb ingest` never fails for want of a destination. Use it
-when the owning bundle genuinely isn't known yet; don't use it to avoid asking. What lands
-there is ordinary bundle content: catalog it like any other. Do **not** graduate it into new
+if the hub has none — a first `khb ingest` never fails for want of a destination. It is not a
+way around step 2: when a bundle in the hub plainly owns the material, that bundle wins. What
+lands there is ordinary bundle content: catalog it like any other. Do **not** graduate it into new
 bundles on your own — a bundle is a logical unit the user defines (a person, a team, a
 project), so material leaves `default` only when the user says which bundle owns it. An
 explicitly named bundle that doesn't exist is still an error — only `default` is conjured.
