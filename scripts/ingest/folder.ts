@@ -5,6 +5,7 @@ import { readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "../lib/util";
 import type { Entry } from "../lib/ledger";
 import { acquireFile, newCounters, report, type Options } from "./acquire";
+import { detail, pos } from "../lib/log";
 import type { Source } from "./index";
 
 export async function ingestFolder(
@@ -25,12 +26,19 @@ export async function ingestFolder(
       return statSync(p).isDirectory() ? walk(p) : [p];
     });
 
+  // Walk the whole tree up front rather than streaming it: a corpus on a network share can
+  // take a while to enumerate, and knowing the denominator is what makes "[ 3/57]" mean
+  // anything to someone deciding whether to wait.
+  detail(`scanning ${s.path} …`);
+  const files = walk(s.path);
+  detail(`${files.length} file(s) found`);
+
   const c = newCounters();
-  for (const p of walk(s.path)) {
+  for (const [i, p] of files.entries()) {
     // Flatten the subtree into the filename so two `notes.md` in sibling folders don't
     // collide in raw/, and so the origin stays legible without opening the file.
     const rel = p.slice(s.path.length + 1).replaceAll(/[\\/]/g, "__");
-    await acquireFile(p, rel, rawDir, bundleDir, entries, c, opts);
+    await acquireFile(pos(i + 1, files.length), p, rel, rawDir, bundleDir, entries, c, opts);
   }
   report(c);
 }

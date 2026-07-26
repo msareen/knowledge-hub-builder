@@ -96,7 +96,11 @@ export function rawNameFor(
   return `${stem}--${sha256(source).slice(0, 12)}.md`;
 }
 
-/** Write a raw/ file with provenance front matter. Returns its bundle-relative path. */
+/**
+ * Write a raw/ file with provenance front matter. Returns its bundle-relative path.
+ * Silent by design — the caller owns the per-file line, and knows the verb ("copied",
+ * "extracted", "transcribed") that a write on its own cannot.
+ */
 export function writeRaw(dir: string, name: string, meta: RawMeta, body: string): string {
   mkdirSync(dir, { recursive: true });
   const safe = safeRawName(name);
@@ -107,7 +111,6 @@ export function writeRaw(dir: string, name: string, meta: RawMeta, body: string)
     (meta.quality ? `quality: ${meta.quality}\n` : "") +
     `---\n\n`;
   writeFileSync(join(dir, safe), fm + body);
-  console.log(`  raw/ <- ${safe}`);
   // dir is <bundle>/raw/<type>; report the path as the ledger stores it
   const type = basename(dir);
   return `raw/${type}/${safe}`;
