@@ -95,8 +95,15 @@ leaves `bundles/` and `outer.index.md` alone.
 
 ### 2b. The package — `@msareen/knowledge-hub-builder`, installed once
 
+> **None of the following is in your hub.** This section describes the *installed tool*,
+> which lives in your global package directory — not in the folder you are working in. A
+> hub contains exactly what §2a lists: `khb.json`, `outer.index.md`, `bundles/`, and the
+> package-owned contract docs. There is no `scripts/` and no `package.json` in a hub, so
+> paths below are package-internal and will not resolve from the hub root. To run the tool,
+> call `khb <command>` — never reach for a file in this tree.
+
 ```
-@msareen/knowledge-hub-builder/
+@msareen/knowledge-hub-builder/     # installed once, globally — NOT part of a hub
 ├── package.json               # bin: khb → scripts/cli.ts
 ├── scripts/
 │   ├── cli.ts                 # subcommand dispatch; owns the global --hub flag

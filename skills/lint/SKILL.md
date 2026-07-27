@@ -14,7 +14,7 @@ description: Validate KHB structure (routing integrity, bundle shape, OKF confor
 
 ## The rules (L1–L9)
 
-Enforced by `khb lint` (`scripts/lint.ts`). Combines KHB routing rules with
+Enforced by `khb lint`. Combines KHB routing rules with
 OKF v0.1 conformance (see the OKF spec). Reserved filenames: `index.md`, `log.md`
 (OKF) and `refs.md` (KHB). Every other `.md` in a bundle — outside `raw/` —
 is a **concept document**.
