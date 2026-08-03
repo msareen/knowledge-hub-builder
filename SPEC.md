@@ -217,12 +217,20 @@ Two look-alikes are deliberately excluded, since both would rewire provenance on
 **copy** (the twin's path still exists — two real sources, both ingested) and an **ambiguous**
 match (several vanished rows share the hash). Each is reported and left to judgement.
 
-The bundle argument is optional. With none, ingest targets `default` and scaffolds it if the
-hub has no such bundle, so a hub with zero bundles still has a landing path. Only that name
-is auto-created — an explicit name that doesn't resolve is an error, not a scaffold request.
-`default` is a holding area, not a tier: its contents are cataloged like any bundle's. Its
-material moves only when a human says which bundle should own it — a topic emerging inside
-it is not itself a reason to move anything.
+A bundle is a logical unit its owner defines, so the destination is a human decision. An
+explicit name that doesn't resolve is an error, not a scaffold request; a bare `khb ingest`
+in a hub that has real bundles prints them and stops, because the CLI cannot ask. The agent
+asks instead (`skills/ingest/SKILL.md` §1–2): which existing bundle, or a new one; then, for
+an existing bundle, whether to re-ingest its declared `sources.yaml` paths or take a new path.
+
+`default` survives as the fallback for a hub with nothing to choose between: a bare
+`khb ingest` scaffolds it and lands there when there are **no bundles at all**, and uses it
+when it is the **only** bundle — a one-option question is not a choice, and the first ingest
+anyone runs should not fail for want of a destination. It is not an option once a real bundle
+exists — that was the earlier design, and it bought a pile of material whose ownership
+nobody had decided, which is exactly the decision cataloging then has to make blind.
+`default` is a holding area, not a tier: its contents are cataloged like any bundle's, and
+they move only when a human says which bundle should own them.
 
 Every raw file carries its origin, so a lossy extraction is always recoverable:
 

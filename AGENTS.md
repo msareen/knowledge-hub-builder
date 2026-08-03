@@ -138,7 +138,7 @@ From outside, pass `--hub <dir>` or set `$KHB_HUB`.
 | `khb upgrade` | refresh this hub's package-owned contract docs |
 | `khb visualize` | regenerate `visualizer/graph.html` |
 | `khb new-bundle <name>` | scaffold + register a bundle |
-| `khb ingest [bundle]` | acquire + extract every source in `sources.yaml` → `raw/`; maintains `log.md`. No bundle named → `default`, created if absent |
+| `khb ingest <bundle>` | acquire + extract every source in `sources.yaml` → `raw/`; maintains `log.md`. Name the bundle — with none it lists the hub's bundles and stops, unless there is nothing to choose between (no bundles, or only `default`), where it uses `default` |
 | `khb export <bundle> [dest]` | standalone copy: bundle + common patterns, shareable alone |
 
 There is no `khb catalog` command — cataloging is entirely a judgement pass.
@@ -147,9 +147,16 @@ There is no `khb catalog` command — cataloging is entirely a judgement pass.
 
 **Ingest** (`skills/ingest/SKILL.md`) is mechanical and flat: `khb ingest <bundle>` pulls
 every declared source into `raw/` as markdown with a provenance header, extracting
-everything it can locally — into the named bundle, or into `default` when none is named — text, PDF, DOCX, ODT, XLSX, PPTX, images by OCR, audio and
+everything it can locally — text, PDF, DOCX, ODT, XLSX, PPTX, images by OCR, audio and
 video by whisper. Sources behind an authenticated API (Confluence, ADO, git hosts) you pull
 yourself via MCP/CLI into the same `raw/` shape. Ingest never interprets content.
+
+When the user has not named a bundle, **ask** which existing bundle owns the material or
+whether to start a new one, and for an existing bundle ask whether to re-ingest what its
+`sources.yaml` already declares or to take a new path. Never choose a destination silently.
+The single exception is a hub with nothing to choose between: with no bundles at all an
+unnamed ingest lands in `default`, created on the spot, and where `default` is the only
+bundle it lands there as it stands.
 
 **Catalog** (`skills/catalog/SKILL.md`) is the judgement half, one bundle at a time: read
 each `raw/` file, split it into concepts, give each OKF frontmatter, link them, register
