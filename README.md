@@ -208,6 +208,12 @@ files under `skills/` when developing KHB.
 changing `bundles/` or `outer.index.md`. `khb export` includes the same compatibility
 layout in a standalone bundle export.
 
+The refresh is also automatic: every command that works on a hub first compares the `khb`
+version stamped in `khb.json` against the installed package, and upgrades the hub in place
+if they differ, printing one line to stderr. So updating the package is enough — the hub's
+contract docs can never be a version behind the CLI acting on them. Set
+`KHB_NO_AUTO_UPGRADE=1` to suppress the check and leave the hub as it is.
+
 ## Commands
 
 Commands can be run directly or requested through the matching agent skill.
@@ -215,7 +221,7 @@ Commands can be run directly or requested through the matching agent skill.
 | Command | Purpose |
 |---|---|
 | `khb init [dir]` | Create a hub |
-| `khb upgrade` | Refresh package-owned contracts and skills |
+| `khb upgrade` | Refresh package-owned contracts and skills (also runs automatically on version drift) |
 | `khb new-bundle <name> ["scope"]` | Create and register a bundle |
 | `khb ingest [bundle] [--force]` | Acquire and extract declared sources |
 | `khb lint` | Validate routing, bundle structure, and OKF metadata |
@@ -229,13 +235,14 @@ Additional ingest flags:
 
 Run against a hub outside the current directory with `--hub <dir>` or `$KHB_HUB`.
 
-To update the installed package and then refresh a hub:
+To update the installed package:
 
 ```bash
 bun update -g @msareen/knowledge-hub-builder
-cd ~/my-knowledge
-khb upgrade
 ```
+
+Each hub refreshes itself the next time you run any command in it. `khb upgrade` does the
+same thing on demand, with a fuller report.
 
 ## Hub Layout
 

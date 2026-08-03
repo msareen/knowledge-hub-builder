@@ -5,63 +5,23 @@
 // copied INTO the hub — an agent opened on the hub folder must be able to read them
 // without knowing where khb is installed. Those copies are package-owned: `upgrade`
 // overwrites them.
-import { cpSync, mkdirSync, writeFileSync, existsSync, statSync, rmSync } from "node:fs";
-import { join, resolve, basename, dirname } from "node:path";
-import { PKG, HUB_TEMPLATE, MANAGED, RETIRED, MARKER, markerIn, version } from "./lib/paths";
+//
+// The mechanism itself lives in lib/upgrade.ts, because cli.ts also runs it on version
+// drift before any hub command.
+import { cpSync, mkdirSync, existsSync } from "node:fs";
+import { join, resolve, basename } from "node:path";
+import { HUB_TEMPLATE, MARKER, markerIn } from "./lib/paths";
+import { upgradeHub, syncManaged, stamp } from "./lib/upgrade";
 
 const upgrading = process.env.KHB_SUBCOMMAND === "upgrade";
 const [dirArg] = process.argv.slice(2);
 
-/** Copy every package-owned contract file into the hub, replacing what is there. */
-function syncManaged(hub: string): string[] {
-  const done: string[] = [];
-  for (const f of MANAGED) {
-    const src = join(PKG, f);
-    if (!existsSync(src)) continue;
-    const dest = join(hub, f);
-    mkdirSync(dirname(dest), { recursive: true });
-    cpSync(src, dest, { recursive: true, force: true });
-    done.push(statSync(src).isDirectory() ? `${f}/` : f);
-  }
-  return done;
-}
-
-/** Drop package-owned files that later versions stopped shipping. */
-function pruneRetired(hub: string): string[] {
-  const gone: string[] = [];
-  for (const f of RETIRED) {
-    const p = join(hub, f);
-    if (!existsSync(p)) continue;
-    rmSync(p, { recursive: true, force: true });
-    gone.push(f);
-  }
-  return gone;
-}
-
-function stamp(hub: string, created?: string) {
-  writeFileSync(
-    join(hub, MARKER),
-    JSON.stringify(
-      { khb: version(), created: created ?? new Date().toISOString(), upgraded: new Date().toISOString() },
-      null,
-      2,
-    ) + "\n",
-  );
-}
-
 if (upgrading) {
   const { HUB } = await import("./lib/util"); // resolves the hub, or exits with guidance
-  // The hub may still carry a marker name from an older version; stamp() writes MARKER,
-  // so drop the old file rather than leaving the hub with two.
-  const found = markerIn(HUB)!;
-  const before = JSON.parse(await Bun.file(join(HUB, found)).text());
-  if (found !== MARKER) rmSync(join(HUB, found));
-  const synced = syncManaged(HUB);
-  const pruned = pruneRetired(HUB);
-  stamp(HUB, before.created);
-  console.log(`Upgraded ${HUB}: ${before.khb ?? before.bkr ?? "?"} -> ${version()}`);
+  const { from, to, synced, pruned, renamed } = upgradeHub(HUB);
+  console.log(`Upgraded ${HUB}: ${from ?? "?"} -> ${to}`);
   console.log(`  refreshed: ${synced.join(", ")}`);
-  if (found !== MARKER) console.log(`  renamed: ${found} -> ${MARKER}`);
+  if (renamed) console.log(`  renamed: ${renamed} -> ${MARKER}`);
   if (pruned.length) console.log(`  removed (no longer part of the contract): ${pruned.join(", ")}`);
   console.log(`Your bundles/ and outer.index.md were not touched. Next: khb lint`);
 } else {

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, existsSync, statSync, mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { join, basename, dirname, resolve } from "node:path";
-import { MARKER, markerIn } from "./paths";
+import { join, basename, resolve } from "node:path";
+import { MARKER, markerIn, findHub } from "./paths";
 
 /**
  * Find the hub root — the folder holding khb.json, outer.index.md and bundles/.
@@ -10,20 +10,12 @@ import { MARKER, markerIn } from "./paths";
  * ancestor of cwd containing the marker.
  */
 function resolveHub(): string {
+  const found = findHub();
+  if (found) return found;
   const explicit = process.env.KHB_HUB;
   if (explicit) {
-    const dir = resolve(explicit);
-    if (!markerIn(dir)) {
-      console.error(`Not a KHB hub (no ${MARKER}): ${dir}`);
-      process.exit(1);
-    }
-    return dir;
-  }
-  for (let dir = process.cwd(); ; ) {
-    if (markerIn(dir)) return dir;
-    const up = dirname(dir);
-    if (up === dir) break;
-    dir = up;
+    console.error(`Not a KHB hub (no ${MARKER}): ${resolve(explicit)}`);
+    process.exit(1);
   }
   console.error(`No KHB hub found in ${process.cwd()} or any parent directory.`);
   console.error(`Create one:   khb init <dir>`);

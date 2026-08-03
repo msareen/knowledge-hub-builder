@@ -92,6 +92,14 @@ agent is opened on the hub folder and must find its rules there, without knowing
 `khb` is installed. They are package-owned: `khb upgrade` overwrites them in place and
 leaves `bundles/` and `outer.index.md` alone.
 
+Copies drift, so the copy is kept honest by the CLI rather than by the user's memory.
+`khb.json` stamps the version that wrote the hub's copies; before running any command that
+touches a hub, `khb` compares that stamp to the installed package version and, if they
+differ, performs the upgrade in place and says so on stderr. Only `init` (no hub yet) and
+`upgrade` (which is the operation) skip the check, and `KHB_NO_AUTO_UPGRADE=1` disables it.
+The invariant it buys: **a hub's contract docs always state the same version as the `khb`
+acting on them** — an agent can never read a protocol the CLI no longer implements.
+
 ### 2b. The package — `@msareen/knowledge-hub-builder`, installed once
 
 > **None of the following is in your hub.** This section describes the *installed tool*,
@@ -105,7 +113,7 @@ leaves `bundles/` and `outer.index.md` alone.
 @msareen/knowledge-hub-builder/     # installed once, globally — NOT part of a hub
 ├── package.json               # bin: khb → scripts/cli.ts
 ├── scripts/
-│   ├── cli.ts                 # subcommand dispatch; owns the global --hub flag
+│   ├── cli.ts                 # subcommand dispatch; --hub flag; the version drift check
 │   ├── init.ts                # khb init / khb upgrade
 │   ├── new-bundle.ts          # scaffold from .bundle_template, register in outer.index.md
 │   ├── export.ts              # bundle + common patterns → standalone shareable folder
@@ -116,6 +124,7 @@ leaves `bundles/` and `outer.index.md` alone.
 │       ├── extract.ts         # every local extractor + the content-hash cache
 │       ├── ledger.ts          # log.md read/write
 │       ├── paths.ts           # package-side paths — importing it never needs a hub
+│       ├── upgrade.ts         # the refresh itself: `khb upgrade` and the drift check
 │       └── util.ts            # hub resolution + shared helpers
 ├── .bundle_template/          # copied by `khb new-bundle`
 ├── templates/hub/             # copied by `khb init`

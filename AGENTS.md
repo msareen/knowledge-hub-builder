@@ -135,7 +135,7 @@ From outside, pass `--hub <dir>` or set `$KHB_HUB`.
 | Command | Purpose |
 |---|---|
 | `khb lint` | validate structure against `skills/lint/SKILL.md` |
-| `khb upgrade` | refresh this hub's package-owned contract docs |
+| `khb upgrade` | refresh this hub's package-owned contract docs — runs by itself whenever `khb.json`'s stamped version differs from the installed khb, so these docs always match the CLI |
 | `khb visualize` | regenerate `visualizer/graph.html` |
 | `khb new-bundle <name>` | scaffold + register a bundle |
 | `khb ingest <bundle>` | acquire + extract every source in `sources.yaml` → `raw/`; maintains `log.md`. Name the bundle — with none it lists the hub's bundles and stops, unless there is nothing to choose between (no bundles, or only `default`), where it uses `default` |

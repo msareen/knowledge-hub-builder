@@ -1,5 +1,5 @@
 {
-  "khb": "0.1.4",
+  "khb": "0.1.5",
   "created": "2026-07-18T00:00:00Z",
   "note": "The khb development repo is also its own hub — bundles/meta is KHB's own knowledge. Not published (see package.json 'files')."
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // khb — the CLI. Subcommands are loaded lazily: `init` must run before a hub exists,
 // so nothing that resolves a hub may be imported at module scope.
-import { version } from "./lib/paths";
+import { version, findHub, markerIn, MARKER } from "./lib/paths";
 
 const COMMANDS: Record<string, { load: () => Promise<unknown>; help: string }> = {
   init: { load: () => import("./init"), help: "khb init [dir]                  create a hub here (or in dir)" },
@@ -57,6 +57,28 @@ if (!entry) {
   console.error(`Unknown command: ${cmd}`);
   console.error(`Try: khb help`);
   process.exit(1);
+}
+
+// Version drift: a hub carries package-owned copies of the agent contract, and a hub
+// stamped at an older version than the installed khb is stating an older contract than
+// the one the CLI now implements. Rather than let the two disagree, refresh the hub in
+// place before running the command — `khb upgrade` touches nothing the user wrote.
+// `init` has no hub yet, `upgrade` does this itself, and $KHB_NO_AUTO_UPGRADE opts out.
+if (cmd !== "init" && cmd !== "upgrade" && !process.env.KHB_NO_AUTO_UPGRADE) {
+  const hub = findHub();
+  if (hub) {
+    const { hubVersion, upgradeHub } = await import("./lib/upgrade");
+    // A marker under a pre-rename name is drift too, even at a matching version.
+    if (hubVersion(hub) !== version() || markerIn(hub) !== MARKER) {
+      const { from, to, pruned, renamed } = upgradeHub(hub);
+      // stderr, so a command's own output stays pipeable.
+      console.error(
+        `khb: hub was built by ${from ?? "an unknown version"}, khb is ${to} — refreshed its contract docs.`,
+      );
+      if (renamed) console.error(`khb:   renamed ${renamed} -> khb.json`);
+      if (pruned.length) console.error(`khb:   removed (no longer part of the contract): ${pruned.join(", ")}`);
+    }
+  }
 }
 
 // Subcommand modules parse process.argv.slice(2) themselves — reshape it so they see

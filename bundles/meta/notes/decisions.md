@@ -6,6 +6,21 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-04 — A hub upgrades itself on version drift.** Every command that acts on a hub
+  now compares the `khb` version stamped in `khb.json` against the installed package's
+  `package.json` version, and runs the upgrade in place when they differ — one stderr line,
+  then the command proceeds. `init` (no hub yet) and `upgrade` (that *is* the operation) are
+  exempt, and `KHB_NO_AUTO_UPGRADE=1` opts out. A hub carrying a pre-rename marker name
+  counts as drift too, so a legacy `bkr.json` is migrated on first contact rather than only
+  by an explicit upgrade. Reason: the contract docs in a hub are *copies*, and a stale copy
+  states an older protocol than the CLI implements with no way for an agent to tell which is
+  current — the same hazard that made adapters pointers instead of duplicates. Leaving the
+  refresh to the user's memory meant every `bun update -g` had a manual second half that
+  nobody performs in every hub they own. The upgrade only ever touches package-owned paths,
+  so doing it unprompted risks nothing the user wrote. The mechanism moved out of `init.ts`
+  into `scripts/lib/upgrade.ts` so `cli.ts` can call it without importing a command module,
+  and hub resolution gained a soft `findHub()` in `paths.ts` (util.ts's `HUB` still exits
+  with guidance) because the check must stay silent where there is no hub.
 - **2026-08-04 — Ingest asks for its destination; `default` narrows to the hub with no real bundle.**
   Amends the 2026-07-23 landing-bundle decision below. A bare `khb ingest` in a hub that has
   bundles now prints them and exits 1 instead of silently landing in `default`; the agent

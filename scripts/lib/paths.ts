@@ -1,7 +1,7 @@
 // Package-side paths. Importing this must never require a hub to exist — `khb init`
 // runs before there is one. Hub-side paths live in util.ts.
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { readFileSync, existsSync } from "node:fs";
 
 /** Root of the installed @msareen/knowledge-hub-builder package (NOT the user's hub). */
@@ -28,6 +28,26 @@ export const LEGACY_MARKERS = ["bkr.json"];
  */
 export const markerIn = (dir: string): string | undefined =>
   [MARKER, ...LEGACY_MARKERS].find((m) => existsSync(join(dir, m)));
+
+/**
+ * The hub this invocation acts on, or undefined if there is none. Precedence:
+ * $KHB_HUB (set from --hub by cli.ts) > nearest ancestor of cwd holding a marker.
+ * Soft by design — util.ts turns "none" into an error with guidance, while the version
+ * drift check in cli.ts must stay silent for commands that run outside a hub.
+ */
+export function findHub(): string | undefined {
+  const explicit = process.env.KHB_HUB;
+  if (explicit) {
+    const dir = resolve(explicit);
+    return markerIn(dir) ? dir : undefined;
+  }
+  for (let dir = process.cwd(); ; ) {
+    if (markerIn(dir)) return dir;
+    const up = dirname(dir);
+    if (up === dir) return undefined;
+    dir = up;
+  }
+}
 
 /**
  * Package-owned files copied into every hub by `khb init` and refreshed by
