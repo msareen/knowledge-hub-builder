@@ -9,9 +9,14 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; help: string }> =
   "new-bundle": { load: () => import("./new-bundle"), help: 'khb new-bundle <name> ["scope"]  scaffold a bundle + register it' },
   ingest: { load: () => import("./ingest/index"), help: "khb ingest [bundle] [--force]   acquire + extract declared sources → raw/ (default: 'default')" },
   lint: { load: () => import("./lint"), help: "khb lint                        validate the hub against skills/lint/SKILL.md" },
-  visualize: { load: () => import("./visualize"), help: "khb visualize                   regenerate visualizer/graph.html" },
+  visualize: { load: () => import("./visualize"), help: "khb visualize [--port N] [--no-open]  serve the live bundle graph in your browser; aliases: vis, viz" },
   export: { load: () => import("./export"), help: "khb export <bundle> [dest]      standalone copy of one bundle" },
 };
+
+// Short forms that just resolve to a canonical command above — kept out of COMMANDS
+// itself so help text lists each command once. `-v` is taken by --version, so
+// `visualize` gets word-shaped aliases instead of a letter one.
+const ALIASES: Record<string, string> = { vis: "visualize", viz: "visualize" };
 
 const argv = process.argv.slice(2);
 
@@ -28,7 +33,8 @@ if (hubAt >= 0) {
   argv.splice(hubAt, 2);
 }
 
-const cmd = argv.shift();
+const cmd0 = argv.shift();
+const cmd = cmd0 && ALIASES[cmd0] ? ALIASES[cmd0] : cmd0;
 
 if (!cmd || cmd === "help" || cmd === "--help" || cmd === "-h") {
   console.log(`khb ${version()} — Knowledge Hub Builder\n`);

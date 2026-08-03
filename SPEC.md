@@ -72,7 +72,6 @@ my-knowledge/                  # ~/OneDrive/my-knowledge, a private repo, a shar
 │       │   └── <concept>.md
 │       └── raw/               # ingested/extracted material, pre-curation (gitignored)
 ├── inbox/extracted/           # hub-wide extraction cache, keyed by content hash (gitignored)
-├── visualizer/graph.html      # generated
 │
 │   ── below: package-owned copies, refreshed by `khb upgrade`, never hand-edited ──
 ├── AGENTS.md                  # common contract; Codex discovers this directly
@@ -111,7 +110,7 @@ leaves `bundles/` and `outer.index.md` alone.
 │   ├── new-bundle.ts          # scaffold from .bundle_template, register in outer.index.md
 │   ├── export.ts              # bundle + common patterns → standalone shareable folder
 │   ├── lint.ts                # enforce skills/lint/SKILL.md across the hub
-│   ├── visualize.ts           # emit visualizer/graph.html from indexes + refs
+│   ├── visualize.ts           # serve the live bundle graph from indexes + refs
 │   ├── ingest/                # folder.ts / files.ts / web.ts → acquire.ts → bundle/raw
 │   └── lib/
 │       ├── extract.ts         # every local extractor + the content-hash cache
@@ -272,9 +271,56 @@ drops, and rewrites the raw file with `extract_tool: claude-vision`.
 
 ## 8. Visualizer
 
-`khb visualize` scans `outer.index.md`, every bundle `index.md`, and every `refs.md`,
-and emits `visualizer/graph.html` — a single self-contained HTML file: bundles as nodes,
-refs as directed edges, note counts as node size. No server, open in any browser.
+`khb visualize [--port N]` scans `outer.index.md`, every bundle `index.md`/`refs.md`, and
+every concept doc's markdown links, and serves an interactive graph from a local server —
+`aliases: vis, viz` (`-v` is taken by `khb --version`). Two zoom levels: bundles as nodes
+with refs as directed edges (note counts as node size), and — click a bundle — its
+concepts as nodes with the markdown links between them as edges. Click a concept to open
+a panel that fetches its full body from `/api/file`. A refresh button rescans the hub and
+refetches the graph over `/api/graph`, for watching a hub change live during a catalog
+pass.
+
+The inner view is **clustered by folder, not free-floating**: each concept is anchored to
+the region of its top-level subdirectory (`tables/`, `notes/`, …), drawn as a labelled
+hull, and links that cross folders pull far more weakly than links inside one. The
+bundle's own organisation is therefore the visible structure, and the graph reads as
+traffic between regions instead of a single hairball. Deeper nesting collapses into its
+top-level folder — a handful of labelled regions beats one region per directory.
+
+The canvas **pans and zooms** (wheel to zoom at the cursor, drag the background to pan,
+`fit` / `F` to reframe). The layout is settled before the first paint and then framed by a
+fit pass with a floor on the zoom, so a small hub opens zoomed in rather than as three dots
+in an empty canvas, and a large one opens whole.
+
+The outer view seats bundles on a ring **just wide enough to hold them side by side**, with
+short-range repulsion and a firm pull to the centre: the hub opens as one compact group
+that reads at a glance, and zoom — not distance — is what makes it usable.
+
+Labels are drawn in **screen space at a fixed size**, not in world space, and any label
+whose box would collide with one already drawn is dropped — larger nodes claim their name
+first, and the hovered node always keeps its own. Text therefore stays legible and sparse
+at every zoom level instead of piling into an unreadable puddle; zooming in reveals the
+labels that were culled. A node's label is its front-matter `title`, clipped short; the
+untruncated title and full path appear in the panel when it is clicked, and in the hover
+strip at the bottom.
+
+A concept's `type` is encoded as **colour**, never as sub-text, and is spelled out in words
+in the hover strip and the panel chip — there is no legend and no shape vocabulary to
+learn. Hovering a node dims everything it isn't linked to. The top bar is deliberately
+thin: back, fit, a dark/light toggle remembered in `localStorage`, and refresh. Every
+colour the canvas draws comes from the active theme so the graph and the surrounding chrome
+stay in step.
+
+Folder regions are laid out on an **ellipse sized from the folders themselves** — each
+folder's disc grows with its file count, and the ring is only wide enough for neighbouring
+discs to clear each other — so two folders sit side by side rather than a screen and a half
+apart. The fit pass has a zoom ceiling but no floor: a large graph zooms out until it is
+whole rather than opening cropped.
+
+Unpinned, it binds a random free port (and picks another if `--port N` is already taken)
+and opens the URL in the default browser; `--no-open` just prints it. The page heartbeats
+the server and beacons on unload, so the server exits on its own once the browser tab
+closes rather than lingering as a background process.
 
 ## 9. Agent workflow summary
 

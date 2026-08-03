@@ -212,7 +212,7 @@ Commands can be run directly or requested through the matching agent skill.
 | `khb new-bundle <name> ["scope"]` | Create and register a bundle |
 | `khb ingest [bundle] [--force]` | Acquire and extract declared sources |
 | `khb lint` | Validate routing, bundle structure, and OKF metadata |
-| `khb visualize` | Generate `visualizer/graph.html` |
+| `khb visualize [--port N] [--no-open]` (aliases: `vis`, `viz`) | Serve the live bundle graph on a random free port and open it in your default browser — pan/zoomable cross-bundle map, drill into a bundle for its folder-clustered concepts, rebuild-on-refresh, exits when you close the tab |
 | `khb export <bundle> [dest]` | Export one standalone bundle |
 
 Additional ingest flags:
