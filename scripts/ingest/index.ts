@@ -12,7 +12,7 @@
 import { parse } from "yaml";
 import { read, join, HUB } from "../lib/util";
 import { detail, section, totalElapsed } from "../lib/log";
-import { bundleForIngest, DEFAULT_BUNDLE } from "../lib/scaffold";
+import { bundleForIngest, listBundles, DEFAULT_BUNDLE } from "../lib/scaffold";
 import { readLedger, writeLedger } from "../lib/ledger";
 import { takeFlag } from "../lib/args";
 import { ingestFolder } from "./folder";
@@ -43,10 +43,23 @@ if (positional.length > 1) {
   console.error("Usage: khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]");
   process.exit(1);
 }
-// No bundle named → `default`, created on the spot if the hub has none. Bytes always have
-// somewhere to land; sorting them into real bundles is a later, cheaper decision (a concept
-// is one file, and moving it is a `git mv`). Naming a bundle explicitly stays the norm.
-const bundle = positional[0] ?? DEFAULT_BUNDLE;
+// No bundle named: which one owns the material is a human decision (AGENTS.md) and a CLI
+// cannot ask, so it stops and shows what the hub has, leaving the choice to whoever is
+// driving. The exception is a hub with nothing to choose between — no bundles at all, or
+// only the landing bundle — where bytes go to `default` rather than the ingest failing.
+let bundle = positional[0];
+if (!bundle) {
+  const have = listBundles();
+  const onlyLanding = have.length === 1 && have[0] === DEFAULT_BUNDLE;
+  if (have.length && !onlyLanding) {
+    console.error("Usage: khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]");
+    console.error(`\nBundles in this hub: ${have.join(", ")}`);
+    console.error(`Name the one that owns this material, or start a new one:`);
+    console.error(`  khb new-bundle <name> "<scope>"`);
+    process.exit(1);
+  }
+  bundle = DEFAULT_BUNDLE;
+}
 
 const dir = bundleForIngest(bundle);
 let cfg: unknown;

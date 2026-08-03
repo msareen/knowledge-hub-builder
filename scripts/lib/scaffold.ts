@@ -1,9 +1,12 @@
-// Bundle creation, shared by `khb new-bundle` and by ingest's default-bundle fallback.
-// One implementation so a bundle born from a bare `khb ingest` is indistinguishable from
-// one the user named: same template, same {{name}} substitution, same outer.index.md row.
+// Bundle creation and lookup, shared by `khb new-bundle` and `khb ingest`.
+// One implementation so every bundle is born the same way: same template, same {{name}}
+// substitution, same outer.index.md row — and nothing ever conjures one implicitly.
 import { cpSync, readFileSync, writeFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { HUB, BUNDLES, TEMPLATE, join } from "./util";
 
+// The landing bundle: where a bare `khb ingest` goes in a hub with nothing to choose between
+// — conjured when the hub has no bundles at all, reused when it is the only one. With a real
+// bundle present the destination is a choice and the user makes it, so nothing is auto-created.
 export const DEFAULT_BUNDLE = "default";
 
 export const VALID_NAME = /^[a-z0-9][a-z0-9-]*$/;
@@ -33,24 +36,34 @@ export function createBundle(name: string, scope: string): string {
   return dest;
 }
 
+/** Names of the bundles that exist in this hub, alphabetically. */
+export function listBundles(): string[] {
+  if (!existsSync(BUNDLES)) return [];
+  return readdirSync(BUNDLES)
+    .filter((n) => statSync(join(BUNDLES, n)).isDirectory())
+    .sort();
+}
+
 /**
- * Resolve the bundle to ingest into, creating `default` if that is the target and it does
- * not exist yet. A hub with no bundles must still have somewhere for bytes to land — the
- * alternative is refusing the first ingest anyone ever runs. Only `default` is ever
- * conjured this way: a misspelled explicit name is a mistake, not a request to scaffold.
+ * Resolve the bundle to ingest into. A name the user gave must already exist — which bundle
+ * owns material is their decision, so an unresolvable name is a typo, not a scaffold request.
+ * The one exception is `default` in a hub with no bundles: the first ingest anywhere must
+ * still have somewhere to land, and there is no choice to put to the user yet.
  */
 export function bundleForIngest(name: string): string {
   const dir = join(BUNDLES, name);
   if (existsSync(dir)) return dir;
-  if (name !== DEFAULT_BUNDLE) {
-    console.error(`No such bundle: ${name}`);
-    console.error(`Create it:   khb new-bundle ${name} "<scope>"`);
-    process.exit(1);
+  const have = listBundles();
+  if (name === DEFAULT_BUNDLE && !have.length) {
+    // The scope line lands in outer.index.md, where every agent reads it — so it must not
+    // read as an instruction to reorganize the hub. Splitting `default` into real bundles is
+    // the user's call, exactly like any other bundle decision.
+    createBundle(DEFAULT_BUNDLE, "Unsorted material — where a first ingest lands before any bundle exists; moves out when you say which bundle owns it");
+    console.log(`Created bundles/${DEFAULT_BUNDLE}/ — this hub had no bundles to land in.`);
+    return dir;
   }
-  // The scope line lands in outer.index.md, where every agent reads it — so it must not
-  // read as an instruction to reorganize the hub. Splitting `default` into real bundles is
-  // the user's call, exactly like any other bundle decision.
-  createBundle(DEFAULT_BUNDLE, "Unsorted material — where an ingest with no named bundle lands; moves out when you say which bundle owns it");
-  console.log(`Created bundles/${DEFAULT_BUNDLE}/ — the landing bundle for unrouted material.`);
-  return dir;
+  console.error(`No such bundle: ${name}`);
+  if (have.length) console.error(`This hub has: ${have.join(", ")}`);
+  console.error(`Create it:   khb new-bundle ${name} "<scope>"`);
+  process.exit(1);
 }

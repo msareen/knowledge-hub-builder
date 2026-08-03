@@ -7,7 +7,7 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; help: string }> =
   init: { load: () => import("./init"), help: "khb init [dir]                  create a hub here (or in dir)" },
   upgrade: { load: () => import("./init"), help: "khb upgrade                     refresh this hub's contract docs" },
   "new-bundle": { load: () => import("./new-bundle"), help: 'khb new-bundle <name> ["scope"]  scaffold a bundle + register it' },
-  ingest: { load: () => import("./ingest/index"), help: "khb ingest [bundle] [--force]   acquire + extract declared sources → raw/ (default: 'default')" },
+  ingest: { load: () => import("./ingest/index"), help: "khb ingest <bundle> [--force]   acquire + extract declared sources → raw/ (name required once the hub has a bundle other than 'default')" },
   lint: { load: () => import("./lint"), help: "khb lint                        validate the hub against skills/lint/SKILL.md" },
   visualize: { load: () => import("./visualize"), help: "khb visualize [--port N] [--no-open]  serve the live bundle graph in your browser; aliases: vis, viz" },
   export: { load: () => import("./export"), help: "khb export <bundle> [dest]      standalone copy of one bundle" },

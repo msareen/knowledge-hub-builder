@@ -180,9 +180,13 @@ Create one only when you intend to:
 khb new-bundle team-payments "Payments team roadmap, incidents, and vendor decisions"
 ```
 
-KHB never creates, splits, or merges named bundles based on their contents. When
-`khb ingest` is run without a bundle name, it uses a `default` landing bundle and creates it
-if needed.
+KHB never creates, splits, or merges bundles based on their contents. Name the bundle when
+you ingest: run `khb ingest` without one and it lists the hub's bundles and stops. Ask an
+agent to ingest without naming a bundle and it asks you — existing bundle or new one, and for
+an existing one whether to reuse the paths in its `sources.yaml` or take a new path. An
+unnamed ingest lands somewhere by itself only when there is nothing to choose between: a hub
+with no bundles gets a `default` bundle created on the spot, and a hub whose only bundle is
+`default` uses it. Material moves out of `default` when you say who owns it.
 
 Cross-bundle relationships belong in `refs.md`; concept documents must not link directly
 into another bundle.

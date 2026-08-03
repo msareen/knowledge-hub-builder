@@ -6,6 +6,21 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-04 — Ingest asks for its destination; `default` narrows to the hub with no real bundle.**
+  Amends the 2026-07-23 landing-bundle decision below. A bare `khb ingest` in a hub that has
+  bundles now prints them and exits 1 instead of silently landing in `default`; the agent
+  asks instead — an existing bundle or a new one — and then, for an existing bundle, whether
+  to re-ingest the paths already in `sources.yaml` or take a new path. A named bundle
+  ("re-ingest real-estate") is still run without a question. Reason: `default` was bought
+  with the argument that ownership is a cheaper decision once the text exists, but where real
+  bundles exist it defers the one question the user can always answer (whose material is
+  this?) and hands cataloging a pile nobody has decided the owner of. `default` is kept for
+  the case that argument actually covers — a hub with nothing to choose between, meaning **no**
+  bundles (scaffolded on the spot) or `default` as the **only** bundle (used as it stands,
+  since a one-option question is not a choice). Its scope line in `outer.index.md` says so.
+  `scripts/lib/scaffold.ts` keeps `DEFAULT_BUNDLE` but only conjures it when `listBundles()`
+  is empty; ingest's own bare-argument branch widens that to "empty or `[default]`", and the
+  new `listBundles()` also lets the CLI show what the hub actually has when it refuses.
 - **2026-07-26 — One common contract, native discovery for Claude and Codex.**
   `AGENTS.md` is the only common contract; the accidental singular `AGENT.md` is retired
   and removed by `khb upgrade`. Claude imports `AGENTS.md` through `CLAUDE.md`, while Codex
@@ -41,7 +56,10 @@ description: Design decisions for KHB and their rationale.
   creates, splits or merges bundles on its own initiative.** Cataloging classifies concepts
   and links them within one bundle; heterogeneous contents are the expected case, not a
   defect to fix. An agent restructures bundles only when explicitly told to.
-- **2026-07-23 — `default` is the landing bundle when none is named.** `khb ingest` with no
+- **2026-07-23 — `default` is the landing bundle when none is named.** *(Narrowed 2026-08-04
+  to hubs with no bundle other than `default` — see the top of this list; elsewhere ingest
+  asks.)* `khb ingest`
+  with no
   bundle argument targets `bundles/default/`, scaffolding it if the hub has none. Dropping
   phase 0 left the first ingest in a fresh hub with nowhere to put bytes — it exited 1 and
   told you to go create a bundle, which is the routing question the user often can't answer

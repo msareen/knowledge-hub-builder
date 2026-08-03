@@ -58,8 +58,12 @@ source, extracts it into markdown under `raw/`, and updates `log.md`.
 It does not summarize, label, organize, or create concepts. Unchanged content hashes are
 skipped by default; `--force` reacquires everything.
 
-When no bundle is named, KHB uses the `default` bundle and creates it if necessary. An
-explicitly named bundle must already exist.
+A named bundle must already exist. Run without a name and the command lists the hub's bundles
+and stops — unless there is nothing to choose between: a hub with no bundles gets a `default`
+landing bundle created so a first ingest still works, and a hub whose only bundle is `default`
+uses it. An agent asked to ingest without a named bundle asks you which
+existing bundle owns the material or whether to create a new one, and for an existing bundle
+whether to re-ingest the paths already in its `sources.yaml` or take a new path.
 
 ## Should I run ingestion manually or ask an agent?
 

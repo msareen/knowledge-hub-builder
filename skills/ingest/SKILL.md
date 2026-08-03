@@ -11,14 +11,60 @@ text exists. Deciding what the text *means* — splitting it into concepts, titl
 tagging, linking, indexing — is the [catalog skill](../catalog/SKILL.md), a separate step
 you run afterwards.
 
-Do not curate here. Do not create, split, or merge bundles here — routing material to a
-bundle that exists is fine, reshaping the hub is not. If you find yourself reading a document
-to understand it, you have left this skill.
+Do not curate here. Do not split or merge bundles here, and create one only as the user's
+answer to the question in step 1 — never on your own initiative. If you find yourself reading
+a document to understand it, you have left this skill.
 
-## 1. Declare the sources
+## 1. Settle the bundle — ask, never assume
 
-Ingest is bundle-first: material lands in one bundle, and you say where it comes from. Edit
-`bundles/<bundle>/sources.yaml`:
+Ingest is bundle-first: material lands in exactly one bundle, and which bundle owns it is the
+user's decision, not yours. Whenever there is a choice to make, put it to them.
+
+**Take the first of these that applies:**
+
+1. **The user named a bundle** — "re-ingest the real-estate bundle" — → use it, no question
+   asked. If the name does not resolve to a bundle in `bundles/`, say so and ask whether to
+   create it; never scaffold on a guess, and never silently fall back to a similar name.
+2. **No bundle named, and the hub has real bundles** → ask, always, offering the choice
+   explicitly: **an existing bundle** (list them, from `outer.index.md`, with their scope
+   lines so the user can tell them apart) **or a new bundle**. Do not pick for the user,
+   however plainly one bundle seems to own the material — say which you would pick if you
+   have a view, then wait for the answer. Do not offer `default` here and do not mention it;
+   with real bundles on the table it is not one of the options.
+3. **The user answered "a new bundle"** → they name it and give its scope; you run
+   `khb new-bundle <name> "<scope>"`. Creating a bundle is a human decision (`AGENTS.md`), so
+   this branch only ever runs on an explicit answer to the question above.
+4. **No bundle named and nothing to choose between** → `default`, without asking. Two shapes
+   of hub qualify:
+   - **no bundles at all** → `default` is created on the spot; a first ingest should not fail
+     for want of a destination.
+   - **`default` is the only bundle** → it is used as it stands. A one-option question is not
+     a choice, so do not put it to the user.
+
+**The `default` bundle** is only that last case — a landing place in a hub that has no other,
+not an option to fall back on once a real bundle exists. The moment one does, `default` stops
+being a destination for unnamed ingests and case 2 applies. What lands there is ordinary
+bundle content: catalog it like any other. Do **not** graduate it into new bundles on your
+own; material leaves `default` when the user says which bundle owns it.
+
+## 2. Declare the sources — reuse or replace
+
+Once the bundle is settled, settle where the material comes from. If the user already named
+the files, folders or URLs, that is the answer — you still ask the add-or-replace question
+below when the bundle has declarations of its own. **Otherwise, for an existing bundle, read
+its `sources.yaml` first and ask which you are doing:**
+
+- **use what's declared** — re-ingest the paths already in `sources.yaml` (this is what
+  "re-ingest the real-estate bundle" usually means), or
+- **a new path** — the user gives files, folders or URLs; ask whether they are *added* to
+  the declarations or *replace* them before you edit the file.
+
+Quote the current declarations in the question so the answer is informed. A bundle with an
+empty `sources.yaml` has nothing to re-ingest, so there the only answer is a new path — ask
+for it. Do not infer sources from nearby files, do not edit `sources.yaml`, and do not run
+`khb ingest` until the user has answered.
+
+Sources live in `bundles/<bundle>/sources.yaml`:
 
 ```yaml
 sources:
@@ -32,46 +78,17 @@ sources:
     urls:
       - https://example.com/design-doc
   # Types with no scripted ingester are still declared here, for the record —
-  # you pull them yourself in step 3.
+  # you pull them yourself in step 4.
   - type: confluence
     space: PROJX
 ```
 
-If the user has not explicitly named the source locations, inspect the bundle's current
-`sources.yaml`, then ask which files, folders, URLs, or services to ingest. Include any
-existing declarations in the question so the user can confirm or replace them. Do not
-infer sources from nearby files, edit `sources.yaml`, or run `khb ingest` until the user
-answers.
-
 Nothing is copied by declaring a source.
 
-**Which bundle — take the first of these that applies, and do not go further:**
-
-1. **The user named a bundle** → use it. A named bundle that does not exist is an error,
-   not an invitation to create one.
-2. **The hub has bundles and exactly one plainly owns the material** → use it, and say
-   which you picked. If several could own it, ask which — this is the only bundle question
-   ingest ever asks.
-3. **Anything else** — no bundle named, or the hub has no bundles at all → `default`,
-   created on the spot, without asking.
-
-Never ask the user to name or create a bundle *for the ingest to land in*. `default` exists
-so that question never has to be asked at this stage: bytes always have somewhere to go, and
-which bundle owns them is a cheaper decision later, once the text exists and the user can see
-what they actually have.
-
-**The `default` bundle.** When no bundle is named, ingest targets `default` and creates it
-if the hub has none — a first `khb ingest` never fails for want of a destination. It is not a
-way around step 2: when a bundle in the hub plainly owns the material, that bundle wins. What
-lands there is ordinary bundle content: catalog it like any other. Do **not** graduate it into new
-bundles on your own — a bundle is a logical unit the user defines (a person, a team, a
-project), so material leaves `default` only when the user says which bundle owns it. An
-explicitly named bundle that doesn't exist is still an error — only `default` is conjured.
-
-## 2. Run it
+## 3. Run it
 
 ```
-khb ingest                          # no bundle named → the 'default' bundle
+khb ingest                          # only where 'default' is the sole bundle, or none is
 khb ingest <bundle>                 # incremental: unchanged content hashes are skipped
 khb ingest <bundle> --force         # re-acquire everything
 khb ingest <bundle> --skip-ocr      # leave scans and images unread
@@ -135,7 +152,7 @@ pip install -U openai-whisper                # transcription (faster-whisper als
 Install them where `khb` resolves modules from — for a global install that is the khb
 package directory, not your hub. khb prints the exact `cd … && bun add …` to use.
 
-## 3. Sources khb cannot reach
+## 4. Sources khb cannot reach
 
 Anything behind an authenticated API has no scripted ingester, because maintaining API
 wrappers is not what this tool is for. Pull those yourself with the site's MCP server or
@@ -175,7 +192,7 @@ and the text reads thin, garbled, or contradictory, **open the `source:` file an
 directly** — a vision pass over a chart or a scanned table recovers what OCR drops. Rewrite
 the `raw/` file with `extract_tool: claude-vision` and `quality: high` when you do.
 
-## 4. The ledger — `log.md`
+## 5. The ledger — `log.md`
 
 Every bundle keeps its ingest ledger in `log.md` (OKF-reserved, so it is never mistaken for
 a concept doc, and committed, so it survives `raw/` being deleted and re-derived).
