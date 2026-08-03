@@ -8,8 +8,9 @@
 // Nothing here interprets content. Ingest ends the moment bytes have become text — deciding
 // what the text *says* is the catalog pass (skills/catalog/SKILL.md).
 import { readFileSync, existsSync } from "node:fs";
-import { writeRaw, sha256File, rawNameFor } from "../lib/util";
-import { record, isFresh, type Entry } from "../lib/ledger";
+import { basename } from "node:path";
+import { writeRaw, sha256File, rawNameFor, retargetRaw } from "../lib/util";
+import { record, isFresh, identify, adopt, type Entry } from "../lib/ledger";
 import {
   extractCached, ocrCached, ocrImageCached, transcribeCached,
   extractedBody, extractedPath, type Extraction,
@@ -32,6 +33,7 @@ export type Counters = {
   transcribed: number;
   lowQuality: number;   // OCR/ASR output — worth re-reading from source during curation
   skipped: number;      // unchanged since last ingest
+  moved: number;        // same bytes at a new path — row re-pointed, nothing re-extracted
   // Everything that did not become a raw/ file — protected, unreadable, no extractor, or
   // skipped by a flag. One bucket, not one per cause: the per-file line above already gave
   // the reason, and splitting it into `pending` + `failed` only ever double-counted.
@@ -40,7 +42,7 @@ export type Counters = {
 
 export const newCounters = (): Counters => ({
   copied: 0, extracted: 0, fromCache: 0, ocrd: 0, transcribed: 0,
-  lowQuality: 0, skipped: 0, pending: 0,
+  lowQuality: 0, skipped: 0, moved: 0, pending: 0,
 });
 
 /** Record the source with an empty `raw` so the owed work survives this process. */
@@ -70,13 +72,38 @@ export async function acquireFile(
     pend(entries, path, hash, c, "no extractor for this format");
     return;
   }
+  // Identity before freshness. A file that moved is the row it already has: resolve that
+  // first, or it reads as an unrelated arrival and earns a second raw/ file, a second row
+  // with an empty `curated`, and eventually a second concept for material already written.
+  let adopted: Entry | undefined;
+  const id = identify(entries, bundleDir, path, hash);
+  if (id.kind === "moved") {
+    adopted = adopt(entries, id.from, path);
+    retargetRaw(bundleDir, adopted.raw, path);
+    c.moved++;
+    outcome(`moved from ${id.from.source} — kept ${adopted.raw}${adopted.curated ? " and its catalog entry" : ""}`);
+    if (!opts.force) return;
+  } else if (id.kind === "copy") {
+    note(`same bytes as ${id.twin.source}, which is also still on disk — ingesting as its own source`);
+  } else if (id.kind === "ambiguous") {
+    note(`same bytes as ${id.twins.length} rows whose sources have all gone — not guessing which one moved here`);
+  }
+
   if (!opts.force && isFresh(entries, bundleDir, path, hash)) {
     c.skipped++;
     outcome("unchanged, skipped");
     return;
   }
 
-  const file = rawNameFor(rawDir, mdName(name), path, entries.values());
+  // A source keeps its raw/ filename for life. Deriving the name from the path again on
+  // every run means a file that moved and *then* changed re-extracts under a new name,
+  // stranding the old raw file with the concept's Citations still pointing at it. Only fall
+  // back to a fresh name when this source has no raw file in this directory yet.
+  const held = adopted ?? entries.get(path);
+  const file =
+    held?.raw?.startsWith(`raw/${basename(rawDir)}/`)
+      ? basename(held.raw)
+      : rawNameFor(rawDir, mdName(name), path, entries.values());
   const stamp = (raw: string) => record(entries, { source: path, sha256: hash, fetched: new Date().toISOString(), raw });
 
   if (kind === "text") {
@@ -151,6 +178,7 @@ export async function acquireFile(
 export function report(c: Counters) {
   const line = (n: number, s: string) => (n ? console.log(`  ${n} ${s}`) : undefined);
   line(c.skipped, "unchanged, skipped");
+  line(c.moved, "moved/renamed — existing raw file and catalog entry kept");
   line(c.copied, "text file(s) copied");
   line(c.extracted, "extracted");
   line(c.fromCache, "reused from the extraction cache (inbox/extracted/)");

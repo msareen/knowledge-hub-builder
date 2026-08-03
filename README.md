@@ -102,6 +102,9 @@ original `source` during cataloging.
 KHB also maintains `bundles/<bundle>/log.md`:
 
 - unchanged source hashes are skipped on later runs;
+- a source that moved or was renamed is recognised by its hash and its existing row is
+  re-pointed at the new path, keeping its `raw` file and its `curated` value — it does not
+  come back as a second row to catalog again;
 - `raw` identifies the extracted file;
 - an empty `raw` means extraction is pending;
 - an empty `curated` means the raw file has not been cataloged.

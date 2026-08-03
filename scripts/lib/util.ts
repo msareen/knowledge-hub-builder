@@ -116,6 +116,22 @@ export function writeRaw(dir: string, name: string, meta: RawMeta, body: string)
   return `raw/${type}/${safe}`;
 }
 
+/**
+ * Correct the `source:` line of an already-written raw/ file, for when the same bytes turn
+ * up at a new path. Only that one line moves: the body is unchanged by definition (same
+ * hash), and rewriting the file wholesale would churn a diff for no reason.
+ */
+export function retargetRaw(bundleDir: string, rawRel: string, source: string): boolean {
+  const p = join(bundleDir, rawRel);
+  if (!existsSync(p)) return false;
+  const text = readFileSync(p, "utf8");
+  const end = text.indexOf("\n---", 3);
+  if (!text.startsWith("---\n") || end === -1) return false; // no provenance header to fix
+  const head = text.slice(0, end).replace(/^source:.*$/m, `source: ${JSON.stringify(source)}`);
+  writeFileSync(p, head + text.slice(end));
+  return true;
+}
+
 export const sha256 = (buf: Buffer | string) => createHash("sha256").update(buf).digest("hex");
 
 /** Hash a file in chunks — corpora contain multi-GB binaries we must not slurp. */

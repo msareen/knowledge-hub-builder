@@ -183,12 +183,34 @@ a concept doc, and committed, so it survives `raw/` being deleted and re-derived
 | column | owner | meaning |
 |---|---|---|
 | `source` | khb | origin URI: absolute path, url, or tool query |
-| `sha256` | khb | content hash (12-char prefix) — drives skip-unchanged and dedup |
+| `sha256` | khb | content hash (12-char prefix) — drives skip-unchanged, move detection and dedup |
 | `fetched` | khb | ISO timestamp of last acquisition |
 | `raw` | khb | bundle-relative `raw/` path; **empty = never extracted** |
 | `curated` | agent | concept doc(s) distilled from it; **empty = catalog backlog** |
 
 `khb ingest` maintains the first four and never touches `curated`.
+
+### Moved and renamed sources
+
+The bytes are a source's identity; the path is only where they live today. When a file
+appears at a path the ledger has not seen, khb looks for an existing row with the same hash
+whose own path has since disappeared. If exactly one matches, that row is **re-pointed** at
+the new path: same `raw` file (concepts cite it by name, so it is never renamed), same
+`curated`, and the raw file's `source:` provenance header is corrected. Nothing is
+re-extracted and nothing re-enters the backlog.
+
+Two cases are deliberately *not* treated as moves, because both would silently rewire
+provenance:
+
+- **Copy** — the twin row's path still exists, so these are two real sources with the same
+  bytes. Both are ingested; the run says so, and folding or declining the second is a
+  cataloging judgement.
+- **Ambiguous** — several vanished rows share the hash, so which one moved here is
+  unknowable. The new file is ingested as its own source and the run says why.
+
+Still on you, not khb: a source **modified in place** keeps its `curated` value, so the
+concept derived from it does not re-enter the backlog even though its material changed.
+Watch for `raw/` files whose content shifted and re-catalog them deliberately.
 
 ## Hand off
 

@@ -77,4 +77,60 @@ export function isFresh(entries: Map<string, Entry>, bundleDir: string, source: 
   return !!e && e.sha256.startsWith(hash.slice(0, 12)) && !!e.raw && existsSync(join(bundleDir, e.raw));
 }
 
+/** A ledger row acquired from a local file, as opposed to a URL or a tool query. */
+const isLocalSource = (s: string) => !/^[a-z][a-z0-9+.-]*:\/\//i.test(s);
+
+export type Identity =
+  | { kind: "moved"; from: Entry }        // same bytes, old path gone — one file, renamed
+  | { kind: "copy"; twin: Entry }         // same bytes, old path still there — two files
+  | { kind: "ambiguous"; twins: Entry[] } // several rows share these bytes; do not guess
+  | { kind: "new" };
+
+/**
+ * Decide what a not-yet-seen source path actually *is*, by content hash.
+ *
+ * Keying the ledger on the path alone means moving a file reads as a deletion plus an
+ * unrelated arrival: a second raw/ file with identical bytes, a second row with an empty
+ * `curated`, and so a second concept for material already cataloged. The bytes are the
+ * identity; the path is just where they happen to live today.
+ *
+ * Only local-file rows are candidates — a URL cannot have been "moved" on this disk — and
+ * a row is only a move if its old path is genuinely gone. Two live paths with the same
+ * bytes are a copy, which is a real (if redundant) second source and the agent's call, not
+ * ours. Several candidates at once is ambiguous, and guessing there would silently rewire
+ * provenance, so we report and leave it alone.
+ */
+export function identify(entries: Map<string, Entry>, bundleDir: string, source: string, hash: string): Identity {
+  if (entries.has(source)) return { kind: "new" }; // known path: freshness, not identity
+  const twins = [...entries.values()].filter(
+    (e) =>
+      e.source !== source &&
+      isLocalSource(e.source) &&
+      e.sha256.startsWith(hash.slice(0, 12)) &&
+      !!e.raw &&
+      existsSync(join(bundleDir, e.raw)),
+  );
+  if (!twins.length) return { kind: "new" };
+  const orphaned = twins.filter((e) => !existsSync(e.source));
+  if (orphaned.length === 1) return { kind: "moved", from: orphaned[0] };
+  if (orphaned.length > 1) return { kind: "ambiguous", twins: orphaned };
+  return { kind: "copy", twin: twins[0] };
+}
+
+/**
+ * Re-point an existing row at the file's new path, keeping its raw/ file and — the whole
+ * point — its `curated` value, so cataloged material is not offered as backlog again.
+ *
+ * The raw/ filename deliberately does *not* change: concept docs cite raw paths in their
+ * Citations sections, and renaming the file underneath them would break those links to
+ * cosmetically match a path that is already recorded inside the file's own provenance
+ * header. The header is what gets corrected.
+ */
+export function adopt(entries: Map<string, Entry>, from: Entry, source: string): Entry {
+  entries.delete(from.source);
+  const moved = { ...from, source };
+  entries.set(source, moved);
+  return moved;
+}
+
 export { HEADER as LEDGER_HEADER };

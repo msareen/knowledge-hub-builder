@@ -203,6 +203,20 @@ can, and writes `raw/<type>/<file>.md` with a provenance header. It does not int
 content — that is §5b. Re-running is incremental: a source whose content hash is unchanged
 and whose `raw/` copy still exists is skipped; `--force` re-acquires.
 
+**A source is identified by its bytes, not its path.** When a file turns up at an unseen
+path, khb looks for a row with the same hash whose own path has since vanished; exactly one
+match means the file moved, and that row is re-pointed at the new path — keeping its `raw/`
+file (never renamed, because concepts cite it) and its `curated` value, and correcting the
+raw file's `source:` header. Without this, moving a file reads as a deletion plus an
+unrelated arrival: a duplicate raw file, a duplicate row with an empty `curated`, and
+eventually a duplicate concept for material already cataloged. A source's `raw/` filename is
+likewise fixed for life, so a file that moves and *then* changes re-extracts over the same
+file rather than stranding the one its citations point at.
+
+Two look-alikes are deliberately excluded, since both would rewire provenance on a guess: a
+**copy** (the twin's path still exists — two real sources, both ingested) and an **ambiguous**
+match (several vanished rows share the hash). Each is reported and left to judgement.
+
 The bundle argument is optional. With none, ingest targets `default` and scaffolds it if the
 hub has no such bundle, so a hub with zero bundles still has a landing path. Only that name
 is auto-created — an explicit name that doesn't resolve is an error, not a scaffold request.
