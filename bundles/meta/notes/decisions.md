@@ -6,6 +6,17 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-04 — Ingest offers the catalog pass instead of implying it.** The ingest skill's
+  hand-off used to tell the agent to "continue with the catalog skill", which read either as
+  licence to curate unasked or, just as often, as advice an agent stopped short of taking.
+  It now ends in an explicit offer naming the bundle and its uncurated row count, with the
+  three answers spelled out — yes, not now, or a named subset — and the offer scoped to the
+  bundle just ingested so a "yes" never rolls onward into another bundle's backlog.
+  Reason: cataloging is a judgement pass over the user's material and the destination
+  question (2026-08-04, below) established that the user answers those; but leaving a bundle
+  at the ingest summary leaves it with a backlog and nothing citable, which is not a finished
+  state either. An offer is the only ending that is neither of those failures. `AGENTS.md`
+  carries the same rule so the runtimes that read it without loading the skill still get it.
 - **2026-08-04 — A hub upgrades itself on version drift.** Every command that acts on a hub
   now compares the `khb` version stamped in `khb.json` against the installed package's
   `package.json` version, and runs the upgrade in place when they differ — one stderr line,

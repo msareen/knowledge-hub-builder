@@ -229,11 +229,30 @@ Still on you, not khb: a source **modified in place** keeps its `curated` value,
 concept derived from it does not re-enter the backlog even though its material changed.
 Watch for `raw/` files whose content shifted and re-catalog them deliberately.
 
-## Hand off
+## Hand off — offer the catalog pass
 
 Ingest is done when the summary shows nothing unexpectedly pending. Report to the user what
-landed, what didn't and why, and how many rows are uncurated — then continue with the
-[catalog skill](../catalog/SKILL.md) to turn `raw/` into concept docs.
+landed, what didn't and why, and how many `log.md` rows are now uncurated.
+
+Then **offer to catalog, and wait for the answer.** Raw text is not yet knowledge — a bundle
+left at the end of ingest has a backlog and nothing citable — so never stop silently on the
+summary, and never start cataloging unasked either. Name the bundle and the size of the
+backlog in the offer, so the answer is informed:
+
+> Ingest landed 94 files in `real-estate/raw/`; 94 rows are uncurated. Shall I catalog them
+> into concept docs now?
+
+Take the answer at face value:
+
+- **yes** → continue with the [catalog skill](../catalog/SKILL.md), on that bundle, reading
+  the backlog from `log.md`.
+- **no, or not now** → stop. The ledger is the durable backlog, so nothing is lost; say that
+  the uncurated rows are waiting whenever they want to pick it up.
+- **only part of it** — one folder, one document, the low-quality files first → catalog that
+  subset and leave the rest of the rows uncurated.
+
+Offer once, for the bundle you just ingested. Do not offer to catalog a bundle this run did
+not touch, and do not roll a "yes" onward into a second bundle's backlog.
 
 ## Hygiene
 

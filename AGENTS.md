@@ -158,6 +158,10 @@ The single exception is a hub with nothing to choose between: with no bundles at
 unnamed ingest lands in `default`, created on the spot, and where `default` is the only
 bundle it lands there as it stands.
 
+When a run finishes, **offer the catalog pass** for the bundle just ingested — report what
+landed and how many rows are uncurated, then ask before curating anything. Neither stopping
+silently at the summary nor cataloging unasked is right.
+
 **Catalog** (`skills/catalog/SKILL.md`) is the judgement half, one bundle at a time: read
 each `raw/` file, split it into concepts, give each OKF frontmatter, link them, register
 them in `index.md`. When the runtime supports parallel agents, fan them out over the raw
