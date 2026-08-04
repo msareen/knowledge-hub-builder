@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-"""Render images/demo.gif — the terminal demo at the top of README.md.
+"""Render images/demo.gif — the demo at the top of README.md.
+
+The GIF shows what KHB actually looks like in use: an agent session, not a shell
+session. Nobody types `khb ingest` by hand — the agent loads the skill, asks the
+questions the protocol makes it ask, runs the CLI as a tool call, and does the
+cataloging the CLI deliberately cannot. So the transcript is rendered in a Claude
+Code register: `>` for the human turn, a bullet for each agent turn or tool call,
+and indented dim lines for tool output.
 
 Kept in the repo so the GIF can be regenerated when the CLI output changes; it is not
-part of the published package (see the `files` allowlist in package.json). The command
-output below is transcribed from a real session, so re-record rather than invent when
-a command's output changes.
+part of the published package (see the `files` allowlist in package.json). The tool
+output below is transcribed from a real run, so re-record rather than invent when a
+command's output changes.
 
     python images/make-demo-gif.py
 """
@@ -30,59 +37,107 @@ CMD = (233, 236, 241)
 PATH = (121, 192, 255)
 OK = (126, 231, 135)
 WARN = (210, 168, 255)
+ACCENT = (215, 119, 87)     # the agent's turn marker
+TOOL = (233, 236, 241)      # tool name, before its parenthesised argument
 
 FONT = ImageFont.truetype("C:/Windows/Fonts/consola.ttf", FONT_SIZE)
 FONT_B = ImageFont.truetype("C:/Windows/Fonts/consolab.ttf", FONT_SIZE)
 
-# (kind, text, colour) — "cmd" is typed out a character at a time, everything else lands
-# whole. Transcribed from a real run; see the module docstring.
+# Consolas has none of Claude Code's own glyphs (U+23FA, U+23BF), and a missing glyph
+# renders as tofu, so the markers here are the nearest shapes the font does carry.
+BULLET = "\u25cf "          # agent turn / tool call
+ELBOW = "  \u2514 "         # first line of a tool result
+CONT = "     "              # subsequent result lines, aligned under the elbow
+
+# (kind, text, colour):
+#   user  typed out a character at a time, prefixed `>`
+#   agent  what the agent says
+#   tool   a tool call — "Name(argument)", split and coloured on the paren
+#   res    tool output, first line          cont  tool output, continued
+#   note   an unprefixed aside (the bundle menu)
+# Tool output is transcribed from a real run; see the module docstring.
 SCRIPT = [
-    ("cmd",  "khb init ~/knowledge", CMD),
-    ("out",  "Hub created: ~/knowledge", FG),
-    ("out",  "  khb.json, outer.index.md, bundles/, .gitignore, .gitattributes", DIM),
-    ("out",  "  contract docs: AGENTS.md, CLAUDE.md, SPEC.md, skills/", DIM),
-    ("gap",  "", FG),
+    ("user",  "add my finance docs to the hub and write them up", CMD),
+    ("gap",   "", FG),
 
-    ("cmd",  'khb new-bundle finances "Personal finances: budgets, tax"', CMD),
-    ("out",  "Created bundles/finances/ and registered it in outer.index.md", FG),
-    ("gap",  "", FG),
+    ("tool",  "Skill(ingest)", TOOL),
+    ("res",   "acquire into raw/ with provenance — no interpretation", DIM),
+    ("gap",   "", FG),
 
-    ("cmd",  "khb ingest finances", CMD),
-    ("out",  "khb ingest -> bundle 'finances'", FG),
-    ("out",  "  sources:  1 declared in bundles/finances/sources.yaml", DIM),
-    ("out",  "  options:  ocr=on  audio=on  force=off", DIM),
-    ("out",  "[1/1] folder — ~/documents/finances -> raw/folder/", DIM),
-    ("out",  "  [1/2] ~/documents/finances/budget.txt", DIM),
-    ("out",  "         copied -> raw/folder/budget.txt.md (0.0s)", PATH),
-    ("out",  "  [2/2] ~/documents/finances/tax-notes.txt", DIM),
-    ("out",  "         copied -> raw/folder/tax-notes.txt.md (0.0s)", PATH),
-    ("out",  "ledger: 2 source(s) in log.md", FG),
-    ("out",  "  2 in raw/ but not yet cataloged (empty 'curated')", DIM),
-    ("gap",  "", FG),
+    # Step 1 of the protocol: the destination is the user's decision, never a guess.
+    ("agent", "Which bundle owns this material?", FG),
+    ("note",  "  finances  — Personal finances: budgets, tax", DIM),
+    ("note",  "  a new bundle", DIM),
+    ("gap",   "", FG),
+    ("user",  "finances", CMD),
+    ("gap",   "", FG),
 
-    # Ingest ends by offering the catalog pass; the agent curates only on a yes.
-    ("out",  '  agent  "2 files uncurated. Catalog them into concepts now?"', WARN),
-    ("out",  '  you    "yes"', WARN),
-    ("out",  "  agent  wrote finances/budget.md, finances/tax.md", DIM),
-    ("gap",  "", FG),
+    ("tool",  "Bash(khb ingest finances)", TOOL),
+    ("res",   "[1/1] folder — ~/documents/finances -> raw/folder/", DIM),
+    ("cont",  "  copied -> raw/folder/budget.txt.md (0.0s)", PATH),
+    ("cont",  "  copied -> raw/folder/tax-notes.txt.md (0.0s)", PATH),
+    ("cont",  "ledger: 2 source(s) in log.md", DIM),
+    ("cont",  "  2 in raw/ but not yet cataloged (empty 'curated')", DIM),
+    ("gap",   "", FG),
 
-    ("out",  '  you    "when is my tax deadline?"', WARN),
-    ("out",  "  agent  outer.index.md -> finances -> tax.md", DIM),
-    ("out",  '  agent  "31 January."  [finances/tax.md]', FG),
-    ("gap",  "", FG),
+    # Ingest ends in an offer; curation happens only on a yes.
+    ("agent", "2 files uncurated. Catalog them into concept docs now?", WARN),
+    ("user",  "yes", CMD),
+    ("gap",   "", FG),
 
-    ("cmd",  "khb lint", CMD),
-    ("out",  "lint: 0 error(s), 0 warning(s) across 1 bundle(s)", OK),
+    # The half no CLI can do: splitting text into concepts and labelling them.
+    ("tool",  "Skill(catalog)", TOOL),
+    ("tool",  "Write(bundles/finances/tax.md)", TOOL),
+    ("res",   "type: Reference  ·  self-assessment deadlines", DIM),
+    ("tool",  "Write(bundles/finances/budget.md)", TOOL),
+    ("res",   "type: Table  ·  monthly outgoings", DIM),
+    ("tool",  "Edit(bundles/finances/index.md)", TOOL),
+    ("res",   "2 concepts registered  ·  log.md 'curated' filled in", DIM),
+    ("gap",   "", FG),
+
+    ("tool",  "Bash(khb lint)", TOOL),
+    ("res",   "lint: 0 error(s), 0 warning(s) across 1 bundle(s)", OK),
+    ("gap",   "", FG),
+
+    ("user",  "when is my tax deadline?", CMD),
+    ("agent", "outer.index.md -> finances -> tax.md", DIM),
+    ("agent", "31 January.  [finances/tax.md]", FG),
 ]
 
-_longest = max(FONT_B.getlength("$ " + t) if k == "cmd" else FONT.getlength(t)
-               for k, t, _ in SCRIPT)
-W = int(PAD * 2 + _longest) + 12
+PREFIX = {
+    "user":  ("> ", PROMPT),
+    "agent": (BULLET, ACCENT),
+    "tool":  (BULLET, ACCENT),
+    "res":   (ELBOW, DIM),
+    "cont":  (CONT, DIM),
+    "note":  ("", DIM),
+    "gap":   ("", DIM),
+}
+
+
+def segments(kind, text, colour):
+    """One line as (text, font, colour) runs — the only place styling is decided."""
+    pre, pre_colour = PREFIX[kind]
+    out = [(pre, FONT_B if kind == "user" else FONT, pre_colour)] if pre else []
+    if kind == "tool" and "(" in text:
+        # `Write(path.md)` — the name carries the weight, the argument the colour.
+        name, arg = text.split("(", 1)
+        out += [(name, FONT_B, TOOL), ("(" + arg[:-1], FONT, PATH), (")", FONT, TOOL)]
+    else:
+        out.append((text, FONT_B if kind == "user" else FONT, colour))
+    return out
+
+
+def width(segs):
+    return sum(f.getlength(t) for t, f, _ in segs)
+
+
+W = int(PAD * 2 + max(width(segments(*s)) for s in SCRIPT)) + 12
 H = TITLE_H + PAD * 2 + LINE_H * len(SCRIPT)
 
 CHARS_PER_FRAME = 2
 FRAME_MS = 45           # typing cadence
-HOLD_AFTER_CMD = 400    # pause once a command is fully typed, ms
+HOLD_AFTER_CMD = 400    # pause once a prompt is fully typed, ms
 HOLD_AFTER_OUT = 180
 HOLD_GAP = 90
 HOLD_END = 2200
@@ -98,25 +153,24 @@ def chrome(img):
     for i, c in enumerate([(255, 95, 86), (255, 189, 46), (39, 201, 63)]):
         x = 20 + i * 20
         d.ellipse([x, TITLE_H // 2 - 6, x + 12, TITLE_H // 2 + 6], fill=c)
-    d.text((96, TITLE_H // 2 - 9), "khb — knowledge hub builder", font=FONT, fill=DIM)
+    d.text((96, TITLE_H // 2 - 9), "claude  —  ~/knowledge", font=FONT, fill=DIM)
 
 
 def render(lines, cursor_on):
-    """lines: list of (text, colour, is_prompt). Returns one frame."""
+    """lines: list of (kind, text, colour). Returns one frame."""
     img = Image.new("RGB", (W, H), BG)
     chrome(img)
     d = ImageDraw.Draw(img)
     visible = lines[-MAX_LINES:]
     y = TITLE_H + PAD
-    for n, (text, colour, is_prompt) in enumerate(visible):
+    for n, (kind, text, colour) in enumerate(visible):
         x = PAD
-        if is_prompt:
-            d.text((x, y), "$", font=FONT_B, fill=PROMPT)
-            x += FONT.getlength("$ ")
-        d.text((x, y), text, font=FONT if not is_prompt else FONT_B, fill=colour)
-        if is_prompt and cursor_on and n == len(visible) - 1:
-            cx = x + FONT.getlength(text)
-            d.rectangle([cx + 1, y + 2, cx + 9, y + LINE_H - 5], fill=FG)
+        segs = segments(kind, text, colour)
+        for t, font, c in segs:
+            d.text((x, y), t, font=font, fill=c)
+            x += font.getlength(t)
+        if kind == "user" and cursor_on and n == len(visible) - 1:
+            d.rectangle([x + 1, y + 2, x + 9, y + LINE_H - 5], fill=FG)
         y += LINE_H
     return img
 
@@ -129,16 +183,16 @@ def build():
         durations.append(ms)
 
     for kind, text, colour in SCRIPT:
-        if kind == "cmd":
-            lines.append(["", colour, True])
+        if kind == "user":
+            lines.append([kind, "", colour])
             for i in range(0, len(text), CHARS_PER_FRAME):
-                lines[-1][0] = text[:i]
+                lines[-1][1] = text[:i]
                 emit(True, FRAME_MS)
-            lines[-1][0] = text
+            lines[-1][1] = text
             emit(True, HOLD_AFTER_CMD)
         else:
-            lines.append([text, colour, False])
-            emit(False, HOLD_AFTER_OUT if kind == "out" else HOLD_GAP)
+            lines.append([kind, text, colour])
+            emit(False, HOLD_AFTER_OUT if kind != "gap" else HOLD_GAP)
     durations[-1] = HOLD_END
 
     pal = [f.quantize(colors=64, method=Image.MEDIANCUT, dither=Image.NONE) for f in frames]
