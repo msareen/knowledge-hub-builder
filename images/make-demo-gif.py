@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Render images/demo.gif — the demo at the top of README.md.
 
-The GIF shows what KHB actually looks like in use: an agent session, not a shell
-session. Nobody types `khb ingest` by hand — the agent loads the skill, asks the
-questions the protocol makes it ask, runs the CLI as a tool call, and does the
-cataloging the CLI deliberately cannot. So the transcript is rendered in a Claude
-Code register: `>` for the human turn, a bullet for each agent turn or tool call,
-and indented dim lines for tool output.
+The GIF shows what KHB actually looks like in use. It opens in the shell, because
+`khb init` and starting the agent are the two things a person really types, and
+then stays inside the agent for everything after — nobody runs `khb ingest` by
+hand. The agent loads the skill, asks the questions the protocol makes it ask,
+runs the CLI as a tool call, and does the cataloging the CLI deliberately cannot.
+So the first frames are a shell (`$`) and the rest is a Claude Code register: `>`
+for the human turn, a bullet for each agent turn or tool call, and indented dim
+lines for tool output.
 
 Kept in the repo so the GIF can be regenerated when the CLI output changes; it is not
 part of the published package (see the `files` allowlist in package.json). The tool
@@ -50,13 +52,29 @@ ELBOW = "  \u2514 "         # first line of a tool result
 CONT = "     "              # subsequent result lines, aligned under the elbow
 
 # (kind, text, colour):
-#   user  typed out a character at a time, prefixed `>`
+#   cmd    a shell command, typed out a character at a time, prefixed `$`
+#   out    shell output
+#   user   the human's turn inside the agent, typed out, prefixed `>`
 #   agent  what the agent says
 #   tool   a tool call — "Name(argument)", split and coloured on the paren
 #   res    tool output, first line          cont  tool output, continued
 #   note   an unprefixed aside (the bundle menu)
 # Tool output is transcribed from a real run; see the module docstring.
 SCRIPT = [
+    # The only part anyone types by hand: make the hub, then hand it to an agent.
+    ("cmd",   "khb init ~/knowledge", CMD),
+    ("out",   "Hub created: ~/knowledge", FG),
+    ("out",   "  khb.json, outer.index.md, bundles/, .gitignore", DIM),
+    ("out",   "  contract docs: AGENTS.md, CLAUDE.md, SPEC.md, skills/", DIM),
+    ("gap",   "", FG),
+
+    # Stylised banner, not verbatim startup output: what matters is that the hub's
+    # own contract and skills are what the agent picks up on entry.
+    ("cmd",   "cd knowledge && claude", CMD),
+    ("out",   "* Welcome to Claude Code   —   cwd: ~/knowledge", WARN),
+    ("out",   "  CLAUDE.md -> AGENTS.md  ·  skills: ingest, catalog, query, lint, …", DIM),
+    ("gap",   "", FG),
+
     ("user",  "add my finance docs to the hub and write them up", CMD),
     ("gap",   "", FG),
 
@@ -76,8 +94,7 @@ SCRIPT = [
     ("res",   "[1/1] folder — ~/documents/finances -> raw/folder/", DIM),
     ("cont",  "  copied -> raw/folder/budget.txt.md (0.0s)", PATH),
     ("cont",  "  copied -> raw/folder/tax-notes.txt.md (0.0s)", PATH),
-    ("cont",  "ledger: 2 source(s) in log.md", DIM),
-    ("cont",  "  2 in raw/ but not yet cataloged (empty 'curated')", DIM),
+    ("cont",  "ledger: 2 source(s), 2 not yet cataloged (empty 'curated')", DIM),
     ("gap",   "", FG),
 
     # Ingest ends in an offer; curation happens only on a yes.
@@ -90,7 +107,6 @@ SCRIPT = [
     ("tool",  "Write(bundles/finances/tax.md)", TOOL),
     ("res",   "type: Reference  ·  self-assessment deadlines", DIM),
     ("tool",  "Write(bundles/finances/budget.md)", TOOL),
-    ("res",   "type: Table  ·  monthly outgoings", DIM),
     ("tool",  "Edit(bundles/finances/index.md)", TOOL),
     ("res",   "2 concepts registered  ·  log.md 'curated' filled in", DIM),
     ("gap",   "", FG),
@@ -104,7 +120,13 @@ SCRIPT = [
     ("agent", "31 January.  [finances/tax.md]", FG),
 ]
 
+# Typed out a character at a time — a shell command and a prompt to the agent read the
+# same way to a viewer: someone is at a keyboard.
+TYPED = {"cmd", "user"}
+
 PREFIX = {
+    "cmd":   ("$ ", PROMPT),
+    "out":   ("", FG),
     "user":  ("> ", PROMPT),
     "agent": (BULLET, ACCENT),
     "tool":  (BULLET, ACCENT),
@@ -118,13 +140,14 @@ PREFIX = {
 def segments(kind, text, colour):
     """One line as (text, font, colour) runs — the only place styling is decided."""
     pre, pre_colour = PREFIX[kind]
-    out = [(pre, FONT_B if kind == "user" else FONT, pre_colour)] if pre else []
+    typed = kind in TYPED
+    out = [(pre, FONT_B if typed else FONT, pre_colour)] if pre else []
     if kind == "tool" and "(" in text:
         # `Write(path.md)` — the name carries the weight, the argument the colour.
         name, arg = text.split("(", 1)
         out += [(name, FONT_B, TOOL), ("(" + arg[:-1], FONT, PATH), (")", FONT, TOOL)]
     else:
-        out.append((text, FONT_B if kind == "user" else FONT, colour))
+        out.append((text, FONT_B if typed else FONT, colour))
     return out
 
 
@@ -169,7 +192,7 @@ def render(lines, cursor_on):
         for t, font, c in segs:
             d.text((x, y), t, font=font, fill=c)
             x += font.getlength(t)
-        if kind == "user" and cursor_on and n == len(visible) - 1:
+        if kind in TYPED and cursor_on and n == len(visible) - 1:
             d.rectangle([x + 1, y + 2, x + 9, y + LINE_H - 5], fill=FG)
         y += LINE_H
     return img
@@ -183,7 +206,7 @@ def build():
         durations.append(ms)
 
     for kind, text, colour in SCRIPT:
-        if kind == "user":
+        if kind in TYPED:
             lines.append([kind, "", colour])
             for i in range(0, len(text), CHARS_PER_FRAME):
                 lines[-1][1] = text[:i]

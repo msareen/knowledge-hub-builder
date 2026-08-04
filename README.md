@@ -1,7 +1,7 @@
 # knowledge-hub-builder
 
 <p align="center">
-  <img src="images/demo.gif" alt="An agent session: the ingest skill asks which bundle owns the material, runs khb ingest as a tool call, offers to catalog, writes the concept docs, then answers a question from them" width="512">
+  <img src="images/demo.gif" alt="khb init in the shell, then an agent session: the ingest skill asks which bundle owns the material, runs khb ingest as a tool call, offers to catalog, writes the concept docs, then answers a question from them" width="600">
 </p>
 
 **KHB (Knowledge Hub Builder)** is a local, markdown-based knowledge base maintained with
