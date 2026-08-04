@@ -39,8 +39,8 @@ FONT_B = ImageFont.truetype("C:/Windows/Fonts/consolab.ttf", FONT_SIZE)
 SCRIPT = [
     ("cmd",  "khb init ~/knowledge", CMD),
     ("out",  "Hub created: ~/knowledge", FG),
-    ("out",  "  khb.json, outer.index.md, bundles/, .gitignore", DIM),
-    ("out",  "  contract docs: AGENT.md, CLAUDE.md, SPEC.md, skills/", DIM),
+    ("out",  "  khb.json, outer.index.md, bundles/, .gitignore, .gitattributes", DIM),
+    ("out",  "  contract docs: AGENTS.md, CLAUDE.md, SPEC.md, skills/", DIM),
     ("gap",  "", FG),
 
     ("cmd",  'khb new-bundle finances "Personal finances: budgets, tax"', CMD),
@@ -48,14 +48,25 @@ SCRIPT = [
     ("gap",  "", FG),
 
     ("cmd",  "khb ingest finances", CMD),
-    ("out",  "[folder]", DIM),
-    ("out",  "  raw/ <- budget.txt.md", PATH),
-    ("out",  "  raw/ <- tax-notes.txt.md", PATH),
+    ("out",  "khb ingest -> bundle 'finances'", FG),
+    ("out",  "  sources:  1 declared in bundles/finances/sources.yaml", DIM),
+    ("out",  "  options:  ocr=on  audio=on  force=off", DIM),
+    ("out",  "[1/1] folder — ~/documents/finances -> raw/folder/", DIM),
+    ("out",  "  [1/2] ~/documents/finances/budget.txt", DIM),
+    ("out",  "         copied -> raw/folder/budget.txt.md (0.0s)", PATH),
+    ("out",  "  [2/2] ~/documents/finances/tax-notes.txt", DIM),
+    ("out",  "         copied -> raw/folder/tax-notes.txt.md (0.0s)", PATH),
     ("out",  "ledger: 2 source(s) in log.md", FG),
-    ("out",  "  2 acquired but not yet curated", DIM),
+    ("out",  "  2 in raw/ but not yet cataloged (empty 'curated')", DIM),
     ("gap",  "", FG),
 
-    ("out",  '  you  "when is my tax deadline?"', WARN),
+    # Ingest ends by offering the catalog pass; the agent curates only on a yes.
+    ("out",  '  agent  "2 files uncurated. Catalog them into concepts now?"', WARN),
+    ("out",  '  you    "yes"', WARN),
+    ("out",  "  agent  wrote finances/budget.md, finances/tax.md", DIM),
+    ("gap",  "", FG),
+
+    ("out",  '  you    "when is my tax deadline?"', WARN),
     ("out",  "  agent  outer.index.md -> finances -> tax.md", DIM),
     ("out",  '  agent  "31 January."  [finances/tax.md]', FG),
     ("gap",  "", FG),
