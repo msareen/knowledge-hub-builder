@@ -6,6 +6,18 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-04 — The OCR stack is bundled, not opt-in; transcription stays opt-in.** Settles
+  the disagreement 59ff125 (2026-07-26) opened and flagged in its own message: that commit
+  moved `@hyzyla/pdfium`, `sharp` and `tesseract.js` into `dependencies` while `README.md`,
+  `SPEC.md` and `skills/ingest/SKILL.md` went on calling them optional deps the user installs
+  on first need. The manifest wins; the three docs now say bundled. Reason: an ingest that
+  halts on a scanned PDF to ask for a 75 MB install interrupts exactly the run that was going
+  well, and OCR is not an exotic path — a corpus of real documents has scans in it. Paying
+  ~75 MB of WASM plus `sharp`'s native binaries at install time, once, including for users
+  who only ever ingest markdown, is the cheaper end of that trade. Whisper stays opt-in
+  because it is a Python executable on `PATH`, which no JS dependency list can deliver.
+  `extract.ts` keeps its dynamic imports and graceful degradation unchanged — that path is
+  now unreachable in a normal install, and still correct for a pruned tree.
 - **2026-08-04 — Ingest offers the catalog pass instead of implying it.** The ingest skill's
   hand-off used to tell the agent to "continue with the catalog skill", which read either as
   licence to curate unasked or, just as often, as advice an agent stopped short of taking.

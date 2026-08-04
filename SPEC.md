@@ -282,11 +282,15 @@ puts them on the CLI side of the §Division-of-labor line.
 | DOCX | `mammoth`, `pandoc` if present | bundled | high |
 | ODT, PPTX | `fflate` + XML | bundled | high |
 | XLSX | `fflate` → one markdown table per sheet | bundled | high |
-| scanned PDF | `pdfium` + `tesseract.js` (WASM) | opt-in, ~75 MB | low |
-| Images (png/jpg/webp/tif) | `tesseract.js` | opt-in, ~75 MB | low |
+| scanned PDF | `pdfium` + `tesseract.js` (WASM) | bundled, ~75 MB | low |
+| Images (png/jpg/webp/tif) | `tesseract.js` | bundled, ~75 MB | low |
 | Audio, video | `whisper` / `faster-whisper` | opt-in, pip | low |
 
-Missing optional deps degrade to a ledger row with an empty `raw` and a printed install
+The OCR stack is bundled rather than opt-in: an ingest that stops to ask for an install is
+worse than an install that carries WASM nobody uses. Transcription stays opt-in because it is
+a Python executable, not something a JS package manager can pull down.
+
+A missing dep degrades to a ledger row with an empty `raw` and a printed install
 hint — never to a failed run. `quality: low` output is a standing invitation for the catalog
 pass to re-read the original: a vision read of a chart or a scanned table recovers what OCR
 drops, and rewrites the raw file with `extract_tool: claude-vision`.

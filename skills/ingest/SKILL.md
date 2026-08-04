@@ -141,16 +141,22 @@ curation, not transcription.
 Extracted text is cached hub-wide by content hash at `inbox/extracted/<sha256>.md`, so the
 same file appearing in two bundles converts once.
 
-OCR and transcription need optional dependencies. When they are missing khb says so once and
-records the affected files as pending rather than failing the run:
+**OCR needs no setup.** `@hyzyla/pdfium`, `sharp` and `tesseract.js` are dependencies of khb
+itself, so a scanned PDF or a photographed page is read on the first run, in any hub, without
+asking the user to install anything.
+
+Transcription is the one route that can be absent: it wants a `whisper` or `faster-whisper`
+executable on `PATH`.
 
 ```
-bun add @hyzyla/pdfium sharp tesseract.js    # OCR — ~75 MB WASM, no system binary
 pip install -U openai-whisper                # transcription (faster-whisper also works)
 ```
 
-Install them where `khb` resolves modules from — for a global install that is the khb
-package directory, not your hub. khb prints the exact `cd … && bun add …` to use.
+When any extractor is unavailable khb says so once and records the affected files as pending
+rather than failing the run — a `log.md` row with an empty `raw`, waiting for the dependency.
+If khb ever prints a `bun add` hint for the OCR packages, its own install tree is incomplete;
+install them where `khb` resolves modules from — for a global install that is the khb package
+directory, not your hub — and khb prints the exact `cd … && bun add …` to use.
 
 ## 4. Sources khb cannot reach
 

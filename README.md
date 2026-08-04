@@ -69,20 +69,25 @@ after ingestion.
 `khb ingest <bundle>` reads `sources.yaml` and writes extracted markdown under
 `bundles/<bundle>/raw/`.
 
-Supported without additional system tools:
+Supported out of the box, with no system tools and no further installation:
 
 - text, markdown, CSV, JSON, and YAML
 - PDF and DOCX
 - ODT, XLSX, and PPTX
+- OCR for images and scanned PDFs, applied automatically when a PDF has no text layer
 
-Optional local tools add:
+OCR ships with KHB: `@hyzyla/pdfium`, `sharp`, and `tesseract.js` are ordinary dependencies,
+so installing KHB pulls them down whether or not you ever ingest a scan. That costs roughly
+75 MB of WASM plus `sharp`'s native binaries — the price of an ingest that never stalls
+waiting for a setup step.
 
-- OCR for images and scanned PDFs: `@hyzyla/pdfium`, `sharp`, and `tesseract.js`
-- audio and video transcription: a `whisper` or `faster-whisper` executable on `PATH`
+One extractor is genuinely optional:
 
-If an optional extractor is missing, KHB leaves a pending row in `log.md` and prints the
-required setup. OCR packages must be installed where the KHB package resolves modules; the
-CLI prints that location.
+- audio and video transcription needs a `whisper` or `faster-whisper` executable on `PATH`
+  (`pip install -U openai-whisper`)
+
+Without it, KHB leaves a pending row in `log.md` and prints the required setup rather than
+failing the run.
 
 Every raw markdown file carries provenance:
 
