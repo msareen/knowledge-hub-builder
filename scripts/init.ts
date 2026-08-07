@@ -8,13 +8,30 @@
 //
 // The mechanism itself lives in lib/upgrade.ts, because cli.ts also runs it on version
 // drift before any hub command.
-import { cpSync, mkdirSync, existsSync } from "node:fs";
-import { join, resolve, basename } from "node:path";
-import { HUB_TEMPLATE, MARKER, markerIn } from "./lib/paths";
-import { upgradeHub, syncManaged, stamp } from "./lib/upgrade";
+import { resolve, basename } from "node:path";
+import { MARKER, markerIn } from "./lib/paths";
+import { upgradeHub } from "./lib/upgrade";
 
 const upgrading = process.env.KHB_SUBCOMMAND === "upgrade";
-const [dirArg] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+
+// A hub describes itself in its own marker, and the machine-level registry reads those
+// two fields from there — so the label follows the hub when it is moved or cloned onto
+// another machine, instead of living only in one laptop's shortcut list.
+function takeOpt(name: string): string | undefined {
+  const i = argv.indexOf(name);
+  if (i < 0) return undefined;
+  const v = argv[i + 1];
+  if (v === undefined) {
+    console.error(`${name} needs a value`);
+    process.exit(1);
+  }
+  argv.splice(i, 2);
+  return v;
+}
+const nameOpt = takeOpt("--name");
+const descOpt = takeOpt("--description");
+const [dirArg] = argv;
 
 if (upgrading) {
   const { HUB } = await import("./lib/util"); // resolves the hub, or exits with guidance
@@ -33,14 +50,8 @@ if (upgrading) {
     process.exit(1);
   }
 
-  mkdirSync(join(hub, "bundles"), { recursive: true });
-  cpSync(join(HUB_TEMPLATE, "outer.index.md"), join(hub, "outer.index.md"));
-  // Dotfiles: shipped unprefixed so npm doesn't swallow them, renamed on the way in.
-  // Never clobber — `khb init` may be run inside a folder that is already a git repo.
-  for (const f of ["gitignore", "gitattributes"])
-    if (!existsSync(join(hub, `.${f}`))) cpSync(join(HUB_TEMPLATE, f), join(hub, `.${f}`));
-  const synced = syncManaged(hub);
-  stamp(hub);
+  const { createHub } = await import("./lib/create");
+  const { synced, entry } = createHub(hub, { name: nameOpt, description: descOpt });
 
   console.log(`Hub created: ${hub}`);
   console.log(`  khb.json, outer.index.md, bundles/, .gitignore, .gitattributes`);
@@ -50,4 +61,5 @@ if (upgrading) {
   console.log(`  git init                              # optional, but recommended`);
   console.log(`  khb new-bundle <name> "<scope>"       # your first bundle`);
   console.log(`\nThen open this folder with Claude or Codex — both load AGENTS.md and the workflow skills.`);
+  console.log(`Registered as "${entry.name}" — from any terminal, 'khb' comes back here and starts your agent.`);
 }

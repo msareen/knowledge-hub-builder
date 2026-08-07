@@ -51,3 +51,43 @@ export function note(msg: string) {
 export function outcome(msg: string) {
   console.log(`         ${msg} (${secs(Date.now() - itemStart)})`);
 }
+
+/**
+ * A running counter for a walk whose units are too fast and too many to deserve a line
+ * each — thousands of files checked in milliseconds, where `item()` per file would bury
+ * the result in its own progress.
+ *
+ * On a terminal it rewrites one line in place, on **stderr**: the transient text never
+ * lands in a redirected log or a pipe, so `khb … > out.txt` still gets clean output. With
+ * no terminal it degrades to a milestone line every `every` units, so a CI log or a
+ * captured run still shows the walk moving rather than appearing hung.
+ *
+ * Always call `done()`, including on the early-exit paths — it is what erases the line.
+ */
+export function ticker(label: string, total?: number, every = 500) {
+  const tty = process.stderr.isTTY;
+  const of = total ? `/${total}` : "";
+  let n = 0;
+  let lastPaint = 0;
+  let width = 0;
+  return {
+    tick(suffix = "") {
+      n++;
+      const text = `  ${label} ${n}${of}${suffix ? ` — ${suffix}` : ""}`;
+      if (tty) {
+        // Repaint at ~12fps, not per unit: the terminal is slower than the walk, and an
+        // unthrottled counter spends more time drawing than working.
+        const now = Date.now();
+        if (now - lastPaint < 80 && n !== total) return;
+        lastPaint = now;
+        width = Math.max(width, text.length);
+        process.stderr.write(`\r${text.padEnd(width)}`);
+      } else if (n % every === 0) {
+        console.log(text);
+      }
+    },
+    done() {
+      if (tty && width) process.stderr.write(`\r${" ".repeat(width)}\r`);
+    },
+  };
+}

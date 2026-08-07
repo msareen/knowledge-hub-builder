@@ -4,14 +4,25 @@
 import { version, findHub, markerIn, MARKER } from "./lib/paths";
 
 const COMMANDS: Record<string, { load: () => Promise<unknown>; help: string }> = {
-  init: { load: () => import("./init"), help: "khb init [dir]                  create a hub here (or in dir)" },
+  init: { load: () => import("./init"), help: 'khb init [dir] [--name N] [--description "…"]   create a hub here (or in dir)' },
   upgrade: { load: () => import("./init"), help: "khb upgrade                     refresh this hub's contract docs" },
   "new-bundle": { load: () => import("./new-bundle"), help: 'khb new-bundle <name> ["scope"]  scaffold a bundle + register it' },
   ingest: { load: () => import("./ingest/index"), help: "khb ingest <bundle> [--force]   acquire + extract declared sources → raw/ (name required once the hub has a bundle other than 'default')" },
   lint: { load: () => import("./lint"), help: "khb lint                        validate the hub against skills/lint/SKILL.md" },
   visualize: { load: () => import("./visualize"), help: "khb visualize [--port N] [--no-open]  serve the live bundle graph in your browser; aliases: vis, viz" },
   export: { load: () => import("./export"), help: "khb export <bundle> [dest]      standalone copy of one bundle" },
+  list: { load: () => import("./hubs"), help: "khb list [--json]               every hub on this machine" },
+  go: { load: () => import("./hubs"), help: "khb go [name|N] [--path]        open a hub with your agent (bare 'khb' picks one)" },
+  agent: { load: () => import("./hubs"), help: "khb agent [name] [--command X]  which agent 'khb go' launches" },
+  "update-path": { load: () => import("./hubs"), help: "khb update-path [new] [--dry-run]  you MOVED a hub: repair the list + paths inside it" },
+  forget: { load: () => import("./hubs"), help: "khb forget <name>               drop a hub from the list (folder untouched)" },
 };
+
+/**
+ * Commands that work *outside* a hub, against ~/.khb/hubs-config.json. They must not
+ * resolve or upgrade a hub — their whole job is running before you are in one.
+ */
+const REGISTRY_COMMANDS = new Set(["list", "go", "agent", "forget", "update-path"]);
 
 // Short forms that just resolve to a canonical command above — kept out of COMMANDS
 // itself so help text lists each command once. `-v` is taken by --version, so
@@ -34,14 +45,20 @@ if (hubAt >= 0) {
 }
 
 const cmd0 = argv.shift();
-const cmd = cmd0 && ALIASES[cmd0] ? ALIASES[cmd0] : cmd0;
+// Bare `khb` is the way in from a cold terminal: pick a hub and open it. Help stays one
+// word away, and is what you get when no hub has ever been registered.
+const cmd = !cmd0 ? "go" : (ALIASES[cmd0] ?? cmd0);
 
-if (!cmd || cmd === "help" || cmd === "--help" || cmd === "-h") {
+if (cmd === "help" || cmd === "--help" || cmd === "-h") {
   console.log(`khb ${version()} — Knowledge Hub Builder\n`);
   console.log(`khb is the supporting tool: it handles deterministic extraction, file plumbing,`);
   console.log(`validation, and export. Your AI agent — Claude, Codex, Gemini, or another`);
   console.log(`compatible agent — follows the workflow skills and orchestrates the knowledge work.\n`);
-  for (const c of Object.values(COMMANDS)) console.log("  " + c.help);
+  for (const [name, c] of Object.entries(COMMANDS))
+    if (!REGISTRY_COMMANDS.has(name)) console.log("  " + c.help);
+  console.log(`\nAnywhere on this machine (no hub needed):`);
+  for (const [name, c] of Object.entries(COMMANDS))
+    if (REGISTRY_COMMANDS.has(name)) console.log("  " + c.help);
   console.log(`\nGlobal:  --hub <dir>   operate on that hub instead of searching upward from cwd`);
   console.log(`Docs:    https://github.com/msareen/knowledge-hub-builder`);
   process.exit(0);
@@ -63,10 +80,30 @@ if (!entry) {
 // stamped at an older version than the installed khb is stating an older contract than
 // the one the CLI now implements. Rather than let the two disagree, refresh the hub in
 // place before running the command — `khb upgrade` touches nothing the user wrote.
-// `init` has no hub yet, `upgrade` does this itself, and $KHB_NO_AUTO_UPGRADE opts out.
-if (cmd !== "init" && cmd !== "upgrade" && !process.env.KHB_NO_AUTO_UPGRADE) {
+// `init` has no hub yet, `upgrade` does this itself, the registry commands run outside
+// any hub, and $KHB_NO_AUTO_UPGRADE opts out.
+if (cmd !== "init" && cmd !== "upgrade" && !REGISTRY_COMMANDS.has(cmd)) {
   const hub = findHub();
   if (hub) {
+    // Any command run in a hub is proof the hub exists and is in use — record it, so the
+    // machine registry fills itself in without a migration or a `khb register` to recall.
+    const { registerHub, touchHub } = await import("./lib/registry");
+    registerHub(hub);
+    touchHub(hub);
+
+    // …and proof of where it is. The hub records its own location in its marker, so a move
+    // is noticed by the hub itself rather than inferred from a registry that may have been
+    // deleted or never have seen this machine. Must run before the drift check below:
+    // that restamps the marker, and would overwrite the old location before anyone read it.
+    const { recordLocation } = await import("./lib/upgrade");
+    const { moved } = recordLocation(hub);
+    if (moved) {
+      console.error(`khb: this hub was at ${moved} and is now at ${hub}.`);
+      console.error(`khb:   absolute paths recorded inside it still name the old location.`);
+      console.error(`khb:   repair them:  khb update-path            (--dry-run to preview)`);
+    }
+  }
+  if (hub && !process.env.KHB_NO_AUTO_UPGRADE) {
     const { hubVersion, upgradeHub } = await import("./lib/upgrade");
     // A marker under a pre-rename name is drift too, even at a matching version.
     if (hubVersion(hub) !== version() || markerIn(hub) !== MARKER) {

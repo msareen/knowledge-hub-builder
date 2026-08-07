@@ -6,6 +6,94 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-07 — A hub records its own location in `khb.json`, and overlapping moves are
+  rewritten rather than refused.** `khb update-path` could only work out where a hub used to
+  be by asking the machine registry which of its entries had gone missing — an outside
+  witness, and a fragile one: delete `~/.khb`, open the hub on a second machine, or hand the
+  folder to a colleague and the evidence is gone, leaving `--from <the path you must now
+  remember>` as the only way through. The marker is the one thing that travels *with* the
+  folder, so it now carries a `path` key (canonical, plus `pathAs` for the spelling khb was
+  invoked through when the two differ). Every khb command run in a hub compares it against
+  where the hub actually is; a mismatch is the move, announced on the spot with the one
+  command that repairs it, and the stale location goes into `movedFrom` until `update-path`
+  works it off — so a hub moved twice before anyone repairs it has both former homes rewritten
+  in one pass. The key is inert: nothing reads it but this repair. That is the point — it
+  costs a string and removes an argument the user had no way to reconstruct. It is written
+  only when it changes, so the common case leaves `khb.json` and anyone's `git status` alone,
+  and it is deliberately recorded *before* the version-drift check restamps the marker, which
+  would otherwise overwrite the old location before anything read it.
+
+  The same work retired the third guard claimed in the entry below. Refusing overlapping
+  old/new paths outright rejected two perfectly ordinary moves — a hub lifted out of its
+  parent (`…/kb/hub` → `…/kb`, the case that prompted this) and one pushed down into a
+  subdirectory of where it stood. Only the second direction was ever dangerous, and for a
+  specific reason: the old path occurs inside every reference that is *already* correct, so
+  each would have the move applied to it a second time. The fix is smaller than the refusal —
+  the new path is added to the substitution table mapped to itself, and longest-match-first
+  ordering lets that identity claim those positions before the shorter old path can. Overlap
+  became safe in both directions, and the whole command became idempotent as a side effect:
+  a second run rewrites nothing. What remains refused is old and new naming the same
+  directory, where there is no move to repair at all.
+
+- **2026-08-07 — A bare `khb` with no hubs opens a wizard, and every mechanical pass reports
+  progress.** Two halves of the same principle: khb should not make the user go and read
+  something to get past a state khb can already see. On a fresh machine `khb` had been
+  printing three lines of guidance and stopping, which asks someone who has just installed
+  the tool to leave for the docs before doing anything — so it now asks the five questions
+  `khb init` takes as flags and builds the hub. Critically it calls the same `createHub()`
+  extracted for the purpose (`lib/create.ts`), so there is no second creation path to drift;
+  agents are *detected* by probing `--version` rather than offered blind; a path that is
+  already a hub is adopted into the list rather than overwritten; and with no terminal —
+  or under `--path`, where a script is asking for a path — it falls back to the old
+  guidance rather than blocking on a prompt nobody sees. The same reasoning covers the
+  long walks: `khb ingest` already announced its plan and each file before doing the work
+  (`lib/log.ts`), but `update-path` scanned a whole hub in silence, which is
+  indistinguishable from a hang. It now shares that module, with a new `ticker()` for units
+  too fast and numerous to deserve a line each. The ticker writes to **stderr** and
+  repaints at ~12fps, degrading to a milestone line every 500 units with no terminal —
+  so redirected stdout stays clean and complete while a CI log still shows movement.
+  Still no `--quiet` anywhere: the per-unit line is the audit trail for a pass that
+  rewrites files.
+
+- **2026-08-07 — `khb update-path` repairs a moved hub, and stays a conversion.** A hub folder
+  that moves breaks two things: the machine shortcut list points at nothing, and every
+  absolute path recorded *inside* the hub that named the old location dangles —
+  `sources.yaml`, `source:` headers in `raw/`, `log.md` rows, `resource:` front matter.
+  Rewriting those is a byte-identical prefix swap with no judgement in it, so it belongs in
+  the CLI and not in an agent pass; an agent reading each file to decide would be slower and
+  less reliable at the one thing a regex is exact about. Three guards make it safe to run
+  unattended: every spelling of a path is matched and rewritten to *the same* spelling
+  (native, forward-slashed, and JSON-escaped as `raw/` headers store it), so an escaped
+  source stays escaped; matches must end at a path boundary, so moving `…/old` never touches
+  a sibling `…/older`; and overlapping old/new paths are refused rather than half-applied
+  (superseded — see the entry above, which rewrites them safely instead). The old path is
+  inferred on **proof** — the `created` stamp minted once at `khb init`,
+  now mirrored into each registry entry as an identity fingerprint — while a bare name match
+  is only circumstantial and gets put to the user as a question. Two consequences fell out
+  of building it: registry paths are now canonicalized through `realpath`, because
+  `C:\Users\MANASV~1\…` and `C:\Users\Manasvi Sareen\…` are one directory under two true
+  names and were listing as two hubs; and a hub named after its old folder is renamed after
+  the new one, unless its marker states a name of its own. Named `update-path` rather than
+  the shorter `update` it was first built as: `update` and `upgrade` differ by one letter
+  and agree on nothing, and a hyphen is cheap next to a user running the wrong one.
+
+- **2026-08-07 — One shortcut list per machine, at `~/.khb/hubs-config.json`.** Hub
+  resolution (`--hub` → `$KHB_HUB` → walk up for the marker) all presumes you already know
+  where the hub is; from a cold terminal in an unrelated folder, nobody does, and a person
+  with a personal, a work and a client hub has three paths to keep in their head. So khb
+  now keeps a per-machine file of hub paths plus one preferred agent command, and a bare
+  `khb` picks a hub and launches that agent with the hub as its cwd. Three constraints kept
+  it from rotting the package/hub split: the file holds **paths only, never knowledge** — it
+  is disposable, and every command run inside a hub re-registers it, so it rebuilds itself
+  and needed no migration or `khb register`; the **hub stays the authority on its own
+  identity**, with `name` and `description` read out of its `khb.json` so they travel with a
+  hub that is moved or cloned, and `khb upgrade` now merges the marker rather than replacing
+  it so those keys (and anything else a user put there) survive; and the four commands over
+  it (`list`, `go`, `agent`, `forget`) are the **only** ones that skip hub resolution and the
+  version drift check, since running outside a hub is their entire purpose. `khb go` prints
+  a `cd` line rather than performing it — no child process can move its parent shell — and
+  passes the path to the agent as cwd, which is what actually gets you there.
+
 - **2026-08-04 — The OCR stack is bundled, not opt-in; transcription stays opt-in.** Settles
   the disagreement 59ff125 (2026-07-26) opened and flagged in its own message: that commit
   moved `@hyzyla/pdfium`, `sharp` and `tesseract.js` into `dependencies` while `README.md`,

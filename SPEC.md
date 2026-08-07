@@ -115,6 +115,8 @@ acting on them** — an agent can never read a protocol the CLI no longer implem
 ├── scripts/
 │   ├── cli.ts                 # subcommand dispatch; --hub flag; the version drift check
 │   ├── init.ts                # khb init / khb upgrade
+│   ├── hubs.ts                # khb list / go / agent / update / forget — the only
+│   │                          #   commands that run outside a hub
 │   ├── new-bundle.ts          # scaffold from .bundle_template, register in outer.index.md
 │   ├── export.ts              # bundle + common patterns → standalone shareable folder
 │   ├── lint.ts                # enforce skills/lint/SKILL.md across the hub
@@ -124,6 +126,8 @@ acting on them** — an agent can never read a protocol the CLI no longer implem
 │       ├── extract.ts         # every local extractor + the content-hash cache
 │       ├── ledger.ts          # log.md read/write
 │       ├── paths.ts           # package-side paths — importing it never needs a hub
+│       ├── registry.ts        # ~/.khb/hubs-config.json: where this machine's hubs are
+│       ├── relocate.ts        # khb update-path's path rewriter — pure text, no judgement
 │       ├── upgrade.ts         # the refresh itself: `khb upgrade` and the drift check
 │       └── util.ts            # hub resolution + shared helpers
 ├── .bundle_template/          # copied by `khb new-bundle`
@@ -142,6 +146,175 @@ acting on them** — an agent can never read a protocol the CLI no longer implem
 Rule 3 is the normal path: `cd` anywhere inside the hub and run `khb lint`. One
 consequence worth stating — a hub is identified by its marker file, not its name, so
 hubs may be renamed or moved freely, and nested hubs resolve to the innermost one.
+
+### 2d. The machine registry — `~/.khb/hubs-config.json`
+
+Rules 1–3 all assume you already know where the hub is. From a cold terminal in an
+unrelated folder, you don't — and a person with a personal hub, a work hub and a client
+hub has three paths to remember. So khb keeps **one file per machine** recording where the
+hubs on it are:
+
+```
+~/.khb/                        # %USERPROFILE%\.khb on Windows; $KHB_HOME overrides
+└── hubs-config.json
+```
+
+```json
+{
+  "version": 1,
+  "defaultAgent": "claude",
+  "agents": { "claude": { "command": "claude", "args": [] },
+              "codex":  { "command": "codex",  "args": [] } },
+  "hubs": [
+    { "name": "my-knowledge", "description": "Personal — work + home",
+      "path": "D:\\code\\my-knowledge", "added": "…", "lastUsed": "…" }
+  ]
+}
+```
+
+Three properties define it:
+
+- **It is a shortcut list, never knowledge.** It holds paths and one launch command.
+  Delete it and nothing is lost — the next command run inside each hub puts it back.
+- **It fills itself in.** Every khb command that resolves a hub registers it, so hubs made
+  before the registry existed appear the first time anything is run in them. There is no
+  migration and no `register` command to remember. `khb forget <name>` drops a shortcut and
+  never touches the folder.
+- **The hub is the authority on its own identity.** `name` and `description` are read out
+  of the hub's `khb.json` (`khb init --name --description`, or edit the file), so a hub
+  moved to another machine or cloned by a colleague describes itself the same way there.
+  Only when the marker says nothing does khb fall back to the folder name and a summary of
+  the bundles inside. `khb upgrade` merges rather than replaces the marker, so keys khb
+  does not own survive an upgrade.
+
+The commands over it are `khb list`, `khb go`, `khb agent`, `khb update-path` and `khb forget` —
+the only ones that run **outside** a hub, and therefore the only ones that skip hub
+resolution and the version drift check. A bare `khb` is `khb go`: one hub asks to open it,
+several show the list and take a pick, none prints the help.
+
+`khb go` ends by launching your configured agent with the hub as its working directory.
+No process can change its parent shell's directory, so `khb go` prints the `cd` line for
+the human and passes the path to the agent as cwd — `khb go --path <name>` prints only the
+path, for `cd "$(khb go --path work)"`. `khb agent none` turns the launch off entirely.
+
+Every path stored in or compared against the registry is canonicalized first (`realpath`,
+case-folded on Windows). One directory has several true names — `C:\Users\MANASV~1\…` and
+`C:\Users\Manasvi Sareen\…` are the same folder, as is anything reached through a symlink —
+and without this a single hub lists twice and `khb update-path` cannot tell it has already been
+repaired.
+
+### 2e. `khb update-path` — repairing a hub that moved
+
+Moving a hub folder breaks two things, and one command fixes both:
+
+1. **The shortcut list** still points at the old folder. `khb list` marks it `MISSING`.
+2. **Absolute paths recorded inside the hub** that named the old location — `sources.yaml`
+   entries, `source:` headers in `raw/`, `log.md` rows, `resource:` front matter — are now
+   dangling.
+
+```
+khb update-path [new-path] [--from <old-path>] [--dry-run]
+```
+
+Run from inside the moved hub, or name it. Nothing else is needed, because **the hub records
+its own location**. `khb.json` carries a `path` key — canonical, plus `pathAs` for the
+spelling khb was invoked through when the two differ — and any khb command run in a hub
+compares it against where the hub actually is. A mismatch is the move, stated by the only
+witness that travelled with the folder:
+
+```
+khb: this hub was at D:\kb\old and is now at D:\kb\new.
+khb:   absolute paths recorded inside it still name the old location.
+khb:   repair them:  khb update-path            (--dry-run to preview)
+```
+
+The old location moves into `movedFrom`, where it waits until `update-path` works it off.
+A hub moved twice before anyone repaired it lists both former homes and all of them are
+rewritten in the one pass. The key costs a string and is inert — nothing reads it but this
+repair — but it is what makes the repair need no arguments, and it survives what the registry
+does not: a deleted `~/.khb`, a first run on a second machine, a folder handed to a colleague.
+
+Failing that — a hub last touched by a khb too old to have recorded a location — the old path
+is *inferred, on proof only*: each registry entry records the `created` stamp from the hub's
+marker, minted once at `khb init`, so the dead entry carrying this hub's stamp is provably the
+same hub. A mere name match is circumstantial and is put to the user as a question rather than
+acted on. `--from` settles it either way, and is still the answer when the move predates all
+of this.
+
+The rewrite itself is a **conversion, not an interpretation**, which is what keeps it in the
+CLI rather than in an agent pass (§ AGENTS.md, division of labor): the same substring in
+and out, no judgement about what a path means. Three properties make it safe to run
+unattended:
+
+- **Every spelling moves.** A path appears natively (`D:\a\b`), forward-slashed (`D:/a/b`),
+  and backslash-escaped inside JSON (`D:\\a\\b`, how `raw/` headers and `log.md` store a
+  source). All are matched, and each is rewritten to *the same spelling* of the new path, so
+  a JSON-escaped source stays JSON-escaped.
+- **Matches end at a path boundary.** Moving `…/old` never touches `…/older`, a sibling
+  whose name merely starts the same way.
+- **The new path is shielded from itself.** It is matched too, and rewritten to itself. That
+  is what makes an *overlapping* move safe — a hub lifted out of its parent (`…/kb/hub` →
+  `…/kb`) or pushed down into a subdirectory of where it stood (`…/kb` → `…/kb/hub`). In the
+  second case the old path occurs inside every already-correct reference, and without the
+  shield each would have the move applied to it a second time. Claiming those matches for an
+  identity rewrite also makes the whole command idempotent: run it twice and the second run
+  changes nothing. Only old and new naming *the same directory* is refused, there being no
+  move to repair.
+
+`.git/`, `node_modules/` and the `inbox/` extraction cache are not walked; binary files and
+anything over 8 MB are skipped. `--dry-run` reports the file-by-file hit count and writes
+nothing.
+
+Like `khb ingest`, it states the whole plan before writing anything and reports progress as
+it walks (§2g).
+
+The name says what moves. An earlier `khb update` sat one letter from `khb upgrade` — the
+unrelated refresh of a hub's contract docs — and two commands that differ by a letter and
+agree on nothing is a trap worth spending a hyphen to avoid.
+
+### 2f. First run — the wizard
+
+A bare `khb` on a machine with no hubs has a terminal in front of it and knows the one
+thing the user needs to hear, so it asks rather than referring them to the docs. Five
+questions, every one with a default that Enter accepts: where the hub goes, what to call
+it, a one-line description, which agent opens it, and a first bundle.
+
+Three things keep it honest:
+
+- **It asks only what `khb init` takes as flags**, and calls the same `createHub()`. A hub
+  born in the wizard is byte-identical to one made by hand — there is no second creation
+  path to drift.
+- **Agents are detected, not guessed.** `claude` and `codex` are probed with `--version`
+  and the ones present are marked; the first found is the default. Any other command can be
+  typed instead, or `none`.
+- **A path that is already a hub is adopted, not overwritten.** The machine simply had not
+  heard of it, so it joins the list under its own name and the wizard stops there.
+
+No terminal, or `--path` (a script asking for a path), falls back to three lines of
+guidance. `khb list` on an empty machine likewise reports rather than starts a
+conversation.
+
+### 2g. Progress on the mechanical passes
+
+`khb`'s half of the split is the deterministic half, and some of it is slow: a scanned PDF
+is seconds per page, a video minutes per file, and a hub that has accumulated thousands of
+raw documents takes a visible moment to walk. A silent process is indistinguishable from a
+hung one, so every mechanical pass reports (`scripts/lib/log.ts`):
+
+- **The plan, before any work.** Which hub, which bundle, which extractors are armed, how
+  many sources — or for `update-path`, the old path, the new path, and whether anything
+  will be written. A `--hub`/`$KHB_HUB` run can target a folder you did not expect, and
+  that must be visible before the first write, not after.
+- **Position within the run.** `[3/57]` per unit where a unit is slow enough to deserve its
+  own line (ingest's per-file extraction), and a single rewritten counter line where the
+  units are fast and numerous (`update-path` checking files).
+- **An outcome per unit, and a closing summary** with wall-clock time.
+
+The transient counter writes to **stderr** and repaints at ~12fps; with no terminal it
+degrades to a milestone line every 500 units. So `khb … > out.txt` keeps clean, complete
+stdout, and a CI log still shows the walk moving. There is no `--quiet`: the per-unit line
+is the audit trail for a pass that rewrites files, and a run you have to repeat to find out
+what it did is worse than a noisy one.
 
 ## 3. Routing model
 

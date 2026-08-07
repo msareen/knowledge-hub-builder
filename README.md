@@ -27,8 +27,17 @@ KHB requires [Bun](https://bun.sh).
 
 ```bash
 bun install -g @msareen/knowledge-hub-builder
+khb
+```
 
-khb init ~/my-knowledge
+On a machine with no hubs yet, `khb` walks you through the first one — where it lives, what
+to call it, which agent opens it, and a first bundle. Every question has a default, so
+holding Enter produces a working hub.
+
+To do the same by hand:
+
+```bash
+khb init ~/my-knowledge --description "Personal knowledge"
 cd ~/my-knowledge
 
 khb new-bundle personal "My accounts, plans, records, and reference material"
@@ -61,6 +70,9 @@ or ask the agent:
 
 The agent discovers the KHB workflow skills from the hub and performs the catalog pass
 after ingestion.
+
+Later, from any terminal, `khb` on its own takes you back to the hub and starts your agent
+there — see [Moving between hubs](#moving-between-hubs).
 
 ## How It Works
 
@@ -225,7 +237,7 @@ Commands can be run directly or requested through the matching agent skill.
 
 | Command | Purpose |
 |---|---|
-| `khb init [dir]` | Create a hub |
+| `khb init [dir] [--name N] [--description "…"]` | Create a hub |
 | `khb upgrade` | Refresh package-owned contracts and skills (also runs automatically on version drift) |
 | `khb new-bundle <name> ["scope"]` | Create and register a bundle |
 | `khb ingest [bundle] [--force]` | Acquire and extract declared sources |
@@ -239,6 +251,79 @@ Additional ingest flags:
 - `--skip-audio`
 
 Run against a hub outside the current directory with `--hub <dir>` or `$KHB_HUB`.
+
+### Moving between hubs
+
+These four run **outside** any hub, from any terminal:
+
+| Command | Purpose |
+|---|---|
+| `khb` | Open a hub. One registered hub asks; several show a list and take a pick; none walks you through creating the first |
+| `khb list [--json]` | Every hub on this machine, with its description and path |
+| `khb go <name\|N> [--path]` | Open one by name or list position. `--path` prints just the path, for `cd "$(khb go --path work)"` |
+| `khb agent [name] [--command X] [--args "…"]` | Which agent `khb go` launches — `claude`, `codex`, anything on your PATH, or `none` to just print the path |
+| `khb update-path [new-path] [--from <old>] [--dry-run]` | You **moved** a hub: repoint the list and rewrite old-path references inside it |
+| `khb forget <name>` | Drop a hub from the list. The folder is untouched |
+
+`khb go` prints the hub's path and then starts your agent there, so a bare `khb` from a
+cold terminal ends with an agent open on the right folder. No program can change its
+parent shell's directory, which is why the `cd` line is printed rather than performed.
+
+The list lives in `~/.khb/hubs-config.json` (`%USERPROFILE%\.khb` on Windows). It holds
+paths and one launch command — no knowledge — and fills itself in: any khb command run
+inside a hub registers it, so hubs you already had show up without a migration step.
+Delete the file and the next command in each hub puts it back.
+
+A hub's name and description come from its own `khb.json`, so they travel with the hub
+rather than living in one machine's list. Set them with `khb init --name --description`,
+or edit those two keys in the marker later.
+
+### After moving a hub
+
+Move the folder, then from inside it:
+
+```bash
+khb update-path --dry-run    # what would change
+khb update-path              # apply
+```
+
+That does two things. It repoints the shortcut list — a moved hub shows as `MISSING` in
+`khb list` until you do. And it rewrites the absolute paths recorded *inside* the hub that
+named the old location: `sources.yaml` entries, `source:` headers in `raw/`, `log.md` rows,
+`resource:` front matter.
+
+Neither command needs the old path: the hub records where it lives in its own `khb.json`
+(`path`), so any khb command run in a moved hub notices and says so —
+
+```
+khb: this hub was at D:\kb\old and is now at D:\kb\new.
+khb:   repair them:  khb update-path            (--dry-run to preview)
+```
+
+— and `update-path` reads the old location straight out of the marker. That record travels
+with the folder, so it works after `~/.khb` is deleted, on a second machine, or on a hub a
+colleague handed you. Move a hub twice before repairing it and both former homes are
+rewritten in one pass.
+
+For a hub last touched by a khb too old to have recorded a location, the old path is worked
+out from the registry entry that now points at nothing, matched on the identity stamp in
+`khb.json`. If it can't prove which entry that is, it asks; `--from <old-path>` tells it
+outright.
+
+Both `khb update-path` and `khb ingest` state their whole plan before writing anything, then
+report as they go — a position per file for work slow enough to matter, a live counter for
+work that isn't. The counter goes to stderr, so redirected stdout stays clean.
+
+The rewrite is a literal substitution with three guards: every spelling of the path moves
+(native, forward-slashed, and JSON-escaped as `raw/` headers store it), each rewritten to
+the same spelling of the new path; matches must end at a path boundary, so moving `…/old`
+never touches a sibling `…/older`; and the new path is matched too and rewritten to itself,
+which is what makes overlapping moves safe — lifting a hub out of its parent, or pushing it
+down into a subdirectory of where it stood — and makes a second run a no-op.
+`.git/`, `node_modules/` and the `inbox/` cache are skipped, as are binaries.
+
+Not to be confused with `khb upgrade`, which refreshes a hub's package-owned contract docs
+and has nothing to do with moving anything.
 
 To update the installed package:
 
