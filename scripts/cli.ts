@@ -3,19 +3,31 @@
 // so nothing that resolves a hub may be imported at module scope.
 import { version, findHub, markerIn, MARKER } from "./lib/paths";
 
-const COMMANDS: Record<string, { load: () => Promise<unknown>; help: string }> = {
-  init: { load: () => import("./init"), help: 'khb init [dir] [--name N] [--description "…"]   create a hub here (or in dir)' },
-  upgrade: { load: () => import("./init"), help: "khb upgrade                     refresh this hub's contract docs" },
-  "new-bundle": { load: () => import("./new-bundle"), help: 'khb new-bundle <name> ["scope"]  scaffold a bundle + register it' },
-  ingest: { load: () => import("./ingest/index"), help: "khb ingest <bundle> [--force]   acquire + extract declared sources → raw/ (name required once the hub has a bundle other than 'default')" },
-  lint: { load: () => import("./lint"), help: "khb lint                        validate the hub against skills/lint/SKILL.md" },
-  visualize: { load: () => import("./visualize"), help: "khb visualize [--port N] [--no-open]  serve the live bundle graph in your browser; aliases: vis, viz" },
-  export: { load: () => import("./export"), help: "khb export <bundle> [dest]      standalone copy of one bundle" },
-  list: { load: () => import("./hubs"), help: "khb list [--json]               every hub on this machine" },
-  go: { load: () => import("./hubs"), help: "khb go [name|N] [--path]        open a hub with your agent (bare 'khb' picks one)" },
-  agent: { load: () => import("./hubs"), help: "khb agent [name] [--command X]  which agent 'khb go' launches" },
-  "update-path": { load: () => import("./hubs"), help: "khb update-path [new] [--dry-run]  you MOVED a hub: repair the list + paths inside it" },
-  forget: { load: () => import("./hubs"), help: "khb forget <name>               drop a hub from the list (folder untouched)" },
+const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; desc: string }> = {
+  init: { load: () => import("./init"), usage: 'khb init [dir] [--name N] [--description "…"]', desc: "create a hub here (or in dir)" },
+  upgrade: { load: () => import("./init"), usage: "khb upgrade", desc: "refresh this hub's contract docs" },
+  "new-bundle": { load: () => import("./new-bundle"), usage: 'khb new-bundle <name> ["scope"]', desc: "scaffold a bundle + register it" },
+  ingest: {
+    load: () => import("./ingest/index"),
+    usage: "khb ingest <bundle> [--force]",
+    desc: "acquire + extract declared sources → raw/ (name required once the hub has a bundle other than 'default')",
+  },
+  lint: { load: () => import("./lint"), usage: "khb lint", desc: "validate the hub against skills/lint/SKILL.md" },
+  visualize: {
+    load: () => import("./visualize"),
+    usage: "khb visualize [--port N] [--no-open]",
+    desc: "serve the live bundle graph in your browser; aliases: vis, viz",
+  },
+  export: { load: () => import("./export"), usage: "khb export <bundle> [dest]", desc: "standalone copy of one bundle" },
+  list: { load: () => import("./hubs"), usage: "khb list [--json]", desc: "every hub on this machine" },
+  go: { load: () => import("./hubs"), usage: "khb go [name|N] [--path]", desc: "open a hub with your agent (bare 'khb' picks one)" },
+  agent: { load: () => import("./hubs"), usage: "khb agent [name] [--command X]", desc: "which agent 'khb go' launches" },
+  "update-path": {
+    load: () => import("./hubs"),
+    usage: "khb update-path [new] [--dry-run]",
+    desc: "you MOVED a hub: repair the list + paths inside it",
+  },
+  forget: { load: () => import("./hubs"), usage: "khb forget <name>", desc: "drop a hub from the list (folder untouched)" },
 };
 
 /**
@@ -50,16 +62,34 @@ const cmd0 = argv.shift();
 const cmd = !cmd0 ? "go" : (ALIASES[cmd0] ?? cmd0);
 
 if (cmd === "help" || cmd === "--help" || cmd === "-h") {
-  console.log(`khb ${version()} — Knowledge Hub Builder\n`);
+  const width = Math.max(...Object.values(COMMANDS).map((c) => c.usage.length));
+  const printSection = (title: string, names: string[]) => {
+    console.log(title);
+    for (const name of names) {
+      const c = COMMANDS[name];
+      console.log(`  ${c.usage.padEnd(width)}   ${c.desc}`);
+    }
+  };
+
+  console.log(`khb ${version()} — Knowledge Hub Builder`);
+  console.log();
   console.log(`khb is the supporting tool: it handles deterministic extraction, file plumbing,`);
   console.log(`validation, and export. Your AI agent — Claude, Codex, Gemini, or another`);
-  console.log(`compatible agent — follows the workflow skills and orchestrates the knowledge work.\n`);
-  for (const [name, c] of Object.entries(COMMANDS))
-    if (!REGISTRY_COMMANDS.has(name)) console.log("  " + c.help);
-  console.log(`\nAnywhere on this machine (no hub needed):`);
-  for (const [name, c] of Object.entries(COMMANDS))
-    if (REGISTRY_COMMANDS.has(name)) console.log("  " + c.help);
-  console.log(`\nGlobal:  --hub <dir>   operate on that hub instead of searching upward from cwd`);
+  console.log(`compatible agent — follows the workflow skills and orchestrates the knowledge work.`);
+  console.log();
+
+  printSection(
+    "In a hub:",
+    Object.keys(COMMANDS).filter((name) => !REGISTRY_COMMANDS.has(name)),
+  );
+  console.log();
+  printSection(
+    "Anywhere on this machine (no hub needed) — config and maintenance:",
+    Object.keys(COMMANDS).filter((name) => REGISTRY_COMMANDS.has(name)),
+  );
+  console.log();
+
+  console.log(`Global:  --hub <dir>   operate on that hub instead of searching upward from cwd`);
   console.log(`Docs:    https://github.com/msareen/knowledge-hub-builder`);
   process.exit(0);
 }

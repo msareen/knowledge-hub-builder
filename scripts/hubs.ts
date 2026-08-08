@@ -5,9 +5,10 @@
 // one. Nothing here touches knowledge — see lib/registry.ts for why the registry is
 // disposable by design.
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { findHub, markerIn, version } from "./lib/paths";
 import { sameLocation, rewritePaths } from "./lib/relocate";
 import { clearMoved, staleLocations } from "./lib/upgrade";
@@ -79,16 +80,115 @@ function noHubs(): never {
 /**
  * Ask on the terminal. Returns undefined when there is no terminal to ask on — a piped or
  * scripted khb must print and stop rather than block forever on a prompt nobody sees.
+ *
+ * Input is read key by key rather than through prompt(), for one reason: Esc. A prompt you
+ * can only escape by typing nothing and pressing Enter is a prompt you have to think about,
+ * and Enter already means "take the default" two questions earlier in the wizard. Esc means
+ * the same thing at every prompt in this file — stop, do nothing — so it is handled here,
+ * once, by ending the command. Ctrl-C likewise: raw mode suppresses the signal, so the
+ * prompt would otherwise be unquittable.
  */
 function ask(question: string): string | undefined {
   if (!process.stdin.isTTY) return undefined;
   try {
-    // prompt() answers null for a bare Enter as well as for a cancel; both are "the user
-    // typed nothing", which is an answer here — only a missing terminal is "cannot ask".
-    return prompt(question) ?? "";
+    return readKeys(question);
   } catch {
-    return undefined;
+    // A terminal that will not go into raw mode still answers a line at a time. prompt()
+    // returns null for a bare Enter as well as for a cancel; both are "the user typed
+    // nothing", which is an answer here — only a missing terminal is "cannot ask".
+    try {
+      return prompt(question) ?? "";
+    } catch {
+      return undefined;
+    }
   }
+}
+
+/**
+ * One line of input, read a keypress at a time. Throws if the terminal has no raw mode,
+ * which is `ask`'s cue to fall back; exits on Esc and Ctrl-C, restoring the terminal first
+ * since process.exit runs no `finally`.
+ */
+function readKeys(question: string): string {
+  const stdin = process.stdin;
+  // Something for Atomics.wait to block on. It is never notified — the wait exists only to
+  // hand the CPU back between reads, which is the one way to sleep without going async.
+  const idle = new Int32Array(new SharedArrayBuffer(4));
+  stdin.setRawMode(true);
+  const stop = (code: number, text: string): never => {
+    stdin.setRawMode(false);
+    process.stdout.write(text);
+    process.exit(code);
+  };
+
+  process.stdout.write(question);
+  const buf = Buffer.alloc(64);
+  const utf8 = new StringDecoder("utf8");
+  let line = "";
+  let read = false;
+  try {
+    for (;;) {
+      let n = 0;
+      try {
+        n = readSync(0, buf, 0, buf.length, null);
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        // Nothing typed yet on a non-blocking stdin. Wait a moment before asking again —
+        // a bare `continue` here is a spin loop on one core for as long as the prompt is up.
+        if (code === "EAGAIN") {
+          Atomics.wait(idle, 0, 0, 15);
+          continue;
+        }
+        if (code !== "EOF") throw e;
+      }
+      // End of input before a single key: this terminal cannot be read this way — some
+      // consoles report EOF rather than blocking. Say so, so ask() falls back to a line
+      // reader. Answering "" here instead would be the worse bug by far: silent empty
+      // answers to every question, and a wizard that runs itself on defaults.
+      if (!n && !read) throw new Error("stdin: no keys to read");
+      if (!n) break; // ended mid-answer: take what was typed, as a bare Enter would
+      read = true;
+
+      // A lone Esc is a cancel. Esc with bytes behind it is an arrow or function key —
+      // terminals deliver those as one read — and has no meaning at a prompt.
+      if (buf[0] === 0x1b) {
+        if (n === 1) stop(0, "\ncancelled\n");
+        continue;
+      }
+
+      // Decoded as text, not bytes: paths and descriptions are typed here, and a name with
+      // an accent in it must not arrive as two mangled characters. The decoder holds any
+      // trailing half-character back until the read that completes it — a pasted line can
+      // land across two buffers.
+      for (const ch of utf8.write(buf.subarray(0, n))) {
+        const c = ch.codePointAt(0) ?? 0;
+        if (c === 0x0d || c === 0x0a) return finish(stdin, line); // Enter
+        if (c === 0x03) stop(130, "^C\n"); // Ctrl-C, which raw mode swallowed
+        if (c === 0x04 && !line) stop(0, "\ncancelled\n"); // Ctrl-D on an empty line
+        if (c === 0x7f || c === 0x08) {
+          // Backspace. Erase on screen too — raw mode echoes nothing on its own.
+          if (line) {
+            line = line.slice(0, -1);
+            process.stdout.write("\b \b");
+          }
+          continue;
+        }
+        if (c < 0x20) continue; // every other control key: ignore
+        line += ch;
+        process.stdout.write(ch);
+      }
+    }
+  } finally {
+    stdin.setRawMode(false);
+  }
+  return finish(stdin, line);
+}
+
+/** Leave the terminal as a line-based prompt would have: cooked mode, cursor on a new line. */
+function finish(stdin: typeof process.stdin, line: string): string {
+  stdin.setRawMode(false);
+  process.stdout.write("\n");
+  return line;
 }
 
 /**
@@ -535,7 +635,7 @@ printList(hubs);
 
 if (wantPath) process.exit(0); // ambiguous: a script must name the hub it means
 
-const answer = ask(`\nOpen which? [1-${hubs.length}, or Enter to cancel] `);
+const answer = ask(`\nOpen which? [1-${hubs.length}, Esc to cancel] `);
 if (answer === undefined) {
   console.log(`\nOpen one:  khb go ${hubs[0].name}    |    khb go 1`);
   process.exit(0);
