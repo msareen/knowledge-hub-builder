@@ -22,10 +22,10 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
   list: { load: () => import("./hubs"), usage: "khb list [--json]", desc: "every hub on this machine" },
   go: { load: () => import("./hubs"), usage: "khb go [name|N] [--path]", desc: "open a hub with your agent (bare 'khb' picks one)" },
   agent: { load: () => import("./hubs"), usage: "khb agent [name] [--command X]", desc: "which agent 'khb go' launches" },
-  "update-path": {
+  update: {
     load: () => import("./hubs"),
-    usage: "khb update-path [new] [--dry-run]",
-    desc: "you MOVED a hub: repair the list + paths inside it",
+    usage: "khb update [new] [--path|-p] [--schema|-s] [--dry-run]",
+    desc: "repair a moved hub's paths and/or backfill sources.yaml to the current schema",
   },
   forget: { load: () => import("./hubs"), usage: "khb forget <name>", desc: "drop a hub from the list (folder untouched)" },
 };
@@ -34,7 +34,7 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
  * Commands that work *outside* a hub, against ~/.khb/hubs-config.json. They must not
  * resolve or upgrade a hub — their whole job is running before you are in one.
  */
-const REGISTRY_COMMANDS = new Set(["list", "go", "agent", "forget", "update-path"]);
+const REGISTRY_COMMANDS = new Set(["list", "go", "agent", "forget", "update"]);
 
 // Short forms that just resolve to a canonical command above — kept out of COMMANDS
 // itself so help text lists each command once. `-v` is taken by --version, so
@@ -130,11 +130,11 @@ if (cmd !== "init" && cmd !== "upgrade" && !REGISTRY_COMMANDS.has(cmd)) {
     if (moved) {
       console.error(`khb: this hub was at ${moved} and is now at ${hub}.`);
       console.error(`khb:   absolute paths recorded inside it still name the old location.`);
-      console.error(`khb:   repair them:  khb update-path            (--dry-run to preview)`);
+      console.error(`khb:   repair them:  khb update --path           (--dry-run to preview)`);
     }
   }
   if (hub && !process.env.KHB_NO_AUTO_UPGRADE) {
-    const { hubVersion, upgradeHub } = await import("./lib/upgrade");
+    const { hubVersion, upgradeHub, updateHint } = await import("./lib/upgrade");
     // A marker under a pre-rename name is drift too, even at a matching version.
     if (hubVersion(hub) !== version() || markerIn(hub) !== MARKER) {
       const { from, to, pruned, renamed } = upgradeHub(hub);
@@ -144,6 +144,8 @@ if (cmd !== "init" && cmd !== "upgrade" && !REGISTRY_COMMANDS.has(cmd)) {
       );
       if (renamed) console.error(`khb:   renamed ${renamed} -> khb.json`);
       if (pruned.length) console.error(`khb:   removed (no longer part of the contract): ${pruned.join(", ")}`);
+      const hint = updateHint(hub);
+      if (hint) console.error(hint);
     }
   }
 }

@@ -6,6 +6,7 @@ import { join } from "../lib/util";
 import type { Entry } from "../lib/ledger";
 import { acquireFile, newCounters, report, type Options } from "./acquire";
 import { detail, pos } from "../lib/log";
+import { makeExcluder } from "./exclude";
 import type { Source } from "./index";
 
 export async function ingestFolder(
@@ -30,14 +31,23 @@ export async function ingestFolder(
   // take a while to enumerate, and knowing the denominator is what makes "[ 3/57]" mean
   // anything to someone deciding whether to wait.
   detail(`scanning ${s.path} …`);
-  const files = walk(s.path);
-  detail(`${files.length} file(s) found`);
+  const all = walk(s.path);
+  detail(`${all.length} file(s) found`);
+
+  // relOf is posix-normalized so an 'exclude' entry like "drafts/" behaves the same whether
+  // the corpus was walked on Windows or POSIX; it's computed once and reused for both the
+  // exclude check and the flattened raw/ filename below.
+  const relOf = (p: string) => p.slice(s.path.length + 1).replaceAll("\\", "/");
+  const excluded = makeExcluder(s.exclude);
+  const files = all.filter((p) => !excluded(p, relOf(p)));
+  const skippedCount = all.length - files.length;
+  if (skippedCount) detail(`${skippedCount} excluded by 'exclude' rule(s), ${files.length} remain`);
 
   const c = newCounters();
   for (const [i, p] of files.entries()) {
     // Flatten the subtree into the filename so two `notes.md` in sibling folders don't
     // collide in raw/, and so the origin stays legible without opening the file.
-    const rel = p.slice(s.path.length + 1).replaceAll(/[\\/]/g, "__");
+    const rel = relOf(p).replaceAll("/", "__");
     await acquireFile(pos(i + 1, files.length), p, rel, rawDir, bundleDir, entries, c, opts);
   }
   report(c);

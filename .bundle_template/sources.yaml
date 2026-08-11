@@ -4,6 +4,7 @@
 sources: []
 # - type: folder
 #   path: /abs/path/to/some-folder
+#   exclude: []          # optional — skip these paths/globs before ingesting
 # - type: web
 #   urls: []
 # - type: confluence

@@ -21,8 +21,8 @@ import { ingestWeb } from "./web";
 import type { Options } from "./acquire";
 
 export type Source =
-  | { type: "folder"; path: string }
-  | { type: "files"; paths: string[] }
+  | { type: "folder"; path: string; exclude?: string[] }
+  | { type: "files"; paths: string[]; exclude?: string[] }
   | { type: "web"; urls: string[] };
 
 const argv = process.argv.slice(2);
@@ -93,6 +93,14 @@ for (const [i, s] of sources.entries()) {
       console.error(`${bundle}: ${at}.${field} must be a list of strings`);
       process.exit(1);
     }
+  }
+  if (
+    (s.type === "folder" || s.type === "files") &&
+    s.exclude !== undefined &&
+    (!Array.isArray(s.exclude) || s.exclude.some((v: unknown) => typeof v !== "string"))
+  ) {
+    console.error(`${bundle}: ${at}.exclude must be a list of strings`);
+    process.exit(1);
   }
 }
 if (!sources.length) {

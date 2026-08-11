@@ -64,16 +64,26 @@ empty `sources.yaml` has nothing to re-ingest, so there the only answer is a new
 for it. Do not infer sources from nearby files, do not edit `sources.yaml`, and do not run
 `khb ingest` until the user has answered.
 
+For a `folder` or `files` source, ask one more thing before running `khb ingest`: **anything
+to exclude from this source?** (default: no — most sources want everything ingested). If the
+user names folders, files or patterns to skip, write them into that source's `exclude:` list
+yourself — do not run `khb ingest` until this is settled either, for the same reason as the
+question above: a declaration you have not confirmed is not yet a plan.
+
 Sources live in `bundles/<bundle>/sources.yaml`:
 
 ```yaml
 sources:
   - type: folder          # walk a directory tree
     path: /abs/path/to/project-x
+    exclude:               # optional — skip these before ingesting
+      - drafts/             # a plain entry: matches this path or anything under it
+      - "**/*.tmp"          # a glob (has * ? [): matched with Bun.Glob
   - type: files           # a scattered, explicitly named set
     paths:
       - /abs/path/to/one.pdf
       - /abs/path/to/two.xlsx
+    # exclude: also accepted here, matched against each path's basename
   - type: web
     urls:
       - https://example.com/design-doc
@@ -82,6 +92,10 @@ sources:
   - type: confluence
     space: PROJX
 ```
+
+`exclude` entries can also be fully-qualified absolute paths (e.g. `D:\corpus\project-x\drafts`
+or `/abs/path/to/project-x/drafts`) instead of paths/patterns relative to the source — either
+form matches, plain or glob.
 
 Nothing is copied by declaring a source.
 

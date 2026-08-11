@@ -28,7 +28,7 @@ export type HubEntry = {
   /**
    * The `created` stamp from the hub's own marker. Copied here purely as an identity
    * fingerprint: after a hub is moved, its registry entry points at nothing, and matching
-   * this against the marker at the new location is how `khb update-path` knows which dead entry
+   * this against the marker at the new location is how `khb update --path` knows which dead entry
    * is the same hub rather than a different one that also went missing.
    */
   created?: string;
@@ -222,7 +222,7 @@ export const isAlive = (h: HubEntry): boolean => existsSync(h.path) && !!markerI
  * Dead entries that are plausibly `hub` under its former name, best evidence first:
  * an identical `created` stamp is proof (it is minted once, at `khb init`), a matching
  * registry name is a guess. Returning candidates rather than picking one is deliberate —
- * `khb update-path` acts on proof and asks when it only has a guess.
+ * `khb update --path` acts on proof and asks when it only has a guess.
  */
 export function relocationCandidates(hub: string): { certain: HubEntry[]; likely: HubEntry[] } {
   const path = canonical(hub);

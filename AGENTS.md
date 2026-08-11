@@ -150,7 +150,7 @@ paths — and fill themselves in as hubs are used, so they need no maintenance.
 | `khb list` | every hub on this machine, with its description and path |
 | `khb go [name\|N]` | open a hub — prints its path, then launches your agent there. Bare `khb` is this: one hub asks, several offer a list, none walks the user through creating the first. `--path` prints only the path |
 | `khb agent [name]` | which agent `khb go` launches — `claude`, `codex`, a custom `--command`, or `none` |
-| `khb update-path [new-path]` | the hub **moved**: repoint the list and rewrite every old-path reference inside it. Needs no arguments — the hub records its own location in `khb.json`, so the move is detected and announced by any khb command run there. `--dry-run` first. Unrelated to `khb upgrade` |
+| `khb update [new-path]` | repair the hub: `--path`/`-p` repoints the list and rewrites every old-path reference after a move (needs no arguments — the move is detected and announced by any khb command run there); `--schema`/`-s` backfills a bundle's `sources.yaml` to the current schema (e.g. a newly added `exclude:` field). No flag runs both. `--dry-run` first. Unrelated to `khb upgrade`, which only touches package-owned contract docs, never bundle content |
 | `khb forget <name>` | drop a shortcut; the hub folder is untouched |
 
 A hub's `name` and `description` in that list come from its own `khb.json`, so they travel

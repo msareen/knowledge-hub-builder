@@ -127,7 +127,8 @@ acting on them** — an agent can never read a protocol the CLI no longer implem
 │       ├── ledger.ts          # log.md read/write
 │       ├── paths.ts           # package-side paths — importing it never needs a hub
 │       ├── registry.ts        # ~/.khb/hubs-config.json: where this machine's hubs are
-│       ├── relocate.ts        # khb update-path's path rewriter — pure text, no judgement
+│       ├── relocate.ts        # khb update --path's path rewriter — pure text, no judgement
+│       ├── schema.ts          # khb update --schema: sources.yaml field diff/apply
 │       ├── upgrade.ts         # the refresh itself: `khb upgrade` and the drift check
 │       └── util.ts            # hub resolution + shared helpers
 ├── .bundle_template/          # copied by `khb new-bundle`
@@ -187,7 +188,7 @@ Three properties define it:
   the bundles inside. `khb upgrade` merges rather than replaces the marker, so keys khb
   does not own survive an upgrade.
 
-The commands over it are `khb list`, `khb go`, `khb agent`, `khb update-path` and `khb forget` —
+The commands over it are `khb list`, `khb go`, `khb agent`, `khb update` and `khb forget` —
 the only ones that run **outside** a hub, and therefore the only ones that skip hub
 resolution and the version drift check. A bare `khb` is `khb go`: one hub asks to open it,
 several show the list and take a pick, none prints the help.
@@ -200,21 +201,30 @@ path, for `cd "$(khb go --path work)"`. `khb agent none` turns the launch off en
 Every path stored in or compared against the registry is canonicalized first (`realpath`,
 case-folded on Windows). One directory has several true names — `C:\Users\MANASV~1\…` and
 `C:\Users\Manasvi Sareen\…` are the same folder, as is anything reached through a symlink —
-and without this a single hub lists twice and `khb update-path` cannot tell it has already been
-repaired.
+and without this a single hub lists twice and `khb update --path` cannot tell it has already
+been repaired.
 
-### 2e. `khb update-path` — repairing a hub that moved
+### 2e. `khb update` — repairing a hub
 
-Moving a hub folder breaks two things, and one command fixes both:
+Two independent repairs, selectable together or apart:
+
+```
+khb update [new-path] [--path|-p] [--schema|-s] [--from <old-path>] [--dry-run]
+```
+
+No flag runs both. `--path`/`-p` repairs a moved hub; `--schema`/`-s` backfills a bundle's
+`sources.yaml` to the current field set (§ scripts/lib/schema.ts). They are unrelated repairs
+that happen to share a plan-then-write-then-report shape, so one command with two switches
+beat two commands that would each need the same hub-resolution and dry-run plumbing.
+
+#### `--path` — a hub that moved
+
+Moving a hub folder breaks two things, and this half fixes both:
 
 1. **The shortcut list** still points at the old folder. `khb list` marks it `MISSING`.
 2. **Absolute paths recorded inside the hub** that named the old location — `sources.yaml`
    entries, `source:` headers in `raw/`, `log.md` rows, `resource:` front matter — are now
    dangling.
-
-```
-khb update-path [new-path] [--from <old-path>] [--dry-run]
-```
 
 Run from inside the moved hub, or name it. Nothing else is needed, because **the hub records
 its own location**. `khb.json` carries a `path` key — canonical, plus `pathAs` for the
@@ -225,10 +235,10 @@ witness that travelled with the folder:
 ```
 khb: this hub was at D:\kb\old and is now at D:\kb\new.
 khb:   absolute paths recorded inside it still name the old location.
-khb:   repair them:  khb update-path            (--dry-run to preview)
+khb:   repair them:  khb update --path            (--dry-run to preview)
 ```
 
-The old location moves into `movedFrom`, where it waits until `update-path` works it off.
+The old location moves into `movedFrom`, where it waits until `--path` works it off.
 A hub moved twice before anyone repaired it lists both former homes and all of them are
 rewritten in the one pass. The key costs a string and is inert — nothing reads it but this
 repair — but it is what makes the repair need no arguments, and it survives what the registry
@@ -268,9 +278,34 @@ nothing.
 Like `khb ingest`, it states the whole plan before writing anything and reports progress as
 it walks (§2g).
 
-The name says what moves. An earlier `khb update` sat one letter from `khb upgrade` — the
-unrelated refresh of a hub's contract docs — and two commands that differ by a letter and
-agree on nothing is a trap worth spending a hyphen to avoid.
+#### `--schema` — a bundle's `sources.yaml` predates a field
+
+A `sources.yaml` written before a field existed (e.g. `folder`/`files` sources gained
+`exclude:`) has no way to discover it short of reading the docs. `scripts/lib/schema.ts`
+holds the current, optional, backfillable field list per source `type`; this half diffs
+every bundle's `sources.yaml` against it and, for anything missing, stages a default value —
+or, for a field the schema has since deprecated, stages its removal. Comment-preserving:
+it edits the parsed YAML document node-by-node (the `yaml` package's `Document` API) rather
+than reserializing from scratch, so hand-written comments and structure in an untouched part
+of the file survive. The one caveat is cosmetic, not correctness: re-serializing the whole
+document can normalize whitespace in *other*, unrelated flow-style content in the same file.
+
+There is no persisted schema version anywhere — the "schema" is just this file's current
+shape, diffed fresh on every run, the same way `khb upgrade`'s `MANAGED`/`RETIRED` lists are
+static and re-checked rather than tracked historically. `--dry-run` prints the changes and
+writes nothing; otherwise it applies immediately, same convention as `--path`.
+
+`khb upgrade` prints a one-line hint when either half of `update` has something pending —
+never a prompt, since `upgrade` already runs unattended inside unrelated commands on version
+drift, and a blocking question there would interrupt work that has nothing to do with either
+repair.
+
+The name says what it does, now that it does two things belonging to neither `khb upgrade`
+(package-owned contract docs only) nor to a single-purpose `update-path`. The original
+one-letter-from-`upgrade` objection to the shorter name held while `update` meant only path
+repair; a second, unrelated repair under the same verb resolves it — `update` repairs what
+the user's own bundles record, `upgrade` refreshes what the package owns, and the two no
+longer read as near-synonyms.
 
 ### 2f. First run — the wizard
 
@@ -302,12 +337,13 @@ raw documents takes a visible moment to walk. A silent process is indistinguisha
 hung one, so every mechanical pass reports (`scripts/lib/log.ts`):
 
 - **The plan, before any work.** Which hub, which bundle, which extractors are armed, how
-  many sources — or for `update-path`, the old path, the new path, and whether anything
-  will be written. A `--hub`/`$KHB_HUB` run can target a folder you did not expect, and
-  that must be visible before the first write, not after.
+  many sources — or for `update --path`, the old path, the new path, and whether anything
+  will be written; for `update --schema`, which bundles and fields. A `--hub`/`$KHB_HUB`
+  run can target a folder you did not expect, and that must be visible before the first
+  write, not after.
 - **Position within the run.** `[3/57]` per unit where a unit is slow enough to deserve its
   own line (ingest's per-file extraction), and a single rewritten counter line where the
-  units are fast and numerous (`update-path` checking files).
+  units are fast and numerous (`update --path` checking files).
 - **An outcome per unit, and a closing summary** with wall-clock time.
 
 The transient counter writes to **stderr** and repaints at ~12fps; with no terminal it
@@ -368,6 +404,7 @@ Each bundle declares its sources in `sources.yaml`:
 sources:
   - type: folder      # local disk
     path: /abs/path/to/project-x
+    exclude: [drafts/]      # optional — skip paths/globs before ingesting
   - type: web
     urls:
       - https://example.com/design-doc

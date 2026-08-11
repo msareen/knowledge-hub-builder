@@ -49,6 +49,7 @@ Add sources to `bundles/personal/sources.yaml`:
 sources:
   - type: folder
     path: /absolute/path/to/documents
+    exclude: [drafts/]      # optional — skip paths/globs before ingesting
   - type: files
     paths:
       - /absolute/path/to/one.pdf
@@ -262,7 +263,7 @@ These four run **outside** any hub, from any terminal:
 | `khb list [--json]` | Every hub on this machine, with its description and path |
 | `khb go <name\|N> [--path]` | Open one by name or list position. `--path` prints just the path, for `cd "$(khb go --path work)"` |
 | `khb agent [name] [--command X] [--args "…"]` | Which agent `khb go` launches — `claude`, `codex`, anything on your PATH, or `none` to just print the path |
-| `khb update-path [new-path] [--from <old>] [--dry-run]` | You **moved** a hub: repoint the list and rewrite old-path references inside it |
+| `khb update [new-path] [--path\|-p] [--schema\|-s] [--from <old>] [--dry-run]` | Repair the hub: path references after a move, and/or backfill `sources.yaml` to the current schema. No flag runs both |
 | `khb forget <name>` | Drop a hub from the list. The folder is untouched |
 
 `khb go` prints the hub's path and then starts your agent there, so a bare `khb` from a
@@ -278,41 +279,36 @@ A hub's name and description come from its own `khb.json`, so they travel with t
 rather than living in one machine's list. Set them with `khb init --name --description`,
 or edit those two keys in the marker later.
 
-### After moving a hub
+### `khb update` — repairing a hub
 
-Move the folder, then from inside it:
+Two independent repairs, run together or apart:
 
 ```bash
-khb update-path --dry-run    # what would change
-khb update-path              # apply
+khb update --dry-run    # what would change, both halves
+khb update               # apply both
+khb update --path        # only repoint paths after a move
+khb update --schema      # only backfill sources.yaml to the current schema
 ```
 
-That does two things. It repoints the shortcut list — a moved hub shows as `MISSING` in
-`khb list` until you do. And it rewrites the absolute paths recorded *inside* the hub that
-named the old location: `sources.yaml` entries, `source:` headers in `raw/`, `log.md` rows,
-`resource:` front matter.
-
-Neither command needs the old path: the hub records where it lives in its own `khb.json`
-(`path`), so any khb command run in a moved hub notices and says so —
+**`--path`/`-p`** — after you move the folder, this repoints the shortcut list (a moved hub
+shows as `MISSING` in `khb list` until you do) and rewrites the absolute paths recorded
+*inside* the hub that named the old location: `sources.yaml` entries, `source:` headers in
+`raw/`, `log.md` rows, `resource:` front matter. It needs no old path: the hub records where
+it lives in its own `khb.json` (`path`), so any khb command run in a moved hub notices and
+says so —
 
 ```
 khb: this hub was at D:\kb\old and is now at D:\kb\new.
-khb:   repair them:  khb update-path            (--dry-run to preview)
+khb:   repair them:  khb update --path            (--dry-run to preview)
 ```
 
-— and `update-path` reads the old location straight out of the marker. That record travels
-with the folder, so it works after `~/.khb` is deleted, on a second machine, or on a hub a
+— and `--path` reads the old location straight out of the marker. That record travels with
+the folder, so it works after `~/.khb` is deleted, on a second machine, or on a hub a
 colleague handed you. Move a hub twice before repairing it and both former homes are
-rewritten in one pass.
-
-For a hub last touched by a khb too old to have recorded a location, the old path is worked
-out from the registry entry that now points at nothing, matched on the identity stamp in
-`khb.json`. If it can't prove which entry that is, it asks; `--from <old-path>` tells it
-outright.
-
-Both `khb update-path` and `khb ingest` state their whole plan before writing anything, then
-report as they go — a position per file for work slow enough to matter, a live counter for
-work that isn't. The counter goes to stderr, so redirected stdout stays clean.
+rewritten in one pass. For a hub last touched by a khb too old to have recorded a location,
+the old path is worked out from the registry entry that now points at nothing, matched on
+the identity stamp in `khb.json`. If it can't prove which entry that is, it asks; `--from
+<old-path>` tells it outright.
 
 The rewrite is a literal substitution with three guards: every spelling of the path moves
 (native, forward-slashed, and JSON-escaped as `raw/` headers store it), each rewritten to
@@ -321,6 +317,16 @@ never touches a sibling `…/older`; and the new path is matched too and rewritt
 which is what makes overlapping moves safe — lifting a hub out of its parent, or pushing it
 down into a subdirectory of where it stood — and makes a second run a no-op.
 `.git/`, `node_modules/` and the `inbox/` cache are skipped, as are binaries.
+
+**`--schema`/`-s`** — a bundle's `sources.yaml` can predate a field khb's since learned about
+(e.g. `exclude:`), with no way to discover it short of reading the docs. This backfills
+missing optional fields with their default, per bundle, preserving your comments and
+formatting. `khb upgrade` mentions when either half of `update` has something pending, as a
+printed hint — it never runs `update` for you.
+
+Both `khb update` and `khb ingest` state their whole plan before writing anything, then
+report as they go — a position per file for work slow enough to matter, a live counter for
+work that isn't. The counter goes to stderr, so redirected stdout stays clean.
 
 Not to be confused with `khb upgrade`, which refreshes a hub's package-owned contract docs
 and has nothing to do with moving anything.

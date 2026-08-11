@@ -8,6 +8,7 @@ import { cpSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, r
 import { join, dirname, resolve } from "node:path";
 import { PKG, MANAGED, RETIRED, MARKER, markerIn, version } from "./paths";
 import { canonical } from "./registry";
+import { diffSourcesYamlAll } from "./schema";
 
 export type UpgradeResult = {
   /** Version recorded in the hub's marker before the upgrade, if it recorded one. */
@@ -123,12 +124,12 @@ export type Located = {
  * move can be detected without being told: the machine registry knows a hub went missing
  * but not which live hub it became, and after `~/.khb` is deleted or the folder is opened
  * on another machine it knows nothing at all. A `path` key costs one string and turns
- * "khb update-path --from <the path you must now remember>" into a command with no
+ * "khb update --path --from <the path you must now remember>" into a command with no
  * arguments.
  *
  * Stale locations accumulate in `movedFrom` rather than replacing each other: a hub moved
- * twice before anyone repaired it has references to both former homes, and `update-path`
- * rewrites the whole list in one pass. `khb update-path` clears it — see `clearMoved`.
+ * twice before anyone repaired it has references to both former homes, and `update --path`
+ * rewrites the whole list in one pass. `khb update --path` clears it — see `clearMoved`.
  *
  * Writes only when something actually changed, so the common case leaves khb.json — and
  * anyone's git status — untouched.
@@ -157,7 +158,7 @@ export function recordLocation(hub: string): Located {
     return { movedFrom };
   }
   const moved = was;
-  // The alias first, the canonical form last: `update-path` reports the final entry as the
+  // The alias first, the canonical form last: `update --path` reports the final entry as the
   // move, and one directory's two names are better reported under the comparable one.
   for (const p of [marker.pathAs, was])
     if (typeof p === "string" && p && !movedFrom.includes(p)) movedFrom.push(p);
@@ -180,7 +181,7 @@ export function recordLocation(hub: string): Located {
  * Every location this hub has recorded that is no longer where it stands, oldest first and
  * ending with the most recent one — which is the move to report.
  *
- * Reads `path`/`pathAs` as well as the `movedFrom` backlog, because `khb update-path` runs
+ * Reads `path`/`pathAs` as well as the `movedFrom` backlog, because `khb update --path` runs
  * outside a hub and therefore outside the drift check that calls `recordLocation`: repairing
  * a move directly, with no khb command run in between, must work exactly as well.
  */
@@ -238,4 +239,24 @@ export function upgradeHub(hub: string): UpgradeResult {
   const pruned = pruneRetired(hub);
   stamp(hub, created, carried);
   return { from, to: version(), synced, pruned, renamed: found === MARKER ? undefined : found };
+}
+
+/**
+ * A one-line nudge, printed after `upgradeHub` runs (explicit `khb upgrade` or an
+ * auto-triggered one): `khb update` has a path repair and/or a sources.yaml schema backfill
+ * pending. Never a prompt — `upgrade` already runs unattended inside unrelated commands, so
+ * offering more than a suggestion here would mean blocking commands that have nothing to do
+ * with either half of `update`.
+ */
+export function updateHint(hub: string): string | undefined {
+  const pathPending = staleLocations(hub).length > 0;
+  const schemaDiffs = diffSourcesYamlAll(hub);
+  if (!pathPending && !schemaDiffs.length) return undefined;
+  const parts: string[] = [];
+  if (pathPending) parts.push("path: repair needed");
+  if (schemaDiffs.length) {
+    const fields = schemaDiffs.reduce((n, d) => n + d.changes.length, 0);
+    parts.push(`schema: ${fields} field(s) across ${schemaDiffs.length} bundle(s)`);
+  }
+  return `khb: 'khb update' has changes available (${parts.join("; ")}) — run 'khb update' to apply, or 'khb update --dry-run' to preview.`;
 }

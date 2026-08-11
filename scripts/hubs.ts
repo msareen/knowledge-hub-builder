@@ -7,11 +7,12 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { findHub, markerIn, version } from "./lib/paths";
 import { sameLocation, rewritePaths } from "./lib/relocate";
 import { clearMoved, staleLocations } from "./lib/upgrade";
+import { diffSourcesYamlAll, applySourcesDiff } from "./lib/schema";
 import {
   CONFIG,
   agentFor,
@@ -367,29 +368,26 @@ if (cmd === "list") {
   process.exit(0);
 }
 
-// ---------------------------------------------------------------------- update-path
+// ---------------------------------------------------------------------------- update
 //
-// Repair after a hub was moved on disk. Two things break, and both are fixed here: the
-// machine's shortcut list still points at the old folder, and any absolute path inside the
-// hub that named the old location is now a dangling reference — `sources.yaml` entries,
-// `source:` headers in `raw/`, `log.md` rows, `resource:` front matter.
+// Two independent repairs, selectable together or apart:
 //
-// Named for what it moves rather than the shorter `update`, which sat one letter from
-// `upgrade` and meant something entirely different.
+//  --path/-p    the hub moved on disk. The machine's shortcut list still points at the old
+//               folder, and any absolute path inside the hub that named the old location is
+//               now a dangling reference — `sources.yaml` entries, `source:` headers in
+//               `raw/`, `log.md` rows, `resource:` front matter.
+//  --schema/-s  a bundle's sources.yaml predates a field the current schema knows about
+//               (e.g. `exclude:`) — backfill it, per scripts/lib/schema.ts.
+//
+// No flag runs both. `upgrade` refreshes package-owned contract docs and never touches
+// user content; `update` is the reverse — it only ever repairs what the user's own bundles
+// record, never the contract docs. That split is why `update` is no longer too close a
+// neighbor of `upgrade` to use (see decisions.md) — the two now do genuinely different jobs.
 
-if (cmd === "update-path") {
-  const dryRun = takeFlag(argv, "--dry-run");
-  const fromOpt = takeOpt(argv, "--from");
-  const [dest] = argv;
-
-  // The hub is wherever it is now: the path given, else the hub containing cwd.
-  const newPath = canonical(dest ?? findHub() ?? process.cwd());
-  if (!markerIn(newPath)) {
-    console.error(`Not a KHB hub: ${newPath}`);
-    console.error(`Run 'khb update-path' from inside the moved hub, or name it: khb update-path <new-path>`);
-    process.exit(1);
-  }
-
+/** Repair paths. Returns true if anything failed to write. Exits directly on cases that
+ *  need the user's input to proceed (ambiguous identity, declined a guess) — there is
+ *  nothing useful for a caller to do with those short of the same exit. */
+function repairPaths(newPath: string, fromOpt: string | undefined, dryRun: boolean): boolean {
   // Where it used to be. Given explicitly, or inferred from the registry entry that now
   // points at nothing — proof only, since rewriting paths against a wrong guess would
   // corrupt real references. Every spelling seen along the way is kept: the string the
@@ -416,7 +414,7 @@ if (cmd === "update-path") {
       oldSpellings.push(certain[0].path);
     } else if (certain.length > 1) {
       console.error(`Several registered hubs share this hub's identity — name the old path:`);
-      for (const h of certain) console.error(`  khb update-path ${newPath} --from ${h.path}`);
+      for (const h of certain) console.error(`  khb update ${newPath} --path --from ${h.path}`);
       process.exit(1);
     } else if (likely.length === 1) {
       // A name match is circumstantial — hubs registered before khb recorded an identity
@@ -426,7 +424,7 @@ if (cmd === "update-path") {
       if (yes === undefined) {
         console.error(`This hub carries no identity stamp, so the old path cannot be proven.`);
         console.error(`Likely: ${guess.path}`);
-        console.error(`Confirm it:  khb update-path --from ${guess.path}`);
+        console.error(`Confirm it:  khb update --path --from ${guess.path}`);
         process.exit(1);
       }
       if (!/^y/i.test(yes.trim())) process.exit(0);
@@ -435,7 +433,7 @@ if (cmd === "update-path") {
     } else if (likely.length > 1) {
       console.error(`No registered hub matches this one's identity, but these went missing:`);
       for (const h of likely) console.error(`  ${h.name}  ${h.path}`);
-      console.error(`\nIf one of those is this hub, say so:  khb update-path --from <old-path>`);
+      console.error(`\nIf one of those is this hub, say so:  khb update --path --from <old-path>`);
       process.exit(1);
     }
   }
@@ -446,23 +444,18 @@ if (cmd === "update-path") {
     const entry = registerHub(newPath);
     // Leave the hub knowing where it is, so the *next* move needs no argument at all.
     clearMoved(newPath);
-    console.log(`Nothing to repair: the hub's khb.json already records this location, and`);
-    console.log(`no registered hub is missing from disk.`);
-    console.log(`${entry.name} is registered at ${entry.path}.`);
-    console.log(`\nIf you know the old path, pass it:  khb update-path --from <old-path>`);
-    process.exit(0);
+    detail(`nothing to repair: khb.json already records this location, and no registered`);
+    detail(`hub is missing from disk (${entry.name} is registered at ${entry.path})`);
+    return false;
   }
 
   if (sameLocation(oldPath, newPath)) {
     console.error(`Old and new paths are the same directory:`);
     console.error(`  ${newPath}`);
-    console.error(`There is no move to repair. Name the real old path:  khb update-path --from <old-path>`);
+    console.error(`There is no move to repair. Name the real old path:  khb update --path --from <old-path>`);
     process.exit(1);
   }
 
-  // State the whole plan before doing any of it — same contract as ingest: a command that
-  // rewrites files says what it is about to rewrite, and where, before the first write.
-  console.log(`khb update-path${dryRun ? " (dry run)" : ""}`);
   detail(`from:     ${oldPath}`);
   // Earlier homes, when the hub moved more than once before anyone repaired it. Spellings
   // of `oldPath` itself are not listed — they are the same directory under another name.
@@ -476,7 +469,7 @@ if (cmd === "update-path") {
   // spelling of the same directory, and those references are just as broken.
   const froms = [...new Set([oldPath, ...oldSpellings])].filter(Boolean);
 
-  section(`scanning ${newPath} …`);
+  detail(`scanning ${newPath} …`);
   const { scanned, hits, failed } = rewritePaths(newPath, froms, newPath, {
     dryRun,
     onStart: (n) => detail(`${n} file(s) to check (skipping .git/, node_modules/, inbox/)`),
@@ -492,9 +485,8 @@ if (cmd === "update-path") {
   for (const f of failed) console.error(`    could not write ${f.file}: ${f.reason}`);
 
   if (dryRun) {
-    console.log(`\ndone in ${totalElapsed()} — nothing was written.`);
-    console.log(`Re-run without --dry-run to apply.`);
-    process.exit(0);
+    detail(`nothing was written`);
+    return false;
   }
 
   const entry = relocateHub(oldPath, newPath);
@@ -502,12 +494,68 @@ if (cmd === "update-path") {
   // works the backlog off — otherwise every later command would go on announcing a move
   // that has already been repaired. Not on --dry-run: nothing was repaired there.
   if (!failed.length) clearMoved(newPath);
+  detail(`${total} reference(s) rewritten in ${hits.length} file(s)`);
+  detail(`registry: ${entry.name} now points at ${entry.path}`);
+  detail(`khb.json: path now ${newPath}`);
+  return failed.length > 0;
+}
+
+/** Backfill sources.yaml to the current schema, across every bundle. Never fails short of
+ *  an I/O exception, which throws rather than being reported as a soft failure. */
+function repairSchema(hub: string, dryRun: boolean): void {
+  const diffs = diffSourcesYamlAll(hub);
+  if (!diffs.length) {
+    detail(`sources.yaml already current in every bundle`);
+    return;
+  }
+  const totalFields = diffs.reduce((n, d) => n + d.changes.length, 0);
+  detail(`${totalFields} field(s) across ${diffs.length} bundle(s):`);
+  for (const d of diffs) {
+    console.log(`    ${relative(hub, d.path)}`);
+    for (const c of d.changes) console.log(`      ${c}`);
+  }
+  if (dryRun) {
+    detail(`nothing was written`);
+    return;
+  }
+  for (const d of diffs) applySourcesDiff(d);
+  detail(`${diffs.length} file(s) updated`);
+}
+
+if (cmd === "update") {
+  const doPath = takeFlag(argv, "--path", "-p");
+  const doSchema = takeFlag(argv, "--schema", "-s");
+  const dryRun = takeFlag(argv, "--dry-run");
+  const fromOpt = takeOpt(argv, "--from");
+  const both = !doPath && !doSchema;
+  const [dest] = argv;
+
+  // The hub is wherever it is now: the path given, else the hub containing cwd.
+  const newPath = canonical(dest ?? findHub() ?? process.cwd());
+  if (!markerIn(newPath)) {
+    console.error(`Not a KHB hub: ${newPath}`);
+    console.error(`Run 'khb update' from inside the moved hub, or name it: khb update <new-path>`);
+    process.exit(1);
+  }
+
+  // State the whole plan before doing any of it — same contract as ingest: a command that
+  // rewrites files says what it is about to rewrite, and where, before the first write.
+  console.log(`khb update${dryRun ? " (dry run)" : ""}`);
+
+  let failed = false;
+  if (both || doPath) {
+    section(`path`);
+    failed = repairPaths(newPath, fromOpt, dryRun) || failed;
+  }
+  if (both || doSchema) {
+    section(`schema`);
+    repairSchema(newPath, dryRun);
+  }
+
   console.log(`\ndone in ${totalElapsed()}`);
-  console.log(`  ${total} reference(s) rewritten in ${hits.length} file(s)`);
-  console.log(`  registry: ${entry.name} now points at ${entry.path}`);
-  console.log(`  khb.json: path now ${newPath}`);
-  console.log(`Next: khb lint`);
-  process.exit(failed.length ? 1 : 0);
+  if (dryRun) console.log(`Re-run without --dry-run to apply.`);
+  else console.log(`Next: khb lint`);
+  process.exit(failed ? 1 : 0);
 }
 
 // --------------------------------------------------------------------------- forget

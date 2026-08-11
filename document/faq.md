@@ -90,6 +90,7 @@ For example:
 sources:
   - type: folder
     path: /absolute/path/to/documents
+    exclude: [drafts/]      # optional — skip paths/globs before ingesting
   - type: files
     paths:
       - /absolute/path/to/one.pdf

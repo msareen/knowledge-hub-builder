@@ -10,7 +10,7 @@
 // drift before any hub command.
 import { resolve, basename } from "node:path";
 import { MARKER, markerIn } from "./lib/paths";
-import { upgradeHub } from "./lib/upgrade";
+import { upgradeHub, updateHint } from "./lib/upgrade";
 
 const upgrading = process.env.KHB_SUBCOMMAND === "upgrade";
 const argv = process.argv.slice(2);
@@ -41,6 +41,8 @@ if (upgrading) {
   if (renamed) console.log(`  renamed: ${renamed} -> ${MARKER}`);
   if (pruned.length) console.log(`  removed (no longer part of the contract): ${pruned.join(", ")}`);
   console.log(`Your bundles/ and outer.index.md were not touched. Next: khb lint`);
+  const hint = updateHint(HUB);
+  if (hint) console.log(hint);
 } else {
   const hub = resolve(dirArg ?? process.cwd());
 

@@ -1,4 +1,4 @@
-// Mechanical path rewriting for `khb update-path`: after a hub is moved, replace every literal
+// Mechanical path rewriting for `khb update --path`: after a hub is moved, replace every literal
 // reference to its old location with the new one.
 //
 // Strictly a conversion, not an interpretation — the same substring, in and out, with no
@@ -154,7 +154,7 @@ export function rewritePaths(
 }
 
 /**
- * True when the two spellings name one directory — the only case `khb update-path`
+ * True when the two spellings name one directory — the only case `khb update --path`
  * refuses, since there is then no move to repair. Overlapping-but-different paths used to
  * be refused alongside it; `pairs()` now shields the new path from being matched inside
  * itself, which is what made the overlap safe to rewrite.

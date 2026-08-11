@@ -5,6 +5,7 @@ import { basename } from "../lib/util";
 import type { Entry } from "../lib/ledger";
 import { acquireFile, newCounters, report, type Options } from "./acquire";
 import { detail, item, outcome, pos } from "../lib/log";
+import { makeExcluder } from "./exclude";
 import type { Source } from "./index";
 
 export async function ingestFiles(
@@ -15,9 +16,14 @@ export async function ingestFiles(
   opts: Options,
 ) {
   detail(`${s.paths.length} file(s) declared`);
+  const excluded = makeExcluder(s.exclude);
+  const paths = s.paths.filter((p) => !excluded(p, basename(p)));
+  const skippedCount = s.paths.length - paths.length;
+  if (skippedCount) detail(`${skippedCount} excluded by 'exclude' rule(s), ${paths.length} remain`);
+
   const c = newCounters();
-  for (const [i, p] of s.paths.entries()) {
-    const at = pos(i + 1, s.paths.length);
+  for (const [i, p] of paths.entries()) {
+    const at = pos(i + 1, paths.length);
     if (!existsSync(p)) {
       item(at, p);
       outcome("missing, skipped");

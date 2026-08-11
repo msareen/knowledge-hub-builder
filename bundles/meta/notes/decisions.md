@@ -6,6 +6,44 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-10 — `khb update-path` renamed `khb update`, and gains a schema-repair half.**
+  Reverses the 2026-08-07 naming decision below ("update and upgrade differ by one letter and
+  agree on nothing") — that objection held while `update` would have meant only path repair,
+  a bare synonym for the longer name it replaced. It no longer applies once `update` does two
+  distinct jobs neither of which belongs to `upgrade`: `--path`/`-p` is the old path-repair
+  logic unchanged (`lib/relocate.ts`, `lib/registry.ts`), and the new `--schema`/`-s` backfills
+  a bundle's `sources.yaml` to the current field set (`lib/schema.ts`) — the gap the `exclude:`
+  field just exposed, where an existing bundle has no way to discover a newly added optional
+  field short of reading the docs. No flag runs both. Schema diffing has no persisted version
+  anywhere; it's a fresh presence check against `SOURCES_SCHEMA` every run, the same pattern
+  `MANAGED`/`RETIRED` already use for contract docs. Edits go through the `yaml` package's
+  `Document` API rather than parse-then-stringify, so a hand-written comment survives a field
+  being added around it — reserializing the whole document can still reformat unrelated
+  flow-style content elsewhere in the same file, a cosmetic side effect, not a correctness one.
+  `khb upgrade` now prints a hint when either half of `update` has something pending, mirroring
+  the existing move-detected hint's style: a suggestion, never a prompt, since `upgrade` already
+  runs unattended inside unrelated commands on version drift and a blocking question there would
+  interrupt work that has nothing to do with either repair. `takeFlag` (`lib/args.ts`) grew
+  multi-name support (`--schema`/`-s`) — the first short flags for a subcommand's own options in
+  this codebase.
+
+- **2026-08-09 — `sources.yaml` gains `exclude:`; asking about it stays agent-side.**
+  `folder`/`files` sources can now declare `exclude: string[]` — plain path prefixes or
+  glob patterns (auto-detected by `* ? [`), each checked against both the file's absolute
+  path and its path relative to the source (basename, for `files`), so either form the user
+  writes works. Matching uses Bun's built-in `Bun.Glob`, so no new dependency. Filtering is
+  post-walk only (`scripts/ingest/exclude.ts`, used by `folder.ts`/`files.ts`) rather than
+  pruning directories during the walk — `folder.ts` already enumerates the whole tree
+  up front by design, and pruning correctly for patterns like `node_modules/**` (which
+  doesn't match the directory itself) is real extra complexity for a perf case not in
+  evidence. The interactive half — asking "anything to exclude? (default: no)" — is *not*
+  a CLI prompt: `khb ingest` stays pure argv, exit-1-on-ambiguity, no stdin reads, matching
+  every other command. That question lives in `skills/ingest/SKILL.md` §2 alongside the
+  reuse-vs-replace question already there, with the same rule: don't run `khb ingest`
+  until it's answered. Reason: khb converts bytes to text; deciding whether to ask a human
+  and what to do with the answer is interpretation, so it belongs in the agent-read
+  protocol, not the binary.
+
 - **2026-08-07 — A hub records its own location in `khb.json`, and overlapping moves are
   rewritten rather than refused.** `khb update-path` could only work out where a hub used to
   be by asking the machine registry which of its entries had gone missing — an outside
