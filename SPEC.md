@@ -45,7 +45,8 @@ KHB's own contribution is the bundle-of-bundles layer over both — see §1.
    every concept traces back through a provenance header to the original file.
 6. **Extract to markdown, locally** — binary/opaque formats (PDF, DOCX, XLSX, images,
    audio) are converted to markdown so every bundle's knowledge is plain, greppable text.
-   Every extractor is local and deterministic: pure-JS libraries, tesseract WASM, whisper.
+   Every extractor is local and deterministic: pure-JS libraries, tesseract WASM,
+   whisper.cpp.
    Lossy routes (OCR, ASR) are marked `quality: low` rather than hidden.
 7. **Bun** is the scripting language for all tooling and third-party interfaces.
 
@@ -494,11 +495,23 @@ puts them on the CLI side of the §Division-of-labor line.
 | XLSX | `fflate` → one markdown table per sheet | bundled | high |
 | scanned PDF | `pdfium` + `tesseract.js` (WASM) | bundled, ~75 MB | low |
 | Images (png/jpg/webp/tif) | `tesseract.js` | bundled, ~75 MB | low |
-| Audio, video | `whisper` / `faster-whisper` | opt-in, pip | low |
+| Audio, video | `vno` (whisper.cpp), else `whisper` / `faster-whisper` | opt-in, npm or pip | low |
+| Captions (vtt/srt) | built-in reader | bundled | high |
+
+A recording that has a caption sidecar beside it — `talk.vtt`, `talk.en.vtt`, `talk.srt` —
+is read from the sidecar rather than transcribed, and the two are acquired as one source:
+one ledger row under the recording, no row and no `raw/` file for the sidecar. The pair's
+content hash covers both files, so correcting a caption re-ingests the recording. Where two
+sidecars disagree about language khb transcribes instead: choosing an audience is not a
+conversion decision, and §Division-of-labor puts choices on the agent's side of the line.
 
 The OCR stack is bundled rather than opt-in: an ingest that stops to ask for an install is
-worse than an install that carries WASM nobody uses. Transcription stays opt-in because it is
-a Python executable, not something a JS package manager can pull down.
+worse than an install that carries WASM nobody uses. Transcription stays opt-in because it
+is an external executable, not something khb's own dependency tree can carry: `vno`
+(@msareen/voice-notes-organizer) where `vno status` reports it ready, since whisper.cpp is
+faster than the Python whisper and hands back WebVTT the caption reader can anchor, else
+`whisper` / `faster-whisper`. A vno that is installed but not set up degrades to the
+fallback, or to pending rows, and never to a failed run.
 
 A missing dep degrades to a ledger row with an empty `raw` and a printed install
 hint — never to a failed run. `quality: low` output is a standing invitation for the catalog

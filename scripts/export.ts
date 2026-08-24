@@ -4,8 +4,13 @@
 import { cpSync, writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { HUB, bundleDir, join } from "./lib/util";
 import { detail, totalElapsed } from "./lib/log";
+import { rejectUnknownFlags } from "./lib/args";
 
-const [name, destArg] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+// Before reading positionals: an unrecognized flag would otherwise become the destination,
+// and `khb export mybundle --force` would export into a folder named `--force`.
+rejectUnknownFlags(argv, "khb export <bundle> [dest]");
+const [name, destArg] = argv;
 if (!name) { console.error("Usage: khb export <bundle> [dest]"); process.exit(1); }
 
 const src = bundleDir(name);

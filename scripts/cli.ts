@@ -9,8 +9,8 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
   "new-bundle": { load: () => import("./new-bundle"), usage: 'khb new-bundle <name> ["scope"]', desc: "scaffold a bundle + register it" },
   ingest: {
     load: () => import("./ingest/index"),
-    usage: "khb ingest <bundle> [--force]",
-    desc: "acquire + extract declared sources → raw/ (name required once the hub has a bundle other than 'default')",
+    usage: "khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]",
+    desc: "acquire + extract declared sources → raw/",
   },
   lint: { load: () => import("./lint"), usage: "khb lint", desc: "validate the hub against skills/lint/SKILL.md" },
   visualize: {
@@ -20,14 +20,22 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
   },
   export: { load: () => import("./export"), usage: "khb export <bundle> [dest]", desc: "standalone copy of one bundle" },
   list: { load: () => import("./hubs"), usage: "khb list [--json]", desc: "every hub on this machine" },
-  go: { load: () => import("./hubs"), usage: "khb go [name|N] [--path]", desc: "open a hub with your agent (bare 'khb' picks one)" },
-  agent: { load: () => import("./hubs"), usage: "khb agent [name] [--command X]", desc: "which agent 'khb go' launches" },
+  go: {
+    load: () => import("./hubs"),
+    usage: "khb go [name|N] [--path] [--no-agent] [--agent X]",
+    desc: "open a hub with your agent (bare 'khb' picks one)",
+  },
+  agent: {
+    load: () => import("./hubs"),
+    usage: 'khb agent [name|none] [--command X] [--args "…"]',
+    desc: "which agent 'khb go' launches",
+  },
   update: {
     load: () => import("./hubs"),
-    usage: "khb update [new] [--path|-p] [--schema|-s] [--dry-run]",
+    usage: "khb update [new-path] [-p|-s] [--from <old>] [--dry-run]",
     desc: "repair a moved hub's paths and/or backfill sources.yaml to the current schema",
   },
-  forget: { load: () => import("./hubs"), usage: "khb forget <name>", desc: "drop a hub from the list (folder untouched)" },
+  forget: { load: () => import("./hubs"), usage: "khb forget <name|path>", desc: "drop a hub from the list (folder untouched)" },
 };
 
 /**
@@ -89,7 +97,13 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
   );
   console.log();
 
-  console.log(`Global:  --hub <dir>   operate on that hub instead of searching upward from cwd`);
+  console.log(`Global:  --hub <dir>              operate on that hub instead of searching upward from cwd`);
+  console.log(`         help | --help | -h       this help          --version | -v   version`);
+  console.log(`Env:     KHB_HUB                  same as --hub`);
+  console.log(`         KHB_HOME                 where the hub list lives (default ~/.khb)`);
+  console.log(`         KHB_NO_AUTO_UPGRADE      don't refresh a hub's contract docs on version drift`);
+  console.log(`Exit:    0 on success, 1 on a usage error or a failure. An unknown option is an error;`);
+  console.log(`         a source khb cannot extract is not — it becomes a pending row in log.md.`);
   console.log(`Docs:    https://github.com/msareen/knowledge-hub-builder`);
   process.exit(0);
 }

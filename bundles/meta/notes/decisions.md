@@ -6,6 +6,85 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-24 — Ignore patterns for generated directories are anchored.** `export/` and
+  `inbox/` in both `.gitignore` and `templates/hub/gitignore` are now `/export/` and
+  `/inbox/`. Without the leading slash a directory pattern matches at *any* depth, so
+  `export/` also matched `skills/export/`, `.claude/skills/export/` and
+  `.agents/skills/export/` — meaning every hub `khb init` has ever created was silently
+  ignoring its own export skill, and committing the hub dropped those three files without
+  saying so. Confirmed by `git status --ignored` on a fresh hub before and after. `git
+  ls-files -i -c` is the check that catches this class of mistake; it belongs in the eye of
+  anyone editing either file. `bundles/*/raw/`, `.claude/settings.local.json` and
+  `visualizer/graph.html` were never affected — a pattern containing a slash is already
+  anchored to the file it lives in. Also added to the repo's own list: `.claude/worktrees/`,
+  `*.tgz`, and the usual OS leftovers.
+
+- **2026-08-24 — An unknown option is an error, everywhere.** Every subcommand now ends its
+  flag parsing with `rejectUnknownFlags` (`lib/args.ts`), so anything flag-shaped that a
+  command does not understand exits 1 with the usage line instead of surviving into the
+  positional arguments. Silence there was not neutral: `khb export mybundle --force`
+  exported into a directory literally named `--force`, and `khb visualize --port abc` served
+  on a random port because `Number("abc")` is `NaN` and nobody checked. Only `ingest` had a
+  bespoke version of this check; it now uses the shared one, as does `--port`, which is
+  validated as a real port. `takeOpt` moved into `lib/args.ts` too — `hubs.ts` and `init.ts`
+  had a copy each — and gained `--name=value` alongside `--name value`. The rule the
+  implementation must keep: the guard runs *after* every `take*` for that command, since it
+  works by inspecting what is left over. Getting that wrong is silent in the opposite
+  direction, and it briefly rejected `khb update --from`, a real flag consumed one line too
+  late. Exit codes themselves were already right and are unchanged: 0 for success, 1 for a
+  usage error or a failure, with an unextractable source staying a pending `log.md` row
+  rather than a failed run.
+
+- **2026-08-24 — `vno` is the preferred transcriber, whisper the fallback.** Audio and video
+  now go to `vno` (@msareen/voice-notes-organizer) where it is **set up**, and to
+  `whisper`/`faster-whisper` only where it is not. Installed is not the same as usable, so
+  the probe is `vno status --json` — a command that reports and installs nothing, exits
+  non-zero when ffmpeg or whisper.cpp or a model is missing, and names the blockers. That
+  makes a half-installed vno an amber gate rather than a red one, and never a discovery made
+  one silent per-file failure at a time: whisper takes over if it is there, the recordings
+  otherwise pend like any other unavailable extractor, the rest of the corpus is ingested
+  either way, and both the printed line and the `log.md` reason say `run: vno setup` instead
+  of the wrong `npm install -g`. khb does not run `vno setup` itself — installing software
+  nobody asked it to install is not a conversion step. An older vno that predates `status`
+  would fail that check for the wrong reason, so a non-JSON answer falls back to the plain
+  presence test and vno is used anyway. It is whisper.cpp under a wrapper, so it
+  is markedly faster on the same audio and picks up whatever acceleration the machine has,
+  it installs its own ffmpeg and model rather than asking khb to, and it hands back WebVTT —
+  which, now that the caption reader exists, means a transcript with `## h:mm:ss` anchors
+  instead of the flat text the Python whisper's `--output_format txt` produces. No change to
+  the §Division-of-labor line: still a local binary doing a reproducible conversion,
+  contacting no model, so it stays on the CLI side. Invoked as
+  `vno t <file> -o <cache path> --no-open`, with stdin closed on purpose: vno offers to
+  install a missing dependency and gates that offer on `isTTY`, so a closed stdin turns a
+  prompt nobody could answer into printed instructions. `-o` matters for a second reason —
+  without it vno leaves the transcript beside the recording, i.e. inside the user's corpus,
+  where the next ingest would read it back as a sidecar. Success is judged by the output
+  file existing, not by the exit code, which is 0 even when vno reports a missing file or an
+  unusable dependency. The whisper path is untouched apart from being moved into its own
+  function; `--translate` is deliberately not wired up, since choosing a language for a
+  document is interpretation, not conversion.
+
+- **2026-08-24 — A recording and its caption sidecar are one source.** `talk.vtt` (or
+  `talk.en.vtt`, or `talk.srt`) next to `talk.mp4` is that recording's words, written down by
+  someone who could hear it. Before this, the two were unrelated files: the media went to
+  whisper for minutes of CPU and came back `quality: low`, while the sidecar hit `kindOf`'s
+  `skip` branch and landed in `log.md` with an empty `raw` — the accurate transcript
+  discarded, the worse one flagged for manual verification. Now `.vtt`/`.srt` are a `caption`
+  kind with a real extractor (cue indices and timecodes stripped, `<v Name>` kept as a
+  speaker label, the rolling repetition of auto-generated captions collapsed, a `## h:mm:ss`
+  heading per five minutes so a passage stays findable in the recording), and `acquireFile`
+  prefers a sidecar over whisper. The pair gets one ledger row, under the recording; the
+  sidecar gets none. Three consequences, each deliberate: the row's hash covers both files,
+  so correcting a caption re-ingests the recording instead of leaving it "unchanged,
+  skipped"; the extraction cache is keyed on the sidecar's own hash, so the same captions
+  beside a re-encoded video reuse the entry; and the sidecar is read even under
+  `--skip-audio`, which exists to skip minutes of CPU, not to skip free text. Two languages
+  on disk is a choice about audience, so khb transcribes instead and leaves both files for a
+  human to point at — the same reason `identify()` refuses to guess between ambiguous move
+  candidates. A caption whose recording this source does not visit (excluded, or not listed)
+  stays an ordinary source with its own row, which is what keeps a `files:` source naming
+  only the `.vtt` from acquiring nothing at all.
+
 - **2026-08-10 — `khb update-path` renamed `khb update`, and gains a schema-repair half.**
   Reverses the 2026-08-07 naming decision below ("update and upgrade differ by one letter and
   agree on nothing") — that objection held while `update` would have meant only path repair,

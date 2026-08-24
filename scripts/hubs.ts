@@ -29,24 +29,12 @@ import {
   touchHub,
   type HubEntry,
 } from "./lib/registry";
-import { takeFlag } from "./lib/args";
+import { takeFlag, takeOpt, rejectUnknownFlags } from "./lib/args";
 import { detail, section, totalElapsed } from "./lib/log";
 
 const cmd = process.env.KHB_SUBCOMMAND ?? "go";
 const argv = process.argv.slice(2);
 
-/** Take `--name value`, removing both. */
-function takeOpt(args: string[], name: string): string | undefined {
-  const i = args.indexOf(name);
-  if (i < 0) return undefined;
-  const v = args[i + 1];
-  if (v === undefined) {
-    console.error(`${name} needs a value`);
-    process.exit(1);
-  }
-  args.splice(i, 2);
-  return v;
-}
 
 const ago = (iso?: string): string => {
   if (!iso) return "";
@@ -352,6 +340,7 @@ async function wizard(): Promise<never> {
 
 if (cmd === "list") {
   const asJson = takeFlag(argv, "--json");
+  rejectUnknownFlags(argv, "khb list [--json]");
   const hubs = listHubs();
   if (asJson) {
     console.log(JSON.stringify({ config: CONFIG, ...loadConfig(), hubs }, null, 2));
@@ -527,6 +516,7 @@ if (cmd === "update") {
   const doSchema = takeFlag(argv, "--schema", "-s");
   const dryRun = takeFlag(argv, "--dry-run");
   const fromOpt = takeOpt(argv, "--from");
+  rejectUnknownFlags(argv, "khb update [new-path] [--path|-p] [--schema|-s] [--from <old>] [--dry-run]");
   const both = !doPath && !doSchema;
   const [dest] = argv;
 
@@ -561,6 +551,7 @@ if (cmd === "update") {
 // --------------------------------------------------------------------------- forget
 
 if (cmd === "forget") {
+  rejectUnknownFlags(argv, "khb forget <name|path>");
   const [what] = argv;
   if (!what) {
     console.error(`Usage: khb forget <name|path>`);
@@ -581,6 +572,7 @@ if (cmd === "forget") {
 if (cmd === "agent") {
   const command = takeOpt(argv, "--command");
   const argsOpt = takeOpt(argv, "--args");
+  rejectUnknownFlags(argv, 'khb agent [name|none] [--command X] [--args "…"]');
   const [name] = argv;
   const cfg = loadConfig();
 
@@ -622,6 +614,7 @@ if (cmd === "agent") {
 const wantPath = takeFlag(argv, "--path");
 const noAgent = takeFlag(argv, "--no-agent") || wantPath;
 const agentName = takeOpt(argv, "--agent");
+rejectUnknownFlags(argv, "khb go [name|N] [--path] [--no-agent] [--agent X]");
 const [what] = argv;
 
 // Named target: resolve through the registry, then fall back to any path that is a hub —

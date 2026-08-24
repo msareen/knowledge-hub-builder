@@ -117,6 +117,7 @@ locally. Read the summary it prints — the counts are the state of the world:
 | `unchanged, skipped` | already acquired at this exact content hash |
 | `extracted` / `reused from the extraction cache` | converted now / converted by an earlier run or another bundle |
 | `read by OCR` / `transcribed` | lossy routes — see quality, below |
+| `read from a caption sidecar` | a recording whose words were read off its `.vtt`/`.srt` instead |
 | `marked quality: low` | verify these against the source when cataloging |
 | `not extracted` | got a ledger row with an empty `raw`; the per-file line says why |
 
@@ -150,21 +151,78 @@ curation, not transcription.
 | `.xlsx` | `fflate` → one markdown table per sheet | high |
 | `.pdf` (scanned, no text layer) | `pdfium` + `tesseract.js`, automatically | **low** |
 | `.png .jpg .webp .tif .gif` | `tesseract.js`, automatically | **low** |
-| `.mp3 .wav .m4a .mp4 .mov .mkv` | local `whisper` / `faster-whisper` | **low** |
+| `.mp3 .wav .m4a .mp4 .mov .mkv` | local `vno` (whisper.cpp), else `whisper` / `faster-whisper` | **low** |
+| `.vtt .srt` | built-in caption reader | high |
 
 Extracted text is cached hub-wide by content hash at `inbox/extracted/<sha256>.md`, so the
 same file appearing in two bundles converts once.
+
+**A recording next to its captions is one source, not two.** `talk.vtt` (or `talk.en.vtt`,
+or `talk.srt`) beside `talk.mp4` is that recording's words, already written down by someone
+who could hear it — so khb reads them instead of guessing at them with whisper. The pair
+gets one `log.md` row, under the recording; the sidecar earns no row and no `raw/` file of
+its own, and the recording's `extract_tool` names the file the text came from. It is both
+free and better than transcription, so it happens even under `--skip-audio`.
+
+Two things follow. The pair's identity is *both* files, so correcting a caption re-ingests
+the recording rather than leaving a stale row marked unchanged. And khb never picks between
+sidecars: `talk.en.vtt` next to `talk.fr.vtt` is a choice about audience, so it transcribes
+instead and leaves both files to be pointed at explicitly. A caption with no recording
+beside it — or one whose recording this source does not visit, because it is excluded or
+simply not listed — is an ordinary source and gets its own row. That is also the lever:
+excluding a sidecar does not unpair it, since `exclude` governs what earns a `raw/` file and
+a paired sidecar never earns one; exclude the *recording* to have its captions ingested
+alone.
+
+The caption reader drops what belongs to the player and keeps what belongs to the
+transcript: cue indices and timecodes go, `<v Name>` becomes a speaker label, the rolling
+repetition auto-generated captions leave behind is collapsed, and anything longer than five
+minutes gets a coarse `## h:mm:ss` heading per interval so a passage can be found in the
+source recording. Quality is `high` — the words are what the file says, not what an
+extractor guessed — but auto-generated captions are still ASR underneath, so treat a
+transcript that reads like a machine wrote it the way you would treat one.
 
 **OCR needs no setup.** `@hyzyla/pdfium`, `sharp` and `tesseract.js` are dependencies of khb
 itself, so a scanned PDF or a photographed page is read on the first run, in any hub, without
 asking the user to install anything.
 
-Transcription is the one route that can be absent: it wants a `whisper` or `faster-whisper`
-executable on `PATH`.
+Transcription is the one route that can be absent. It wants a transcriber on `PATH`, and
+takes the first of these it finds:
 
 ```
-pip install -U openai-whisper                # transcription (faster-whisper also works)
+npm install -g @msareen/voice-notes-organizer   # vno — whisper.cpp, preferred
+pip install -U openai-whisper                   # whisper (faster-whisper also works)
 ```
+
+`vno` is preferred where both are set up: it is whisper.cpp rather than the Python
+whisper, so it is markedly faster on the same audio and uses whatever acceleration the
+machine has, it installs its own ffmpeg and model, and it emits WebVTT — which means a
+transcript with `## h:mm:ss` anchors instead of an undifferentiated wall of text. khb runs
+it as `vno t <file> -o <cache path> --no-open` with stdin closed, so nothing is written
+beside your recordings and vno's setup offers degrade to printed instructions instead of
+prompts.
+
+khb gates on `vno status` before using it, because installed and ready are different things
+— vno needs ffmpeg, whisper.cpp and a model, and reports on all three. **A vno that is not
+set up is an amber gate, never a red one.** The run does not stop and nothing else is
+affected: whisper takes over if you have it, and if you don't, the recordings pend with an
+empty `raw` exactly like any other unavailable extractor while the rest of the corpus is
+ingested normally. What you get is the reason and the fix, on the file's own line and again
+in `log.md`:
+
+```
+[ 3/12] D:\corpus\standup.m4a
+        no captions beside it — transcribing (minutes per file) …
+  vno is installed but not set up: ffmpeg, whisper.cpp — run:  vno setup
+        pending — vno is installed but not set up: ffmpeg, whisper.cpp — run:  vno setup
+```
+
+Run `vno setup` yourself and re-run the ingest; the pending rows fill in. khb will not run
+it for you — installing software nobody asked it to install is not a conversion step.
+
+Either engine is a local binary doing a reproducible conversion, and its output is
+`quality: low` all the same: it is a machine's guess at audio, and the recording is still
+the thing to re-read when a passage looks wrong.
 
 When any extractor is unavailable khb says so once and records the affected files as pending
 rather than failing the run — a `log.md` row with an empty `raw`, waiting for the dependency.

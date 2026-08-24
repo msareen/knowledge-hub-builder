@@ -88,6 +88,8 @@ Supported out of the box, with no system tools and no further installation:
 - PDF and DOCX
 - ODT, XLSX, and PPTX
 - OCR for images and scanned PDFs, applied automatically when a PDF has no text layer
+- subtitle files (`.vtt`, `.srt`) — and a video or audio file with one beside it is read
+  from the captions rather than transcribed, as one source rather than two
 
 OCR ships with KHB: `@hyzyla/pdfium`, `sharp`, and `tesseract.js` are ordinary dependencies,
 so installing KHB pulls them down whether or not you ever ingest a scan. That costs roughly
@@ -96,8 +98,14 @@ waiting for a setup step.
 
 One extractor is genuinely optional:
 
-- audio and video transcription needs a `whisper` or `faster-whisper` executable on `PATH`
-  (`pip install -U openai-whisper`)
+- audio and video transcription needs a transcriber on `PATH`. KHB prefers
+  [`vno`](https://www.npmjs.com/package/@msareen/voice-notes-organizer)
+  (`npm install -g @msareen/voice-notes-organizer`), which wraps whisper.cpp and installs
+  its own ffmpeg and model, and falls back to `whisper` / `faster-whisper`
+  (`pip install -U openai-whisper`). KHB checks `vno status` first: a vno that is installed
+  but not yet set up leaves recordings pending with `run: vno setup` and holds up nothing
+  else in the run. A recording that already has a `.vtt` or `.srt` beside
+  it needs neither — those captions are read instead
 
 Without it, KHB leaves a pending row in `log.md` and prints the required setup rather than
 failing the run.
@@ -241,7 +249,7 @@ Commands can be run directly or requested through the matching agent skill.
 | `khb init [dir] [--name N] [--description "…"]` | Create a hub |
 | `khb upgrade` | Refresh package-owned contracts and skills (also runs automatically on version drift) |
 | `khb new-bundle <name> ["scope"]` | Create and register a bundle |
-| `khb ingest [bundle] [--force]` | Acquire and extract declared sources |
+| `khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]` | Acquire and extract declared sources |
 | `khb lint` | Validate routing, bundle structure, and OKF metadata |
 | `khb visualize [--port N] [--no-open]` (aliases: `vis`, `viz`) | Serve the live bundle graph on a random free port and open it in your default browser — pan/zoomable cross-bundle map, drill into a bundle for its folder-clustered concepts, rebuild-on-refresh, exits when you close the tab |
 | `khb export <bundle> [dest]` | Export one standalone bundle |

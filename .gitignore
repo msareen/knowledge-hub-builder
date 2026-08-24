@@ -1,7 +1,23 @@
 node_modules/
+
+# Agent-specific machine-local state; shared skills and settings stay tracked.
 .claude/settings.local.json
+.claude/worktrees/
+
+# Acquired source material — re-fetchable from sources.yaml. log.md is the durable record.
 bundles/*/raw/
-visualizer/graph.html
+
 # Extraction cache, keyed by content hash — re-derivable from the sources. log.md is
 # the durable record.
-inbox/
+/inbox/
+
+# Generated: `khb export <bundle>` with no destination writes here, and an old hub may
+# still carry a graph.html from before `khb visualize` became a live server.
+# Leading slash matters: a bare `export/` also matches `skills/export/`.
+/export/
+visualizer/graph.html
+
+# Publishing and OS leftovers
+*.tgz
+.DS_Store
+Thumbs.db

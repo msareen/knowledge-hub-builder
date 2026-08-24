@@ -4,6 +4,9 @@ import { detail, section, totalElapsed } from "./lib/log";
 import { readdirSync, statSync } from "node:fs";
 import { dirname, relative } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { rejectUnknownFlags } from "./lib/args";
+
+rejectUnknownFlags(process.argv.slice(2), "khb lint");
 
 /** OKF v0.1 concept frontmatter. Unknown keys are warned, not rejected — OKF is permissive,
  *  but a `titel:` typo silently loses the field, so it is worth one line of noise. */

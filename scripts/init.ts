@@ -11,6 +11,7 @@
 import { resolve, basename } from "node:path";
 import { MARKER, markerIn } from "./lib/paths";
 import { upgradeHub, updateHint } from "./lib/upgrade";
+import { takeOpt, rejectUnknownFlags } from "./lib/args";
 
 const upgrading = process.env.KHB_SUBCOMMAND === "upgrade";
 const argv = process.argv.slice(2);
@@ -18,19 +19,9 @@ const argv = process.argv.slice(2);
 // A hub describes itself in its own marker, and the machine-level registry reads those
 // two fields from there — so the label follows the hub when it is moved or cloned onto
 // another machine, instead of living only in one laptop's shortcut list.
-function takeOpt(name: string): string | undefined {
-  const i = argv.indexOf(name);
-  if (i < 0) return undefined;
-  const v = argv[i + 1];
-  if (v === undefined) {
-    console.error(`${name} needs a value`);
-    process.exit(1);
-  }
-  argv.splice(i, 2);
-  return v;
-}
-const nameOpt = takeOpt("--name");
-const descOpt = takeOpt("--description");
+const nameOpt = takeOpt(argv, "--name");
+const descOpt = takeOpt(argv, "--description");
+rejectUnknownFlags(argv, upgrading ? "khb upgrade" : 'khb init [dir] [--name N] [--description "…"]');
 const [dirArg] = argv;
 
 if (upgrading) {

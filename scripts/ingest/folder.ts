@@ -2,7 +2,7 @@
 // owns the extraction decisions. Unchanged files (same content hash, raw/ copy still
 // present) are skipped.
 import { readdirSync, statSync, existsSync } from "node:fs";
-import { join } from "../lib/util";
+import { join, normPath } from "../lib/util";
 import type { Entry } from "../lib/ledger";
 import { acquireFile, newCounters, report, type Options } from "./acquire";
 import { detail, pos } from "../lib/log";
@@ -43,12 +43,17 @@ export async function ingestFolder(
   const skippedCount = all.length - files.length;
   if (skippedCount) detail(`${skippedCount} excluded by 'exclude' rule(s), ${files.length} remain`);
 
+  // What this walk will visit, for the caption/media pairing: a `.vtt` whose recording is
+  // excluded (or simply absent) is acquired on its own rather than folded into a row that
+  // would never appear.
+  const scoped = { ...opts, scope: new Set(files.map((p) => normPath(p))) };
+
   const c = newCounters();
   for (const [i, p] of files.entries()) {
     // Flatten the subtree into the filename so two `notes.md` in sibling folders don't
     // collide in raw/, and so the origin stays legible without opening the file.
     const rel = relOf(p).replaceAll("/", "__");
-    await acquireFile(pos(i + 1, files.length), p, rel, rawDir, bundleDir, entries, c, opts);
+    await acquireFile(pos(i + 1, files.length), p, rel, rawDir, bundleDir, entries, c, scoped);
   }
   report(c);
 }

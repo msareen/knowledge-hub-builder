@@ -14,7 +14,7 @@ import { read, join, HUB } from "../lib/util";
 import { detail, section, totalElapsed } from "../lib/log";
 import { bundleForIngest, listBundles, DEFAULT_BUNDLE } from "../lib/scaffold";
 import { readLedger, writeLedger } from "../lib/ledger";
-import { takeFlag } from "../lib/args";
+import { takeFlag, rejectUnknownFlags } from "../lib/args";
 import { ingestFolder } from "./folder";
 import { ingestFiles } from "./files";
 import { ingestWeb } from "./web";
@@ -25,6 +25,7 @@ export type Source =
   | { type: "files"; paths: string[]; exclude?: string[] }
   | { type: "web"; urls: string[] };
 
+const USAGE = "khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]";
 const argv = process.argv.slice(2);
 const opts: Options = {
   force: takeFlag(argv, "--force"),
@@ -33,14 +34,10 @@ const opts: Options = {
   ocr: !takeFlag(argv, "--skip-ocr"),
   audio: !takeFlag(argv, "--skip-audio"),
 };
-const unknownFlag = argv.find((a) => a.startsWith("--"));
-if (unknownFlag) {
-  console.error(`Unknown ingest flag: ${unknownFlag}`);
-  process.exit(1);
-}
-const positional = argv.filter((a) => !a.startsWith("--"));
+rejectUnknownFlags(argv, USAGE);
+const positional = argv;
 if (positional.length > 1) {
-  console.error("Usage: khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]");
+  console.error(`Usage: ${USAGE}`);
   process.exit(1);
 }
 // No bundle named: which one owns the material is a human decision (AGENTS.md) and a CLI
@@ -52,7 +49,7 @@ if (!bundle) {
   const have = listBundles();
   const onlyLanding = have.length === 1 && have[0] === DEFAULT_BUNDLE;
   if (have.length && !onlyLanding) {
-    console.error("Usage: khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]");
+    console.error(`Usage: ${USAGE}`);
     console.error(`\nBundles in this hub: ${have.join(", ")}`);
     console.error(`Name the one that owns this material, or start a new one:`);
     console.error(`  khb new-bundle <name> "<scope>"`);

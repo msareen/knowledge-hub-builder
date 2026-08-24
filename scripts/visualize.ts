@@ -7,19 +7,24 @@
 // process. `--port N` pins a specific port.
 import { buildGraphData, readConceptFile } from "./lib/graph";
 import { renderGraphPage } from "./lib/graph-page";
+import { takeFlag, takeOpt, rejectUnknownFlags } from "./lib/args";
 
+const USAGE = "khb visualize [--port N] [--no-open]";
 const argv = process.argv.slice(2);
 // port 0 asks the OS for any free port — no fixed default to collide with something else
-// already running on the machine. Both `--port N` and `--port=N` pin it, since the docs
-// have always shown the spaced form.
-const eqArg = argv.find((a) => a.startsWith("--port="));
-const spacedArg = argv[argv.indexOf("--port") + 1];
-const requestedPort = eqArg
-  ? Number(eqArg.slice("--port=".length))
-  : argv.includes("--port") && spacedArg
-    ? Number(spacedArg)
-    : 0;
-const noOpen = argv.includes("--no-open");
+// already running on the machine. `--port N` and `--port=N` both pin it.
+const portArg = takeOpt(argv, "--port");
+const noOpen = takeFlag(argv, "--no-open");
+rejectUnknownFlags(argv, USAGE);
+
+// A port that is not a port used to become NaN and silently serve on a random one, which
+// looks like the flag working right up until nothing is listening where you expected.
+const requestedPort = portArg === undefined ? 0 : Number(portArg);
+if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) {
+  console.error(`--port must be a number between 0 and 65535, not: ${portArg}`);
+  console.error(`Usage: ${USAGE}`);
+  process.exit(1);
+}
 
 function summarize(data: ReturnType<typeof buildGraphData>) {
   const concepts = Object.values(data.bundleGraphs).reduce((n, g) => n + g.concepts.length, 0);

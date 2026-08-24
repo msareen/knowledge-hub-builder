@@ -124,6 +124,13 @@ export function retargetRaw(bundleDir: string, rawRel: string, source: string): 
   return true;
 }
 
+/**
+ * One spelling of a path, for comparing two of them. Absolute, and case-folded on Windows,
+ * where `D:\Corpus\Talk.mp4` and `d:/corpus/talk.mp4` are the same file.
+ */
+export const normPath = (p: string) =>
+  process.platform === "win32" ? resolve(p).toLowerCase() : resolve(p);
+
 export const sha256 = (buf: Buffer | string) => createHash("sha256").update(buf).digest("hex");
 
 /** Hash a file in chunks — corpora contain multi-GB binaries we must not slurp. */

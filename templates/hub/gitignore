@@ -5,8 +5,9 @@ bundles/*/raw/
 .claude/settings.local.json
 
 # Extraction cache (inbox/extracted/<sha256>.md) — re-derivable from the sources.
-inbox/
+/inbox/
 
-# Generated
+# Generated. The leading slash matters: a bare `export/` also matches the `skills/export/`
+# these files ship with, and silently drops the export skill from the hub's own history.
 visualizer/graph.html
-export/
+/export/

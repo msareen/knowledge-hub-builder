@@ -3,8 +3,11 @@
 import { existsSync } from "node:fs";
 import { BUNDLES, join } from "./lib/util";
 import { createBundle, VALID_NAME } from "./lib/scaffold";
+import { rejectUnknownFlags } from "./lib/args";
 
-const [name, scope = "TODO scope"] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+rejectUnknownFlags(argv, 'khb new-bundle <name> ["scope"]');
+const [name, scope = "TODO scope"] = argv;
 if (!name || !VALID_NAME.test(name)) {
   console.error("Usage: khb new-bundle <name> [scope]   (lowercase, digits, hyphens)");
   process.exit(1);
