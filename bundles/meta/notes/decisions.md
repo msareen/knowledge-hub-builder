@@ -6,6 +6,18 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-24 — `khb help` audited against the flags each command actually consumes, two
+  gaps closed.** `khb upgrade`'s own usage line has always read `khb upgrade` — no flags —
+  but `init.ts` took `--name`/`--description` before branching into the `upgrade` path, so
+  `khb upgrade --name x` silently accepted and discarded the flag instead of erroring. Both
+  `takeOpt` calls are now skipped entirely when `upgrading`, so a stray flag there falls
+  through to `rejectUnknownFlags` like everywhere else. Separately, `khb update`'s `usage`
+  string in `cli.ts` showed only the short forms (`-p|-s`), dropping `--path`/`--schema` and
+  the documented `--from <old>` outright; restored to the long forms plus `--from`. That
+  pushed the line past the help table's alignment column, so the printer now caps alignment
+  at 60 chars and gives anything longer its own line with the description indented beneath
+  it, rather than dragging every other command's description wide to match one outlier.
+
 - **2026-08-24 — `khb upgrade` registers and locates its hub like every other in-hub
   command.** `cli.ts` runs `registerHub`/`touchHub` and `recordLocation` before each in-hub
   command and exempts `upgrade`, on the grounds that upgrade performs the contract refresh

@@ -19,8 +19,11 @@ const argv = process.argv.slice(2);
 // A hub describes itself in its own marker, and the machine-level registry reads those
 // two fields from there — so the label follows the hub when it is moved or cloned onto
 // another machine, instead of living only in one laptop's shortcut list.
-const nameOpt = takeOpt(argv, "--name");
-const descOpt = takeOpt(argv, "--description");
+// Both describe a hub being created, so `upgrade` must not consume them: left in argv they
+// are refused below like any other unknown option, instead of being silently swallowed by a
+// command whose help says it takes no flags at all.
+const nameOpt = upgrading ? undefined : takeOpt(argv, "--name");
+const descOpt = upgrading ? undefined : takeOpt(argv, "--description");
 rejectUnknownFlags(argv, upgrading ? "khb upgrade" : 'khb init [dir] [--name N] [--description "…"]');
 const [dirArg] = argv;
 

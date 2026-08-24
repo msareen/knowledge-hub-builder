@@ -32,8 +32,8 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
   },
   update: {
     load: () => import("./hubs"),
-    usage: "khb update [new-path] [-p|-s] [--from <old>] [--dry-run]",
-    desc: "repair a moved hub's paths and/or backfill sources.yaml to the current schema",
+    usage: "khb update [new-path] [--path|-p] [--schema|-s] [--from <old>] [--dry-run]",
+    desc: "repair a moved hub's paths, and/or backfill sources.yaml",
   },
   forget: { load: () => import("./hubs"), usage: "khb forget <name|path>", desc: "drop a hub from the list (folder untouched)" },
 };
@@ -70,12 +70,23 @@ const cmd0 = argv.shift();
 const cmd = !cmd0 ? "go" : (ALIASES[cmd0] ?? cmd0);
 
 if (cmd === "help" || cmd === "--help" || cmd === "-h") {
-  const width = Math.max(...Object.values(COMMANDS).map((c) => c.usage.length));
+  // Descriptions align to the longest usage — but only among those that fit. One long
+  // entry should not push every other description off an 80-column terminal: past the
+  // cap, that entry gets its own line for the usage and an indented line for the
+  // description, instead of dragging the whole column wide.
+  const CAP = 60;
+  const usages = Object.values(COMMANDS).map((c) => c.usage.length);
+  const width = Math.max(...usages.filter((n) => n <= CAP));
   const printSection = (title: string, names: string[]) => {
     console.log(title);
     for (const name of names) {
       const c = COMMANDS[name];
-      console.log(`  ${c.usage.padEnd(width)}   ${c.desc}`);
+      if (c.usage.length > width) {
+        console.log(`  ${c.usage}`);
+        console.log(`  ${" ".repeat(width)}   ${c.desc}`);
+      } else {
+        console.log(`  ${c.usage.padEnd(width)}   ${c.desc}`);
+      }
     }
   };
 
