@@ -10,7 +10,7 @@
 // drift before any hub command.
 import { resolve, basename } from "node:path";
 import { MARKER, markerIn } from "./lib/paths";
-import { upgradeHub, updateHint } from "./lib/upgrade";
+import { recordLocation, upgradeHub, updateHint } from "./lib/upgrade";
 import { takeOpt, rejectUnknownFlags } from "./lib/args";
 
 const upgrading = process.env.KHB_SUBCOMMAND === "upgrade";
@@ -26,6 +26,25 @@ const [dirArg] = argv;
 
 if (upgrading) {
   const { HUB } = await import("./lib/util"); // resolves the hub, or exits with guidance
+
+  // cli.ts runs these two before every *other* in-hub command and skips `upgrade`, on the
+  // grounds that upgrade does the refresh itself. Neither of these is the refresh:
+  //
+  //   - unregistered, a hub you only ever upgrade never appears in `khb list` or `khb go`;
+  //   - unrecorded, a hub upgraded right after a move loses the move. `upgradeHub` stamps
+  //     the marker with wherever the hub is now, so the old path has to be read — and
+  //     appended to `movedFrom` — before that happens, or `khb update --path` is left with
+  //     nothing to repair from and the arguments it exists to avoid.
+  const { registerHub, touchHub } = await import("./lib/registry");
+  registerHub(HUB);
+  touchHub(HUB);
+  const { moved } = recordLocation(HUB);
+  if (moved) {
+    console.log(`This hub was at ${moved} and is now at ${HUB}.`);
+    console.log(`  absolute paths recorded inside it still name the old location.`);
+    console.log(`  repair them:  khb update --path           (--dry-run to preview)`);
+  }
+
   const { from, to, synced, pruned, renamed } = upgradeHub(HUB);
   console.log(`Upgraded ${HUB}: ${from ?? "?"} -> ${to}`);
   console.log(`  refreshed: ${synced.join(", ")}`);

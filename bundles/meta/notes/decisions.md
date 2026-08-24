@@ -6,6 +6,19 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-24 — `khb upgrade` registers and locates its hub like every other in-hub
+  command.** `cli.ts` runs `registerHub`/`touchHub` and `recordLocation` before each in-hub
+  command and exempts `upgrade`, on the grounds that upgrade performs the contract refresh
+  itself. That reasoning covers the refresh and nothing else, and the exemption cost two
+  things. A hub you only ever ran `khb upgrade` in never reached `khb list` or `khb go` —
+  the self-registering-on-first-use promise in `registry.ts` had a hole in it. Worse, a hub
+  upgraded as the first command after a move lost the move: `stamp()` merges `location(hub)`
+  over the marker, so the old `path` was overwritten without ever being appended to
+  `movedFrom`, leaving `khb update --path` with nothing to repair from and the user back to
+  the `--from <old path>` argument the marker exists to eliminate. Both are now done in
+  `init.ts`'s upgrade branch, in `cli.ts`'s order — register, record, *then* stamp, since
+  the stamp is what destroys the evidence.
+
 - **2026-08-24 — Ignore patterns for generated directories are anchored.** `export/` and
   `inbox/` in both `.gitignore` and `templates/hub/gitignore` are now `/export/` and
   `/inbox/`. Without the leading slash a directory pattern matches at *any* depth, so
