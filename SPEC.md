@@ -72,7 +72,7 @@ my-knowledge/                  # ~/OneDrive/my-knowledge, a private repo, a shar
 │       │   ├── index.md       #   (each may carry its own index)
 │       │   └── <concept>.md
 │       └── raw/               # ingested/extracted material, pre-curation (gitignored)
-├── inbox/extracted/           # hub-wide extraction cache, keyed by content hash (gitignored)
+├── .ingest-cache/extracted/   # hub-wide extraction cache, keyed by content hash (gitignored)
 │
 │   ── below: package-owned copies, refreshed by `khb upgrade`, never hand-edited ──
 ├── AGENTS.md                  # common contract; Codex discovers this directly
@@ -272,7 +272,7 @@ unattended:
   changes nothing. Only old and new naming *the same directory* is refused, there being no
   move to repair.
 
-`.git/`, `node_modules/` and the `inbox/` extraction cache are not walked; binary files and
+`.git/`, `node_modules/` and the `.ingest-cache/` extraction cache are not walked; binary files and
 anything over 8 MB are skipped. `--dry-run` reports the file-by-file hit count and writes
 nothing.
 
@@ -483,7 +483,7 @@ raw files, with one hard rule — subagents write concept docs, the orchestrator
 
 Extraction is deterministic, so `khb` owns all of it. Common formats use bundled pure-JS
 libraries with no system install; results are cached hub-wide by content hash
-(`inbox/extracted/<sha256>.md`) and reused across bundles. Nothing here contacts a model:
+(`.ingest-cache/extracted/<sha256>.md`) and reused across bundles. Nothing here contacts a model:
 tesseract and whisper are local binaries, expensive in CPU but reproducible, which is what
 puts them on the CLI side of the §Division-of-labor line.
 

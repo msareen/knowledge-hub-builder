@@ -461,7 +461,7 @@ function repairPaths(newPath: string, fromOpt: string | undefined, dryRun: boole
   detail(`scanning ${newPath} …`);
   const { scanned, hits, failed } = rewritePaths(newPath, froms, newPath, {
     dryRun,
-    onStart: (n) => detail(`${n} file(s) to check (skipping .git/, node_modules/, inbox/)`),
+    onStart: (n) => detail(`${n} file(s) to check (skipping .git/, node_modules/, .ingest-cache/)`),
   });
 
   const total = hits.reduce((n, h) => n + h.count, 0);

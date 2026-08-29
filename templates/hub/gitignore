@@ -4,8 +4,8 @@ bundles/*/raw/
 # Agent-specific machine-local permissions; shared skills remain tracked.
 .claude/settings.local.json
 
-# Extraction cache (inbox/extracted/<sha256>.md) — re-derivable from the sources.
-/inbox/
+# Extraction cache (.ingest-cache/extracted/<sha256>.md) — re-derivable from the sources.
+/.ingest-cache/
 
 # Generated. The leading slash matters: a bare `export/` also matches the `skills/export/`
 # these files ship with, and silently drops the export skill from the hub's own history.

@@ -6,6 +6,19 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-29 — Extraction cache renamed `inbox/` → `.ingest-cache/`.** The name `inbox/`
+  was a fossil of the deleted Phase-0 triage design (2026-07-19, superseded 2026-07-23):
+  back then it held a whole unrouted corpus — `inbox/manifest.jsonl` and
+  `inbox/routing.yaml` — and "inbox" fit. Once bundle-first ingest replaced that pipeline,
+  only the extraction cache survived under the old name, so `inbox/` no longer described
+  what the directory does (a keyed-by-hash conversion cache, not a staging area for
+  anything). Renamed the `INBOX` constant to `INGEST_CACHE` in `scripts/lib/util.ts`
+  (value `.ingest-cache`, dot-prefixed like other generated/local state) and every
+  reference across `extract.ts`, `relocate.ts`'s `SKIP_DIRS`, `hubs.ts`, `acquire.ts`,
+  both `.gitignore`s, `SPEC.md`, `README.md`, and `skills/ingest/SKILL.md`. Sanity-checked
+  against a scratch hub: `khb init` writes `/.ingest-cache/` to `.gitignore`, `khb ingest`
+  runs clean with no `inbox/` anywhere. Historical decision-log entries below that mention
+  `inbox/` are left as-is — they describe what was true when written.
 - **2026-08-24 — `khb help` audited against the flags each command actually consumes, two
   gaps closed.** `khb upgrade`'s own usage line has always read `khb upgrade` — no flags —
   but `init.ts` took `--name`/`--description` before branching into the `upgrade` path, so

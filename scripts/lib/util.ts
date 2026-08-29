@@ -25,7 +25,7 @@ function resolveHub(): string {
 
 export const HUB = resolveHub();
 export const BUNDLES = join(HUB, "bundles");
-export const INBOX = join(HUB, "inbox");
+export const INGEST_CACHE = join(HUB, ".ingest-cache");
 export { TEMPLATE, markerIn } from "./paths";
 
 export function listBundles(): string[] {

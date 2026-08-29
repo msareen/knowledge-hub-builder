@@ -10,7 +10,7 @@ import { join, relative } from "node:path";
 import { ticker } from "./log";
 
 /** Directories never walked: VCS internals, installed packages, regenerable caches. */
-const SKIP_DIRS = new Set([".git", "node_modules", "inbox"]);
+const SKIP_DIRS = new Set([".git", "node_modules", ".ingest-cache"]);
 
 /** A file bigger than this is a corpus artefact, not something holding a path reference. */
 const MAX_BYTES = 8 * 1024 * 1024;

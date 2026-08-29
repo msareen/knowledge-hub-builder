@@ -154,7 +154,7 @@ curation, not transcription.
 | `.mp3 .wav .m4a .mp4 .mov .mkv` | local `vno` (whisper.cpp), else `whisper` / `faster-whisper` | **low** |
 | `.vtt .srt` | built-in caption reader | high |
 
-Extracted text is cached hub-wide by content hash at `inbox/extracted/<sha256>.md`, so the
+Extracted text is cached hub-wide by content hash at `.ingest-cache/extracted/<sha256>.md`, so the
 same file appearing in two bundles converts once.
 
 **A recording next to its captions is one source, not two.** `talk.vtt` (or `talk.en.vtt`,

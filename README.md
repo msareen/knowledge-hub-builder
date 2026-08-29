@@ -324,7 +324,7 @@ the same spelling of the new path; matches must end at a path boundary, so movin
 never touches a sibling `…/older`; and the new path is matched too and rewritten to itself,
 which is what makes overlapping moves safe — lifting a hub out of its parent, or pushing it
 down into a subdirectory of where it stood — and makes a second run a no-op.
-`.git/`, `node_modules/` and the `inbox/` cache are skipped, as are binaries.
+`.git/`, `node_modules/` and the `.ingest-cache/` cache are skipped, as are binaries.
 
 **`--schema`/`-s`** — a bundle's `sources.yaml` can predate a field khb's since learned about
 (e.g. `exclude:`), with no way to discover it short of reading the docs. This backfills
@@ -373,7 +373,7 @@ everything under `bundles/`.
 
 ## Privacy
 
-`raw/` and the extraction cache under `inbox/` are gitignored. `log.md` is committed and
+`raw/` and the extraction cache under `.ingest-cache/` are gitignored. `log.md` is committed and
 records source paths, which may be absolute. Ignore `log.md` before the first commit if
 those paths are sensitive.
 

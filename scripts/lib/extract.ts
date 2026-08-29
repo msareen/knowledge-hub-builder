@@ -1,4 +1,4 @@
-// Content-addressed extraction cache: inbox/extracted/<sha256>.md
+// Content-addressed extraction cache: .ingest-cache/extracted/<sha256>.md
 //
 // Binary formats have to be converted before anything can read them. That conversion is
 // expensive and deterministic per content hash, so it is cached hub-wide rather than
@@ -21,10 +21,10 @@
 // and named in the provenance header, so curation can escalate to a vision read of the
 // source instead of trusting garbled text.
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from "node:fs";
-import { INBOX, join, basename } from "./util";
+import { INGEST_CACHE, join, basename } from "./util";
 import { note } from "./log";
 
-export const EXTRACTED = join(INBOX, "extracted");
+export const EXTRACTED = join(INGEST_CACHE, "extracted");
 
 /** Below this many characters per page, a PDF is a picture of a document, not a document. */
 const SCANNED_CHARS_PER_PAGE = 20;
@@ -611,7 +611,7 @@ export async function transcribeCached(path: string, hash: string, model = "base
 
   // Both engines write files rather than to stdout; give each run a scratch directory of
   // its own so a stray sibling transcript is never mistaken for this one's.
-  const out = join(INBOX, "tmp", hash.slice(0, 12));
+  const out = join(INGEST_CACHE, "tmp", hash.slice(0, 12));
   mkdirSync(out, { recursive: true });
   try {
     return eng.kind === "vno"

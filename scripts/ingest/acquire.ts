@@ -223,7 +223,7 @@ export function report(c: Counters) {
   line(c.moved, "moved/renamed — existing raw file and catalog entry kept");
   line(c.copied, "text file(s) copied");
   line(c.extracted, "extracted");
-  line(c.fromCache, "reused from the extraction cache (inbox/extracted/)");
+  line(c.fromCache, "reused from the extraction cache (.ingest-cache/extracted/)");
   line(c.ocrd, "read by OCR");
   line(c.transcribed, "transcribed");
   line(c.captioned, "read from a caption sidecar (no transcription needed)");

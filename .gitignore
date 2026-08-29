@@ -9,7 +9,7 @@ bundles/*/raw/
 
 # Extraction cache, keyed by content hash — re-derivable from the sources. log.md is
 # the durable record.
-/inbox/
+/.ingest-cache/
 
 # Generated: `khb export <bundle>` with no destination writes here, and an old hub may
 # still carry a graph.html from before `khb visualize` became a live server.
