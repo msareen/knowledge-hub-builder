@@ -35,6 +35,8 @@
   "scripts": {
     "khb": "bun scripts/cli.ts",
     "lint": "bun scripts/cli.ts lint",
+    "upgrade": "bun scripts/cli.ts upgrade",
+    "doctor": "bun scripts/cli.ts doctor",
     "visualize": "bun scripts/cli.ts visualize",
     "new-bundle": "bun scripts/cli.ts new-bundle",
     "export": "bun scripts/cli.ts export",

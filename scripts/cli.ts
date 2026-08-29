@@ -13,6 +13,7 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
     desc: "acquire + extract declared sources → raw/",
   },
   lint: { load: () => import("./lint"), usage: "khb lint", desc: "validate the hub against skills/lint/SKILL.md" },
+  doctor: { load: () => import("./doctor"), usage: "khb doctor", desc: "read-only report on this hub's state" },
   visualize: {
     load: () => import("./visualize"),
     usage: "khb visualize [--port N] [--no-open]",

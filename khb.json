@@ -1,7 +1,7 @@
 {
-  "khb": "0.2.0",
+  "khb": "0.2.2",
   "created": "2026-07-18T00:00:00Z",
   "note": "The khb development repo is also its own hub — bundles/meta is KHB's own knowledge. Not published (see package.json 'files').",
   "path": "D:\\code\\knowledge-hub-builder",
-  "upgraded": "2026-08-24T03:51:07.287Z"
+  "upgraded": "2026-08-29T17:41:55.472Z"
 }

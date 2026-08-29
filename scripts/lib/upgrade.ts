@@ -32,16 +32,28 @@ export function hubVersion(hub: string): string | undefined {
   }
 }
 
-/** Copy every package-owned contract file into the hub, replacing what is there. */
+/**
+ * Copy every package-owned contract file into the hub, replacing what is there.
+ *
+ * A file is skipped when source and destination are the same path. That is not a corner
+ * case: the khb development repo is its own hub (see the `note` in this repo's `khb.json`),
+ * so `PKG` and `hub` are one directory there and every managed path resolves to itself.
+ * `cpSync` rejects that outright with EINVAL, which turned any version drift in the dev
+ * repo into a crash on *every* in-hub command — the working copy is already the source of
+ * truth, so the honest answer is that there is nothing to copy.
+ */
 export function syncManaged(hub: string): string[] {
   const done: string[] = [];
-  for (const f of MANAGED) {
-    const src = join(PKG, f);
+  const same = (left: string, right: string) =>
+    process.platform === "win32" ? left.toLowerCase() === right.toLowerCase() : left === right;
+  for (const managed of MANAGED) {
+    const src = join(PKG, managed);
     if (!existsSync(src)) continue;
-    const dest = join(hub, f);
+    const dest = join(hub, managed);
+    if (same(resolve(src), resolve(dest))) continue;
     mkdirSync(dirname(dest), { recursive: true });
     cpSync(src, dest, { recursive: true, force: true });
-    done.push(statSync(src).isDirectory() ? `${f}/` : f);
+    done.push(statSync(src).isDirectory() ? `${managed}/` : managed);
   }
   return done;
 }

@@ -623,3 +623,35 @@ export async function transcribeCached(path: string, hash: string, model = "base
     rmSync(out, { recursive: true, force: true });
   }
 }
+
+/**
+ * The transcriber situation as a fact to report, rather than as a step in a run.
+ *
+ * `asrEngine()` above is the ingest path: it caches its answer for the process and speaks
+ * up on stderr, both of which are right in the middle of a run and wrong for `khb doctor`,
+ * which prints its own report and must not warn on the side. Same probe order — vno, then
+ * whisper, then faster-whisper — so the two never disagree about what would actually run.
+ */
+export async function transcriberStatus(): Promise<{ ready: boolean; detail: string; fix?: string }> {
+  const vno = await vnoStatus();
+  if (vno.state === "ready") return { ready: true, detail: "vno (whisper.cpp)" };
+
+  const whisper =
+    (await runCli(["whisper", "--help"])) ? "whisper"
+    : (await runCli(["faster-whisper", "--help"])) ? "faster-whisper"
+    : "";
+
+  if (vno.state === "unset-up") {
+    const missing = vno.blockers.length ? `: ${vno.blockers.join(", ")}` : "";
+    // Amber, exactly as in a run: an unset-up vno with whisper behind it is not a problem.
+    return whisper
+      ? { ready: true, detail: `${whisper} — vno installed but not set up${missing}`, fix: "vno setup" }
+      : { ready: false, detail: `vno installed but not set up${missing}`, fix: "vno setup" };
+  }
+  if (whisper) return { ready: true, detail: whisper };
+  return {
+    ready: false,
+    detail: "none on PATH — audio and video pend as rows, everything else ingests",
+    fix: "npm install -g @msareen/voice-notes-organizer   (or: pip install -U openai-whisper)",
+  };
+}

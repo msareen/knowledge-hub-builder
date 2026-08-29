@@ -6,6 +6,90 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-29 — A version bump runs `khb upgrade` on this repo, as a release step.**
+  `RELEASING.md` used to say the opposite — bump `package.json` and *leave* `khb.json` alone,
+  on the reasoning that the stamp records what is actually installed and only `khb upgrade`
+  should set it. The reasoning was right and the conclusion was wrong: it left the restamp to
+  whenever somebody next happened to run a command here, which means the repo spends most of
+  its life stamped a version behind the CLI in the same directory. Steps 2 and 3 now run
+  `bun run upgrade` and commit the restamped marker with the bump.
+
+  The stamp is the smaller half. This repo is the only hub anywhere in which the package and
+  the hub are **the same directory**, so it is the only place the same-path branch of
+  `syncManaged()` is ever exercised — and that branch was broken: `cpSync(src, dest)` with
+  `src === dest` throws EINVAL, so the 0.2.2 bump turned every in-hub command here, `khb
+  upgrade` included, into a crash. No user could have hit it and no other hub could have
+  found it. Making the bump run the upgrade puts that path under a release-time check instead
+  of leaving it to be discovered by a command that wanted to do something else entirely.
+  `bun run lint` and `bun run doctor` follow it for the same reason.
+
+  Two details the step has to be explicit about. It must run through `bun run upgrade` and
+  not a globally-installed `khb`, because the stamp comes from the `package.json` of whichever
+  khb executes — a stale global would quietly stamp the hub with the version just moved off.
+  And `upgradeHub` now reports an empty sync as *"nothing to copy — this hub is its own
+  package"* rather than a bare `refreshed:`, since here an empty list is the correct result
+  and printing it blank reads as a failure. `bun run upgrade` and `bun run doctor` were added
+  to `package.json` alongside the existing `lint`/`ingest`/`export` aliases.
+
+- **2026-08-29 — `khb doctor` collects the diagnostics that were scattered across command
+  margins.** Every check it prints already existed, but each lived in the preamble of a
+  command that happened to know it: `cli.ts` announces a move and a version drift on the way
+  into something else, `khb upgrade` prints the `khb update` hint, `khb ingest` counts the
+  uncurated rows on its way out, and the transcriber probe only ever spoke inside a run that
+  needed it. So "what state is this hub in?" was answered by running several commands that
+  change things and reading their margins — which is a bad trade for a question that should
+  cost nothing to ask. `doctor` writes nothing, and that is the boundary rather than an
+  implementation detail: it reports and names the command that repairs, never repairing on
+  its own, which is what keeps it safe to run on a hub whose state you do not yet trust.
+  It also does not validate — `khb lint` keeps structure and OKF conformance, and doctor
+  points at it instead of duplicating a rule that could then drift.
+
+  Two things it deliberately does not do. It is **not** exempt from the auto-upgrade the
+  other in-hub commands trigger, so drift is normally repaired before doctor sees it and a
+  version finding means the refresh was suppressed rather than that it is due — reporting a
+  drift that any other command silently fixes would be theatre. And backlog counts a row
+  only when it has a raw file: the ledger defines the catalog backlog as "in `raw/` but not
+  yet distilled", so a row with neither `raw` nor `curated` is *pending* — a different state
+  with a different fix — and counting it in both would overstate what cataloging can pick up.
+  `transcriberStatus()` was added beside `asrEngine()` rather than reusing it, because that
+  one caches per process and warns on stderr; both are right in a run and wrong in a report,
+  and they share a probe order so the two can never disagree about what would actually run.
+
+- **2026-08-29 — Lint checks the ledger (L10) and in-bundle links (L11).** Two things the
+  contract has always required and lint has never looked at. **L10** reads `log.md`, whose
+  empty `curated` cells *are* the catalog backlog: a `curated` path naming a file that does
+  not exist is an **error**, a row's `raw` path naming a missing file is a warning, and a
+  `raw/` file no row names is a warning. The asymmetry is deliberate. `curated` gets no
+  not-yet-written excuse — the column is filled only once the concept exists, so a dangling
+  value means the ledger is claiming work nobody can find, which is exactly what a concept
+  renamed after cataloging leaves behind. The `raw` side is a warning *and* is skipped
+  entirely when `raw/` is empty, because `raw/` is gitignored and re-derivable: a hub that
+  was cloned rather than ingested legitimately has every row and no files at all, and
+  warning on each would make the ordinary state of a shared hub unlintable. `declined` is
+  accepted as-is, per skills/catalog/SKILL.md §5. **L11** resolves markdown links *within* a
+  bundle — the catalog cross-link pass and the back-links the query skill writes from a
+  synthesis to its sources are both made of these, and only the index side (L4b) was ever
+  checked, so a typo'd back-link silently produced the dead end §4 of the query skill exists
+  to prevent. A warning, not an error, for L4b's reason: a link to a concept somebody means
+  to write next is not-yet-written knowledge, which OKF tolerates by design.
+
+  Both rules share one `resolveLink()`, which fixed a latent L4 bug on the way: index links
+  were resolved without stripping a `#section` suffix, so an index entry written as
+  `` `* [Alpha](notes/alpha.md#detail)` `` both warned as a missing file *and* left
+  `alpha.md` reported as listed in no index — two
+  spurious findings for the ordinary act of linking to a heading. `raw/` is now enumerated
+  once per bundle and shared by L8 and L10 instead of being walked twice.
+
+  Same pass: `syncManaged()` now skips a managed file whose source and destination are the
+  same path. This repo is its own hub, so `PKG` and the hub are one directory here and every
+  managed path resolves to itself; `cpSync` rejects that with EINVAL, which meant the version
+  bump to 0.2.2 turned *every* in-hub command in the development repo into a crash until the
+  marker was restamped. Nothing to copy is the honest answer, not an error. And
+  `notes/backlog.md` was reconciled against what actually ships — PPTX, XLSX, OCR and
+  incremental ingest had been sitting unchecked since 2026-07-23 despite being released,
+  which is the stale-concept failure the query skill's correction path exists for, sitting in
+  the reference hub.
+
 - **2026-08-29 — Extraction cache renamed `inbox/` → `.ingest-cache/`.** The name `inbox/`
   was a fossil of the deleted Phase-0 triage design (2026-07-19, superseded 2026-07-23):
   back then it held a whole unrouted corpus — `inbox/manifest.jsonl` and
