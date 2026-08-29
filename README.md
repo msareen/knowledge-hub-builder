@@ -251,26 +251,43 @@ Commands can be run directly or requested through the matching agent skill.
 | `khb new-bundle <name> ["scope"]` | Create and register a bundle |
 | `khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]` | Acquire and extract declared sources |
 | `khb lint` | Validate routing, bundle structure, and OKF metadata |
+| `khb doctor` | Read-only report: version, location, per-bundle counts, catalog backlog, transcriber |
 | `khb visualize [--port N] [--no-open]` (aliases: `vis`, `viz`) | Serve the live bundle graph on a random free port and open it in your default browser — pan/zoomable cross-bundle map, drill into a bundle for its folder-clustered concepts, rebuild-on-refresh, exits when you close the tab |
 | `khb export <bundle> [dest]` | Export one standalone bundle |
 
-Additional ingest flags:
-
-- `--skip-ocr`
-- `--skip-audio`
-
 Run against a hub outside the current directory with `--hub <dir>` or `$KHB_HUB`.
+
+### `khb doctor` — what state is this hub in?
+
+A single read-only report. It writes nothing and repairs nothing; each finding names the
+command that does.
+
+```text
+Hub            name, description, stamped version vs installed, location, registered
+Bundles        per bundle: concepts, raw/ files, log.md rows, catalog backlog, pending
+Extraction     which formats are bundled, and whether a transcriber is ready
+Findings       what needs attention, each with its fix
+```
+
+Every check existed already, spread across the margins of commands that each knew one of
+them — a move is announced by whatever you happen to run next, the `khb update` hint comes
+out of `khb upgrade`, the uncurated row count out of `khb ingest`, and the transcriber probe
+only ever spoke during a run that needed it. `doctor` asks for the whole picture without
+changing anything to get it.
+
+It is not a validator: `khb lint` still owns structure and OKF conformance, and `doctor`
+points at it rather than repeating a rule.
 
 ### Moving between hubs
 
-These four run **outside** any hub, from any terminal:
+These run **outside** any hub, from any terminal:
 
 | Command | Purpose |
 |---|---|
 | `khb` | Open a hub. One registered hub asks; several show a list and take a pick; none walks you through creating the first |
 | `khb list [--json]` | Every hub on this machine, with its description and path |
-| `khb go <name\|N> [--path]` | Open one by name or list position. `--path` prints just the path, for `cd "$(khb go --path work)"` |
-| `khb agent [name] [--command X] [--args "…"]` | Which agent `khb go` launches — `claude`, `codex`, anything on your PATH, or `none` to just print the path |
+| `khb go [name\|N] [--path] [--no-agent] [--agent X]` | Open one by name or list position. `--path` prints just the path, for `cd "$(khb go --path work)"`; `--no-agent` prints the path and the `cd` line without launching anything; `--agent X` launches `X` for this run only, leaving the configured default alone |
+| `khb agent [name\|none] [--command X] [--args "…"]` | Which agent `khb go` launches — `claude`, `codex`, anything on your PATH, or `none` to just print the path |
 | `khb update [new-path] [--path\|-p] [--schema\|-s] [--from <old>] [--dry-run]` | Repair the hub: path references after a move, and/or backfill `sources.yaml` to the current schema. No flag runs both |
 | `khb forget <name>` | Drop a hub from the list. The folder is untouched |
 
@@ -278,7 +295,8 @@ These four run **outside** any hub, from any terminal:
 cold terminal ends with an agent open on the right folder. No program can change its
 parent shell's directory, which is why the `cd` line is printed rather than performed.
 
-The list lives in `~/.khb/hubs-config.json` (`%USERPROFILE%\.khb` on Windows). It holds
+The list lives in `~/.khb/hubs-config.json` (`%USERPROFILE%\.khb` on Windows; `$KHB_HOME`
+overrides the directory, for a portable install or a test run). It holds
 paths and one launch command — no knowledge — and fills itself in: any khb command run
 inside a hub registers it, so hubs you already had show up without a migration step.
 Delete the file and the next command in each hub puts it back.

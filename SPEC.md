@@ -121,14 +121,21 @@ acting on them** — an agent can never read a protocol the CLI no longer implem
 │   ├── new-bundle.ts          # scaffold from .bundle_template, register in outer.index.md
 │   ├── export.ts              # bundle + common patterns → standalone shareable folder
 │   ├── lint.ts                # enforce skills/lint/SKILL.md across the hub
+│   ├── doctor.ts              # read-only state report; writes nothing, repairs nothing
 │   ├── visualize.ts           # serve the live bundle graph from indexes + refs
 │   ├── ingest/                # folder.ts / files.ts / web.ts → acquire.ts → bundle/raw
 │   └── lib/
+│       ├── args.ts            # argv helpers; what they consume they remove, leaving positionals
+│       ├── create.ts          # making a hub, shared by `khb init` and the first-run wizard
 │       ├── extract.ts         # every local extractor + the content-hash cache
+│       ├── graph.ts           # graph data for the visualizer — read-only, never writes
+│       ├── graph-page.ts      # the visualizer's browser UI, rendered from that data
 │       ├── ledger.ts          # log.md read/write
+│       ├── log.ts             # progress reporting: each unit announces itself before it runs
 │       ├── paths.ts           # package-side paths — importing it never needs a hub
 │       ├── registry.ts        # ~/.khb/hubs-config.json: where this machine's hubs are
 │       ├── relocate.ts        # khb update --path's path rewriter — pure text, no judgement
+│       ├── scaffold.ts        # bundle creation + lookup, shared by new-bundle and ingest
 │       ├── schema.ts          # khb update --schema: sources.yaml field diff/apply
 │       ├── upgrade.ts         # the refresh itself: `khb upgrade` and the drift check
 │       └── util.ts            # hub resolution + shared helpers
@@ -526,6 +533,10 @@ drops, and rewrites the raw file with `extract_tool: claude-vision`.
 - every concept doc is listed in an index and carries OKF frontmatter (`type` required)
 - `refs.md` targets exist; no cross-bundle inline links from concept docs
 - index files contain links only (routing, not content)
+- intra-bundle links from a concept doc resolve to a file that exists (warning — OKF
+  tolerates a link to knowledge not yet written)
+- `log.md` agrees with the bundle: a `curated` value naming a missing concept is an error,
+  a `raw` value naming a missing file or a `raw/` file with no row is a warning
 
 ## 8. Visualizer
 

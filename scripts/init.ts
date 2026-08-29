@@ -50,7 +50,14 @@ if (upgrading) {
 
   const { from, to, synced, pruned, renamed } = upgradeHub(HUB);
   console.log(`Upgraded ${HUB}: ${from ?? "?"} -> ${to}`);
-  console.log(`  refreshed: ${synced.join(", ")}`);
+  // An empty list is not an empty result: in the khb development repo the package *is* the
+  // hub, so every managed path is its own source and there is genuinely nothing to copy.
+  // Printing a bare "refreshed:" there reads as a failure rather than as the no-op it is.
+  console.log(
+    synced.length
+      ? `  refreshed: ${synced.join(", ")}`
+      : `  refreshed: nothing to copy — this hub is its own package`,
+  );
   if (renamed) console.log(`  renamed: ${renamed} -> ${MARKER}`);
   if (pruned.length) console.log(`  removed (no longer part of the contract): ${pruned.join(", ")}`);
   console.log(`Your bundles/ and outer.index.md were not touched. Next: khb lint`);
