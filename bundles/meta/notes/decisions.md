@@ -6,6 +6,45 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-30 — The machine config gets a command, and a schema with repairs attached.**
+  `~/.khb/hubs-config.json` was documented but unreachable from the CLI: you had to know the
+  path, and nothing ever told you a hand edit had gone wrong. `loadConfig` is forgiving by
+  design — unknown keys ignored, an unparseable file treated as empty — which is right at
+  load time (a damaged registry must not block `khb lint` in a hub that is fine) and wrong as
+  the only feedback anyone gets. A `defaultagent` typo does nothing at all; a stray comma
+  costs every shortcut in silence.
+
+  So `khb config view | edit | check | fix | path`, with `edit` opening the OS default handler
+  for `.json` rather than `$EDITOR` — a terminal editor launched detached would draw over the
+  session, and whatever the machine already opens JSON with is the editor the person actually
+  chose. Because that editor is detached, `edit` cannot validate the save, so it ends by
+  naming `khb config check`.
+
+  The schema lives once, in `lib/config-check.ts`, as findings that carry their own repair.
+  `khb doctor` reports them and `khb config fix` applies them — doctor's no-write boundary
+  stays exactly where it was, and neither command holds a second copy of the rules. A finding
+  gets a `repair` only when the fix loses nothing: canonicalizing a path, merging a duplicate
+  entry, dropping keys the schema does not define, re-deriving a name that has drifted from
+  the hub's own marker. Two deliberate refusals: a dead shortcut is not auto-dropped (a
+  missing path can be an unplugged drive, and a moved hub wants `khb update --path`, not
+  forgetting — `--prune` is the explicit opt-in), and a name collision is not auto-renamed,
+  because a name is re-derived from each hub's `khb.json` on every command run there and a
+  registry-side rename would be silently undone. `fix` applies one repair per pass and
+  re-checks, since repairs move the ground under each other — canonicalizing a path changes
+  the key the next repair looks its entry up by.
+
+- **2026-08-29 — Terminal colour is semantic, per-stream, and lives in one file.**
+  `scripts/lib/color.ts` exports roles — `head`, `cmd`, `path`, `name`, `ok`, `warn`, `bad`,
+  `dim` — and no call site anywhere names a colour. The roles are what carry the meaning:
+  `cmd` marks the thing you can type next, which is the one span a reader is usually hunting
+  for. Two palettes, `paint` for stdout and `paintErr` for stderr, because khb splits its
+  output on purpose (a command's result on stdout, its asides on stderr) and one shared
+  enable-flag cannot be right for both — `khb list > hubs.txt` from a terminal must write a
+  clean file while the warning still on screen keeps its colour. `NO_COLOR` disables,
+  `FORCE_COLOR` forces, a pipe is plain. Padding is applied before painting everywhere: an
+  escape sequence has width in the string and none on screen, so a padded coloured value
+  misaligns its column.
+
 - **2026-08-29 — A version bump runs `khb upgrade` on this repo, as a release step.**
   `RELEASING.md` used to say the opposite — bump `package.json` and *leave* `khb.json` alone,
   on the reasoning that the stamp records what is actually installed and only `khb upgrade`

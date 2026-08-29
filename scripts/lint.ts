@@ -6,6 +6,7 @@ import { readdirSync, statSync } from "node:fs";
 import { dirname, relative } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { rejectUnknownFlags } from "./lib/args";
+import { paint, paintErr } from "./lib/color";
 
 rejectUnknownFlags(process.argv.slice(2), "khb lint");
 
@@ -20,8 +21,8 @@ const isTimestamp = (value: unknown) =>
     : typeof value === "string" && !isNaN(Date.parse(value));
 
 let errors = 0, warnings = 0;
-const err = (rule: string, msg: string) => { errors++; console.error(`ERROR ${rule}: ${msg}`); };
-const warn = (rule: string, msg: string) => { warnings++; console.warn(`warn  ${rule}: ${msg}`); };
+const err = (rule: string, msg: string) => { errors++; console.error(`${paintErr.bad("ERROR")} ${paintErr.name(rule)}: ${msg}`); };
+const warn = (rule: string, msg: string) => { warnings++; console.warn(`${paintErr.warn("warn ")} ${paintErr.name(rule)}: ${msg}`); };
 
 /**
  * Drop everything that is markup *about* markdown rather than markdown: HTML comments, and
@@ -74,7 +75,7 @@ function resolveLink(bundleRoot: string, fromRelative: string, target: string): 
   return resolved.replace(/\/$/, "");
 }
 
-console.log(`khb lint → ${HUB}`);
+console.log(`${paint.head("khb lint")} → ${paint.path(HUB)}`);
 detail(`${bundles.length} bundle(s): ${bundles.join(", ") || "none"}`);
 
 for (const [bundleIndex, bundle] of bundles.entries()) {
@@ -268,4 +269,8 @@ for (const bundle of bundles)
   if (existsSync(join(BUNDLES, bundle, "index.md")))
     proseCheck(`${bundle}/index.md`, read(join(BUNDLES, bundle, "index.md")));
 
-console.log(`\nlint: ${errors} error(s), ${warnings} warning(s) across ${bundles.length} bundle(s) in ${totalElapsed()}`);
+console.log(
+  `\n${paint.head("lint")}: ${errors ? paint.bad(`${errors} error(s)`) : paint.ok("0 errors")}, ` +
+    `${warnings ? paint.warn(`${warnings} warning(s)`) : paint.ok("0 warnings")} ` +
+    `across ${bundles.length} bundle(s) in ${totalElapsed()}`,
+);

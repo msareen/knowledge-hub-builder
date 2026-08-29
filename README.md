@@ -257,6 +257,11 @@ Commands can be run directly or requested through the matching agent skill.
 
 Run against a hub outside the current directory with `--hub <dir>` or `$KHB_HUB`.
 
+Output is colour-coded when the stream is a terminal — headings, the commands you can
+type next, paths, and the difference between an error, a warning and a clean result.
+`NO_COLOR=1` turns it off, `FORCE_COLOR=1` keeps it through a pipe, and a redirected
+stdout is plain text either way.
+
 ### `khb doctor` — what state is this hub in?
 
 A single read-only report. It writes nothing and repairs nothing; each finding names the
@@ -264,6 +269,7 @@ command that does.
 
 ```text
 Hub            name, description, stamped version vs installed, location, registered
+Machine config where it is, the agent it names, how many hubs, schema findings
 Bundles        per bundle: concepts, raw/ files, log.md rows, catalog backlog, pending
 Extraction     which formats are bundled, and whether a transcriber is ready
 Findings       what needs attention, each with its fix
@@ -289,7 +295,8 @@ These run **outside** any hub, from any terminal:
 | `khb go [name\|N] [--path] [--no-agent] [--agent X]` | Open one by name or list position. `--path` prints just the path, for `cd "$(khb go --path work)"`; `--no-agent` prints the path and the `cd` line without launching anything; `--agent X` launches `X` for this run only, leaving the configured default alone |
 | `khb agent [name\|none] [--command X] [--args "…"]` | Which agent `khb go` launches — `claude`, `codex`, anything on your PATH, or `none` to just print the path |
 | `khb update [new-path] [--path\|-p] [--schema\|-s] [--from <old>] [--dry-run]` | Repair the hub: path references after a move, and/or backfill `sources.yaml` to the current schema. No flag runs both |
-| `khb forget <name>` | Drop a hub from the list. The folder is untouched |
+| `khb forget <name> [more…]` | Drop one or more hubs from the list. The folders are untouched. With no name it points you at `khb list` for the names |
+| `khb config [view\|edit\|check\|fix\|path]` | The config file itself — see below |
 
 `khb go` prints the hub's path and then starts your agent there, so a bare `khb` from a
 cold terminal ends with an agent open on the right folder. No program can change its
@@ -304,6 +311,39 @@ Delete the file and the next command in each hub puts it back.
 A hub's name and description come from its own `khb.json`, so they travel with the hub
 rather than living in one machine's list. Set them with `khb init --name --description`,
 or edit those two keys in the marker later.
+
+### `khb config` — the file itself
+
+The list is plain JSON and always has been editable by hand. These five reach it without
+hunting for the path, and say something when a hand edit has gone wrong:
+
+```bash
+khb config              # or 'view' — the path, the file, and a findings count
+khb config edit         # open it in whatever this machine opens .json with
+khb config check        # validate it against the schema
+khb config fix          # repair what can be repaired mechanically
+khb config fix --dry-run --prune   # preview; --prune also drops dead shortcuts
+khb config path         # just the path, for cat "$(khb config path)"
+```
+
+The reason `check` exists: `loadConfig` is forgiving on purpose — it ignores keys it does
+not know and treats an unparseable file as an empty one, so a damaged registry never
+blocks `khb lint` in a hub that is fine. The cost is silence. A `defaultagent` typo does
+nothing at all, a pasted duplicate makes `khb forget` look broken, and a stray comma
+loses you every shortcut with no message anywhere. `check` names each of those, `fix`
+repairs the mechanical ones — canonicalizing paths, merging duplicate entries, dropping
+keys the schema does not define, re-deriving a name or description that has drifted from
+the hub's own `khb.json` — and leaves anything needing a decision to you, with the
+command that settles it.
+
+`khb doctor` runs the same checks and prints the same fixes, so a hub health check covers
+the machine config too. Doctor never writes; `khb config fix` is the half that does.
+
+Two things `fix` will not do on its own: drop a shortcut whose folder has gone (that is
+`--prune`, or `khb forget` — a missing path can be an unplugged drive, and a moved hub
+wants `khb update --path`, not forgetting), and rename a hub. A name is re-derived from
+each hub's own `khb.json` every time a command runs there, so renaming the entry would
+be undone on the next command — the rename belongs in the marker.
 
 ### `khb update` — repairing a hub
 

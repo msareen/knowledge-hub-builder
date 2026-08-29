@@ -5,19 +5,20 @@ import { cpSync, writeFileSync, mkdirSync, existsSync, readFileSync } from "node
 import { HUB, bundleDir, join } from "./lib/util";
 import { detail, totalElapsed } from "./lib/log";
 import { rejectUnknownFlags } from "./lib/args";
+import { paint, paintErr } from "./lib/color";
 
 const argv = process.argv.slice(2);
 // Before reading positionals: an unrecognized flag would otherwise become the destination,
 // and `khb export mybundle --force` would export into a folder named `--force`.
 rejectUnknownFlags(argv, "khb export <bundle> [dest]");
 const [name, destArg] = argv;
-if (!name) { console.error("Usage: khb export <bundle> [dest]"); process.exit(1); }
+if (!name) { console.error(`Usage: ${paintErr.cmd("khb export <bundle> [dest]")}`); process.exit(1); }
 
 const src = bundleDir(name);
 const dest = destArg ?? join(HUB, "export", name);
-if (existsSync(dest)) { console.error(`Destination exists: ${dest}`); process.exit(1); }
+if (existsSync(dest)) { console.error(`${paintErr.bad("Destination exists:")} ${paintErr.path(dest)}`); process.exit(1); }
 
-console.log(`khb export → ${name}`);
+console.log(`${paint.head("khb export")} → ${paint.name(name)}`);
 detail(`from: ${src}`);
 detail(`to:   ${dest}`);
 
@@ -44,4 +45,7 @@ writeFileSync(join(dest, "outer.index.md"),
 writeFileSync(join(dest, "README.md"),
   `# ${name} (exported KHB bundle)\n\nExported: ${new Date().toISOString()}\nOrigin: KHB bundle-of-bundles repo.\n\nStandalone unit: start at AGENTS.md → outer.index.md → bundle/index.md.\nWorkflow protocols (query, ingest, lint, …) live in skills/<name>/SKILL.md and are discoverable by Claude and Codex.\nNote: refs.md entries pointing at other bundles will not resolve here.\n`);
 
-console.log(`\nExported to ${dest} in ${totalElapsed()} (bundle + agent contracts, skills, single-bundle router)`);
+console.log(
+  `\n${paint.ok("Exported to")} ${paint.path(dest)} in ${totalElapsed()} ` +
+    paint.dim("(bundle + agent contracts, skills, single-bundle router)"),
+);

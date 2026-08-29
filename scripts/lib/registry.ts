@@ -7,6 +7,7 @@
 // it and nothing is lost but the shortcuts.
 //
 // Package-side, like paths.ts — importing this must never require a hub to exist.
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, basename } from "node:path";
@@ -109,7 +110,7 @@ export function canonical(p: string): string {
 }
 
 /** Case-insensitive on Windows, after canonicalizing — see `canonical`. */
-const samePath = (a: string, b: string) => {
+export const samePath = (a: string, b: string) => {
   const [x, y] = [canonical(a), canonical(b)];
   return process.platform === "win32" ? x.toLowerCase() === y.toLowerCase() : x === y;
 };
@@ -294,6 +295,24 @@ export function findHubEntry(what: string): HubEntry | undefined {
   const n = Number(what);
   if (Number.isInteger(n) && n >= 1 && n <= hubs.length) return hubs[n - 1];
   return hubs.find((h) => samePath(resolve(h.path), resolve(what)));
+}
+
+/**
+ * Is this command actually runnable? Probed with `--version`, which no agent acts on.
+ * Used by the first-run wizard to offer what is installed, and by the config check to say
+ * so before `khb go` fails at spawn.
+ */
+export function onPath(command: string): boolean {
+  try {
+    const probe = spawnSync(command, ["--version"], {
+      stdio: "ignore",
+      shell: process.platform === "win32",
+      timeout: 5000,
+    });
+    return !probe.error && probe.status === 0;
+  } catch {
+    return false;
+  }
 }
 
 export function agentFor(cfg: Config, name?: string): { name: string; spec: AgentSpec } | undefined {

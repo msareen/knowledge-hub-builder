@@ -137,14 +137,14 @@ From outside, pass `--hub <dir>` or set `$KHB_HUB`.
 | Command | Purpose |
 |---|---|
 | `khb lint` | validate structure against `skills/lint/SKILL.md` |
-| `khb doctor` | read-only report on the hub: version, location, per-bundle concept/raw/backlog counts, transcriber, and the command that fixes each finding. Writes nothing, and does not duplicate `lint` |
+| `khb doctor` | read-only report on the hub: version, location, per-bundle concept/raw/backlog counts, transcriber, the machine config's schema findings, and the command that fixes each finding. Writes nothing, and does not duplicate `lint` |
 | `khb upgrade` | refresh this hub's package-owned contract docs — runs by itself whenever `khb.json`'s stamped version differs from the installed khb, so these docs always match the CLI |
 | `khb visualize [--port N] [--no-open]` | serve the live bundle graph in your browser; aliases `vis`, `viz` |
 | `khb new-bundle <name>` | scaffold + register a bundle |
 | `khb ingest <bundle>` | acquire + extract every source in `sources.yaml` → `raw/`; maintains `log.md`. Name the bundle — with none it lists the hub's bundles and stops, unless there is nothing to choose between (no bundles, or only `default`), where it uses `default` |
 | `khb export <bundle> [dest]` | standalone copy: bundle + common patterns, shareable alone |
 
-These five work **outside** any hub, against a per-machine shortcut list at
+These six work **outside** any hub, against a per-machine shortcut list at
 `~/.khb/hubs-config.json` (`%USERPROFILE%\.khb` on Windows). They hold no knowledge — only
 paths — and fill themselves in as hubs are used, so they need no maintenance.
 
@@ -154,7 +154,8 @@ paths — and fill themselves in as hubs are used, so they need no maintenance.
 | `khb go [name\|N]` | open a hub — prints its path, then launches your agent there. Bare `khb` is this: one hub asks, several offer a list, none walks the user through creating the first. `--path` prints only the path |
 | `khb agent [name]` | which agent `khb go` launches — `claude`, `codex`, a custom `--command`, or `none` |
 | `khb update [new-path]` | repair the hub: `--path`/`-p` repoints the list and rewrites every old-path reference after a move (needs no arguments — the move is detected and announced by any khb command run there); `--schema`/`-s` backfills a bundle's `sources.yaml` to the current schema (e.g. a newly added `exclude:` field). No flag runs both. `--dry-run` first. Unrelated to `khb upgrade`, which only touches package-owned contract docs, never bundle content |
-| `khb forget <name>` | drop a shortcut; the hub folder is untouched |
+| `khb forget <name> [more…]` | drop one or more shortcuts; the hub folders are untouched. Every target is resolved before any is removed, so list positions (`khb forget 1 2`) mean what they meant when you typed them. With no name it points at `khb list` |
+| `khb config [view\|edit\|check\|fix\|path]` | the machine config itself: `view` prints it, `edit` opens it in the OS default editor, `check` validates it against the schema, `fix` repairs what can be repaired mechanically (`--dry-run`, `--prune` to drop dead shortcuts), `path` prints just the location. `khb doctor` reports the same findings but never writes |
 
 A hub's `name` and `description` in that list come from its own `khb.json`, so they travel
 with it. Set them at creation with `khb init --name --description`, or edit the marker's

@@ -8,6 +8,7 @@
 import { buildGraphData, readConceptFile } from "./lib/graph";
 import { renderGraphPage } from "./lib/graph-page";
 import { takeFlag, takeOpt, rejectUnknownFlags } from "./lib/args";
+import { paint, paintErr } from "./lib/color";
 
 const USAGE = "khb visualize [--port N] [--no-open]";
 const argv = process.argv.slice(2);
@@ -21,8 +22,8 @@ rejectUnknownFlags(argv, USAGE);
 // looks like the flag working right up until nothing is listening where you expected.
 const requestedPort = portArg === undefined ? 0 : Number(portArg);
 if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) {
-  console.error(`--port must be a number between 0 and 65535, not: ${portArg}`);
-  console.error(`Usage: ${USAGE}`);
+  console.error(`${paintErr.bad("--port must be a number between 0 and 65535, not:")} ${portArg}`);
+  console.error(`Usage: ${paintErr.cmd(USAGE)}`);
   process.exit(1);
 }
 
@@ -76,7 +77,7 @@ try {
   server = Bun.serve({ port: requestedPort, fetch: fetchHandler });
 } catch (e) {
   if (requestedPort && (e as { code?: string }).code === "EADDRINUSE") {
-    console.warn(`Port ${requestedPort} is busy — picking a free one instead.`);
+    console.warn(paintErr.warn(`Port ${requestedPort} is busy — picking a free one instead.`));
     server = Bun.serve({ port: 0, fetch: fetchHandler });
   } else throw e;
 }
@@ -89,7 +90,7 @@ setInterval(() => {
 }, HEARTBEAT_INTERVAL_MS).unref();
 
 const url = `http://localhost:${server.port}`;
-console.log(`khb visualize → ${url}  (${summarize(data)})`);
+console.log(`${paint.head("khb visualize")} → ${paint.cmd(url)}  ${paint.dim(`(${summarize(data)})`)}`);
 
 // Open the default browser. If that fails the URL is already printed above, so a headless
 // or locked-down box just falls back to copy-paste rather than erroring out.
@@ -103,7 +104,7 @@ if (!noOpen) {
   try {
     Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" }).unref();
   } catch {
-    console.warn("Could not launch a browser — open the URL above yourself.");
+    console.warn(paintErr.warn("Could not launch a browser — open the URL above yourself."));
   }
 }
-console.log(`The server exits on its own once you close the tab. Ctrl+C also works.`);
+console.log(paint.dim(`The server exits on its own once you close the tab. Ctrl+C also works.`));

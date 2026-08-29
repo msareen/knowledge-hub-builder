@@ -12,6 +12,7 @@ import { resolve, basename } from "node:path";
 import { MARKER, markerIn } from "./lib/paths";
 import { recordLocation, upgradeHub, updateHint } from "./lib/upgrade";
 import { takeOpt, rejectUnknownFlags } from "./lib/args";
+import { paint, paintErr } from "./lib/color";
 
 const upgrading = process.env.KHB_SUBCOMMAND === "upgrade";
 const argv = process.argv.slice(2);
@@ -43,13 +44,17 @@ if (upgrading) {
   touchHub(HUB);
   const { moved } = recordLocation(HUB);
   if (moved) {
-    console.log(`This hub was at ${moved} and is now at ${HUB}.`);
+    console.log(
+      `${paint.warn("This hub was at")} ${paint.path(moved)} and is now at ${paint.path(HUB)}.`,
+    );
     console.log(`  absolute paths recorded inside it still name the old location.`);
-    console.log(`  repair them:  khb update --path           (--dry-run to preview)`);
+    console.log(
+      `  repair them:  ${paint.cmd("khb update --path")}           ${paint.dim("(--dry-run to preview)")}`,
+    );
   }
 
   const { from, to, synced, pruned, renamed } = upgradeHub(HUB);
-  console.log(`Upgraded ${HUB}: ${from ?? "?"} -> ${to}`);
+  console.log(`${paint.ok("Upgraded")} ${paint.path(HUB)}: ${from ?? "?"} -> ${paint.name(to)}`);
   // An empty list is not an empty result: in the khb development repo the package *is* the
   // hub, so every managed path is its own source and there is genuinely nothing to copy.
   // Printing a bare "refreshed:" there reads as a failure rather than as the no-op it is.
@@ -60,28 +65,32 @@ if (upgrading) {
   );
   if (renamed) console.log(`  renamed: ${renamed} -> ${MARKER}`);
   if (pruned.length) console.log(`  removed (no longer part of the contract): ${pruned.join(", ")}`);
-  console.log(`Your bundles/ and outer.index.md were not touched. Next: khb lint`);
+  console.log(`Your bundles/ and outer.index.md were not touched. Next: ${paint.cmd("khb lint")}`);
   const hint = updateHint(HUB);
   if (hint) console.log(hint);
 } else {
   const hub = resolve(dirArg ?? process.cwd());
 
   if (markerIn(hub)) {
-    console.error(`Already a KHB hub: ${hub}`);
-    console.error(`To refresh its contract docs:   khb upgrade`);
+    console.error(`${paintErr.bad("Already a KHB hub:")} ${paintErr.path(hub)}`);
+    console.error(`To refresh its contract docs:   ${paintErr.cmd("khb upgrade")}`);
     process.exit(1);
   }
 
   const { createHub } = await import("./lib/create");
   const { synced, entry } = createHub(hub, { name: nameOpt, description: descOpt });
 
-  console.log(`Hub created: ${hub}`);
+  console.log(`${paint.ok("Hub created:")} ${paint.path(hub)}`);
   console.log(`  khb.json, outer.index.md, bundles/, .gitignore, .gitattributes`);
   console.log(`  contract docs (package-owned, refreshed by 'khb upgrade'): ${synced.join(", ")}`);
-  console.log(`\nNext:`);
-  console.log(`  cd ${basename(hub)}`);
-  console.log(`  git init                              # optional, but recommended`);
-  console.log(`  khb new-bundle <name> "<scope>"       # your first bundle`);
+  console.log(`\n${paint.head("Next")}:`);
+  console.log(`  ${paint.cmd(`cd ${basename(hub)}`)}`);
+  console.log(`  ${paint.cmd("git init")}                              ${paint.dim("# optional, but recommended")}`);
+  console.log(
+    `  ${paint.cmd('khb new-bundle <name> "<scope>"')}       ${paint.dim("# your first bundle")}`,
+  );
   console.log(`\nThen open this folder with Claude or Codex — both load AGENTS.md and the workflow skills.`);
-  console.log(`Registered as "${entry.name}" — from any terminal, 'khb' comes back here and starts your agent.`);
+  console.log(
+    `Registered as ${paint.name(`"${entry.name}"`)} — from any terminal, '${paint.cmd("khb")}' comes back here and starts your agent.`,
+  );
 }

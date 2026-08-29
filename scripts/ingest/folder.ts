@@ -6,6 +6,7 @@ import { join, normPath } from "../lib/util";
 import type { Entry } from "../lib/ledger";
 import { acquireFile, newCounters, report, type Options } from "./acquire";
 import { detail, pos } from "../lib/log";
+import { paintErr } from "../lib/color";
 import { makeExcluder } from "./exclude";
 import type { Source } from "./index";
 
@@ -17,7 +18,7 @@ export async function ingestFolder(
   opts: Options,
 ) {
   if (!existsSync(s.path)) {
-    console.warn(`  missing folder, skipped: ${s.path}`);
+    console.warn(`  ${paintErr.warn("missing folder, skipped:")} ${s.path}`);
     return;
   }
 

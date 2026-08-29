@@ -10,6 +10,8 @@
 // trail for a pass that rewrites a bundle's raw/, and a run whose output you have to re-run
 // to reconstruct is worse than a noisy one. Nothing here changes what khb does.
 
+import { paint } from "./color";
+
 const RUN_START = Date.now();
 let itemStart = RUN_START;
 
@@ -25,7 +27,7 @@ export function pos(i: number, n: number): string {
 
 /** A blank-line-separated heading: a source, a bundle, a phase. */
 export function section(title: string) {
-  console.log(`\n${title}`);
+  console.log(`\n${paint.head(title)}`);
 }
 
 /** Indented context under a heading — settings, counts, where things are going. */
@@ -39,7 +41,7 @@ export function detail(msg: string) {
  */
 export function item(prefix: string, label: string) {
   itemStart = Date.now();
-  console.log(`  ${prefix} ${label}`);
+  console.log(`  ${paint.dim(prefix)} ${label}`);
 }
 
 /** A step inside the current item: what khb is about to do, or what it just learned. */

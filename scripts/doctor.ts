@@ -16,9 +16,11 @@ import { staleLocations, hubVersion } from "./lib/upgrade";
 import { diffSourcesYamlAll } from "./lib/schema";
 import { transcriberStatus } from "./lib/extract";
 import { version, MARKER, markerIn } from "./lib/paths";
-import { listHubs, canonical } from "./lib/registry";
+import { listHubs, canonical, loadConfig, agentFor, isAlive } from "./lib/registry";
+import { checkConfig } from "./lib/config-check";
 import { section, detail, totalElapsed } from "./lib/log";
 import { rejectUnknownFlags } from "./lib/args";
+import { paint } from "./lib/color";
 import { readdirSync, statSync } from "node:fs";
 import { relative } from "node:path";
 
@@ -26,9 +28,10 @@ rejectUnknownFlags(process.argv.slice(2), "khb doctor");
 
 /** Findings are advisory: doctor's exit code reports whether it ran, not what it found. */
 const findings: string[] = [];
-const flag = (msg: string, fix?: string) => findings.push(fix ? `${msg}\n      fix: ${fix}` : msg);
+const flag = (msg: string, fix?: string) =>
+  findings.push(fix ? `${msg}\n      ${paint.dim("fix:")} ${paint.cmd(fix)}` : msg);
 
-console.log(`khb doctor → ${HUB}`);
+console.log(`${paint.head("khb doctor")} → ${paint.path(HUB)}`);
 
 // ---- Hub identity -----------------------------------------------------------------------
 const marker = (() => {
@@ -78,6 +81,29 @@ if (stale.length)
 const registered = listHubs().some((entry) => canonical(entry.path) === canonical(HUB));
 detail(`registered    ${registered ? "yes" : "no — 'khb list' and 'khb go' will not offer it"}`);
 
+// ---- Machine config ---------------------------------------------------------------------
+// Not about this hub — about the file that lists every hub on the machine and names the
+// agent `khb go` launches. It belongs in doctor because it fails the same way a hub does:
+// quietly. `loadConfig` ignores what it cannot read, so a hand edit that broke the JSON
+// costs you every shortcut with no message anywhere. The rules live in lib/config-check.ts;
+// doctor reports them and `khb config fix` is the half that writes.
+section("Machine config");
+const configReport = checkConfig();
+detail(`file          ${configReport.path}`);
+if (!configReport.exists) detail(`state         not written yet — created the first time khb registers a hub`);
+else {
+  const machineConfig = loadConfig();
+  const agent = agentFor(machineConfig);
+  detail(`agent         ${agent ? `${agent.name} (${agent.spec.command})` : "none — khb go prints the path"}`);
+  const hubs = listHubs();
+  const missing = hubs.filter((entry) => !isAlive(entry)).length;
+  detail(`hubs          ${hubs.length} registered${missing ? `, ${missing} missing` : ""}`);
+  detail(
+    `schema        ${configReport.findings.length ? `${configReport.findings.length} finding(s)` : "clean"}`,
+  );
+}
+for (const finding of configReport.findings) flag(`config: ${finding.what}`, finding.fix);
+
 // ---- sources.yaml schema ----------------------------------------------------------------
 const schemaDiffs = diffSourcesYamlAll(HUB);
 if (schemaDiffs.length) {
@@ -108,7 +134,7 @@ const bundles = listBundles();
 section(`Bundles (${bundles.length})`);
 
 if (!bundles.length) {
-  detail("none yet — khb new-bundle <name> \"scope\"");
+  detail(`none yet — ${paint.cmd('khb new-bundle <name> "scope"')}`);
 } else {
   const summaries = bundles.map((bundle) => {
     const dir = join(BUNDLES, bundle);
@@ -169,9 +195,12 @@ if (!transcriber.ready)
 
 // ---- Findings ---------------------------------------------------------------------------
 section(findings.length ? `Findings (${findings.length})` : "Findings");
-if (!findings.length) detail("none — nothing here needs attention.");
-else for (const finding of findings) detail(`- ${finding}`);
+if (!findings.length) detail(paint.ok("none — nothing here needs attention."));
+else for (const finding of findings) detail(`${paint.warn("-")} ${finding}`);
 
 section("Next");
-detail("khb lint      structural and OKF validation (doctor does not duplicate it)");
-console.log(`\ndoctor: ${findings.length} finding(s) across ${bundles.length} bundle(s) in ${totalElapsed()}`);
+detail(`${paint.cmd("khb lint")}      structural and OKF validation (doctor does not duplicate it)`);
+console.log(
+  `\n${paint.head("doctor")}: ${findings.length ? paint.warn(`${findings.length} finding(s)`) : paint.ok("no findings")} ` +
+    `across ${bundles.length} bundle(s) in ${totalElapsed()}`,
+);

@@ -31,9 +31,13 @@ import {
 } from "./lib/registry";
 import { takeFlag, takeOpt, rejectUnknownFlags } from "./lib/args";
 import { detail, section, totalElapsed } from "./lib/log";
+import { paint, paintErr } from "./lib/color";
 
 const cmd = process.env.KHB_SUBCOMMAND ?? "go";
 const argv = process.argv.slice(2);
+
+/** Plural on purpose: dropping several dead shortcuts after a reorg is the common case. */
+const FORGET_USAGE = "khb forget <name|path> [more…]";
 
 
 const ago = (iso?: string): string => {
@@ -44,13 +48,16 @@ const ago = (iso?: string): string => {
 };
 
 function printList(hubs: HubEntry[]): void {
-  const w = Math.max(4, ...hubs.map((h) => h.name.length));
-  hubs.forEach((h, i) => {
-    const live = isAlive(h);
-    const tag = live ? String(i + 1).padStart(2) : " x";
-    const note = live ? ago(h.lastUsed) : "MISSING";
-    console.log(`  ${tag}  ${h.name.padEnd(w)}  ${h.description}`);
-    console.log(`      ${" ".repeat(w)}  ${h.path}${note ? `  (${note})` : ""}`);
+  const nameWidth = Math.max(4, ...hubs.map((hub) => hub.name.length));
+  hubs.forEach((hub, index) => {
+    const live = isAlive(hub);
+    // Pad first, paint second, always: an escape sequence has width in the string and none
+    // on the screen, so padding an already-coloured value misaligns the column.
+    const tag = live ? paint.cmd(String(index + 1).padStart(2)) : paint.bad(" x");
+    const used = ago(hub.lastUsed);
+    const note = live ? (used ? paint.dim(`  (${used})`) : "") : `  ${paint.bad("(MISSING)")}`;
+    console.log(`  ${tag}  ${paint.name(hub.name.padEnd(nameWidth))}  ${hub.description}`);
+    console.log(`      ${" ".repeat(nameWidth)}  ${paint.path(hub.path)}${note}`);
   });
 }
 
@@ -59,10 +66,10 @@ function printList(hubs: HubEntry[]): void {
  * The interactive path is `wizard()`; this is its non-TTY twin.
  */
 function noHubs(): never {
-  console.log(`No hubs registered on this machine (${CONFIG}).\n`);
-  console.log(`Create one:              khb init <dir>`);
-  console.log(`Or register an existing:  khb go <dir>       (any path holding a khb.json)`);
-  console.log(`\nRun 'khb' on a terminal and it walks you through the first one.`);
+  console.log(`No hubs registered on this machine ${paint.path(`(${CONFIG})`)}.\n`);
+  console.log(`Create one:              ${paint.cmd("khb init <dir>")}`);
+  console.log(`Or register an existing:  ${paint.cmd("khb go <dir>")}       ${paint.dim("(any path holding a khb.json)")}`);
+  console.log(`\nRun '${paint.cmd("khb")}' on a terminal and it walks you through the first one.`);
   process.exit(0);
 }
 
@@ -188,17 +195,18 @@ function finish(stdin: typeof process.stdin, line: string): string {
  */
 function launch(hub: HubEntry, agentName?: string, noAgent = false): never {
   touchHub(hub.path);
-  console.log(`\n${hub.name} — ${hub.path}`);
-  console.log(`  cd ${/\s/.test(hub.path) ? JSON.stringify(hub.path) : hub.path}`);
+  console.log(`\n${paint.name(hub.name)} — ${paint.path(hub.path)}`);
+  console.log(`  ${paint.cmd(`cd ${/\s/.test(hub.path) ? JSON.stringify(hub.path) : hub.path}`)}`);
 
   const cfg = loadConfig();
   const agent = noAgent ? undefined : agentFor(cfg, agentName);
   if (!agent) {
-    if (!noAgent) console.log(`\nNo default agent set — khb agent <claude|codex> to set one.`);
+    if (!noAgent)
+      console.log(`\nNo default agent set — ${paint.cmd("khb agent <claude|codex>")} to set one.`);
     process.exit(0);
   }
 
-  console.log(`  launching ${agent.name}…\n`);
+  console.log(`  ${paint.dim(`launching ${agent.name}…`)}\n`);
   // shell:true on Windows so PATH shims (claude.cmd, codex.cmd) resolve; stdio inherited
   // so the agent owns the terminal from here.
   const r = spawnSync(agent.spec.command, agent.spec.args ?? [], {
@@ -207,8 +215,10 @@ function launch(hub: HubEntry, agentName?: string, noAgent = false): never {
     shell: process.platform === "win32",
   });
   if (r.error) {
-    console.error(`\nCould not launch ${agent.name} (${agent.spec.command}): ${r.error.message}`);
-    console.error(`Fix the command:  khb agent ${agent.name} --command <exe>`);
+    console.error(
+      `\n${paintErr.bad(`Could not launch ${agent.name}`)} (${agent.spec.command}): ${r.error.message}`,
+    );
+    console.error(`Fix the command:  ${paintErr.cmd(`khb agent ${agent.name} --command <exe>`)}`);
     process.exit(1);
   }
   process.exit(r.status ?? 0);
@@ -248,7 +258,7 @@ function askWith(question: string, fallback: string): string {
 
 async function wizard(): Promise<never> {
   const cfg = loadConfig();
-  console.log(`khb ${version()} — Knowledge Hub Builder\n`);
+  console.log(`${paint.head(`khb ${version()}`)} — Knowledge Hub Builder\n`);
   console.log(`No hubs on this machine yet. Let's set one up.\n`);
   console.log(`A hub is a folder of plain markdown that holds your knowledge. khb does the`);
   console.log(`mechanical half — pulling documents in, extracting text, checking structure —`);
@@ -257,34 +267,38 @@ async function wizard(): Promise<never> {
   // 1. Where. Default under the home directory rather than cwd: a hub is long-lived, and
   //    the folder someone happens to be standing in when they first run khb rarely is.
   const suggested = join(homedir(), "knowledge");
-  const dir = resolve(askWith(`1/5  Where should the hub live?`, suggested));
+  const dir = resolve(askWith(`${paint.head("1/5")}  Where should the hub live?`, suggested));
 
   if (markerIn(dir)) {
     // Already a hub — the machine simply had not heard of it. Adopt, do not re-create.
     const entry = registerHub(dir);
-    console.log(`\n${dir} is already a hub — added it to the list as "${entry.name}".`);
-    console.log(`Open it:  khb`);
+    console.log(
+      `\n${paint.path(dir)} is already a hub — added it to the list as ${paint.name(`"${entry.name}"`)}.`,
+    );
+    console.log(`Open it:  ${paint.cmd("khb")}`);
     process.exit(0);
   }
   if (existsSync(dir) && readdirSync(dir).length) {
-    const ok = askWith(`     ${dir} is not empty. Put the hub there anyway? [y/N]`, "n");
+    const ok = askWith(`     ${paint.warn(`${dir} is not empty.`)} Put the hub there anyway? [y/N]`, "n");
     if (!/^y/i.test(ok)) {
-      console.log(`\nStopped. Nothing was created. Re-run 'khb' to start again.`);
+      console.log(`\nStopped. Nothing was created. Re-run '${paint.cmd("khb")}' to start again.`);
       process.exit(0);
     }
   }
 
   // 2-3. Identity. Both land in the hub's own khb.json, so they travel with the folder.
-  const name = askWith(`2/5  What should it be called?`, basename(dir) || "knowledge");
-  const description = askWith(`3/5  One line describing it (optional)?`, "");
+  const name = askWith(`${paint.head("2/5")}  What should it be called?`, basename(dir) || "knowledge");
+  const description = askWith(`${paint.head("3/5")}  One line describing it (optional)?`, "");
 
   // 4. The agent. Detected rather than asked blind — being offered a tool you do not have
   //    installed is a worse first question than being told which one was found.
   const found = ["claude", "codex"].filter(onPath);
-  console.log(`\n4/5  Which agent should 'khb' open the hub with?`);
-  for (const [i, k] of Object.keys(cfg.agents).entries())
-    console.log(`       ${i + 1}) ${k}${found.includes(k) ? "  (found on PATH)" : ""}`);
-  console.log(`       or type any command, or 'none' to just print the path`);
+  console.log(`\n${paint.head("4/5")}  Which agent should '${paint.cmd("khb")}' open the hub with?`);
+  for (const [index, agentKey] of Object.keys(cfg.agents).entries())
+    console.log(
+      `       ${paint.cmd(String(index + 1))}) ${agentKey}${found.includes(agentKey) ? paint.ok("  (found on PATH)") : ""}`,
+    );
+  console.log(paint.dim(`       or type any command, or 'none' to just print the path`));
   const agentAnswer = askWith(`     Choice?`, found[0] ?? "none");
   const keys = Object.keys(cfg.agents);
   const picked =
@@ -292,7 +306,9 @@ async function wizard(): Promise<never> {
 
   // 5. A first bundle, because an empty hub has nowhere to put anything and the next
   //    question a new user hits is where material goes. Skippable with '-'.
-  console.log(`\n5/5  A bundle is a unit of ownership — you, a team, a client, a project.`);
+  console.log(
+    `\n${paint.head("5/5")}  A bundle is a unit of ownership — you, a team, a client, a project.`,
+  );
   const bundle = askWith(`     Name your first one ('-' to skip)?`, "personal");
   const scope =
     bundle === "-" ? "" : askWith(`     One line on what it covers?`, "TODO scope");
@@ -300,7 +316,7 @@ async function wizard(): Promise<never> {
   // ---- act ----
   const { createHub } = await import("./lib/create");
   const { hub, entry } = createHub(dir, { name, description });
-  console.log(`\nCreated ${hub}`);
+  console.log(`\n${paint.ok("Created")} ${paint.path(hub)}`);
 
   // scaffold.ts resolves the hub through util.ts at import time, so the hub must be
   // announced before it is loaded — hence the import inside the branch, not at the top.
@@ -310,11 +326,13 @@ async function wizard(): Promise<never> {
     const { createBundle, VALID_NAME } = await import("./lib/scaffold");
     if (VALID_NAME.test(bundle)) {
       createBundle(bundle, scope);
-      console.log(`  bundles/${bundle}/ — registered in outer.index.md`);
+      console.log(`  ${paint.name(`bundles/${bundle}/`)} — registered in outer.index.md`);
       madeBundle = true;
     } else {
-      console.log(`  skipped the bundle: '${bundle}' is not a valid name (lowercase, digits, hyphens)`);
-      console.log(`  add one later:  khb new-bundle <name> "<scope>"`);
+      console.log(
+        `  ${paint.warn("skipped the bundle:")} '${bundle}' is not a valid name (lowercase, digits, hyphens)`,
+      );
+      console.log(`  add one later:  ${paint.cmd('khb new-bundle <name> "<scope>"')}`);
     }
   }
 
@@ -325,11 +343,15 @@ async function wizard(): Promise<never> {
     cfg.defaultAgent = picked;
   }
   saveConfig(cfg);
-  console.log(`  registered as "${entry.name}", agent: ${cfg.defaultAgent || "none"}`);
+  console.log(`  registered as ${paint.name(`"${entry.name}"`)}, agent: ${cfg.defaultAgent || "none"}`);
 
-  console.log(`\nFrom any terminal, 'khb' comes back here${cfg.defaultAgent ? ` and starts ${cfg.defaultAgent}` : ""}.`);
+  console.log(
+    `\nFrom any terminal, '${paint.cmd("khb")}' comes back here${cfg.defaultAgent ? ` and starts ${cfg.defaultAgent}` : ""}.`,
+  );
   if (madeBundle)
-    console.log(`Next: add sources to bundles/${bundle}/sources.yaml, then 'khb ingest ${bundle}'.`);
+    console.log(
+      `Next: add sources to ${paint.path(`bundles/${bundle}/sources.yaml`)}, then ${paint.cmd(`khb ingest ${bundle}`)}.`,
+    );
 
   const go = askWith(`\nOpen it now?`, "y");
   if (!/^y/i.test(go)) process.exit(0);
@@ -348,12 +370,19 @@ if (cmd === "list") {
   }
   if (!hubs.length) noHubs();
 
-  console.log(`Hubs on this machine  (${CONFIG})\n`);
+  console.log(`${paint.head("Hubs on this machine")}  ${paint.path(`(${CONFIG})`)}\n`);
   printList(hubs);
   const cfg = loadConfig();
   const agent = agentFor(cfg);
-  console.log(`\nDefault agent: ${agent ? `${agent.name} (${agent.spec.command})` : "none"}`);
-  console.log(`Open one:      khb go ${hubs[0].name}    |    khb go 1    |    khb`);
+  console.log(
+    `\nDefault agent: ${agent ? `${paint.name(agent.name)} ${paint.dim(`(${agent.spec.command})`)}` : "none"}`,
+  );
+  console.log(
+    `Open one:      ${paint.cmd(`khb go ${hubs[0].name}`)}    |    ${paint.cmd("khb go 1")}    |    ${paint.cmd("khb")}`,
+  );
+  console.log(
+    `Drop one:      ${paint.cmd("khb forget <name>")}   ${paint.dim("(or several; the folders are left untouched)")}`,
+  );
   process.exit(0);
 }
 
@@ -402,8 +431,11 @@ function repairPaths(newPath: string, fromOpt: string | undefined, dryRun: boole
       oldPath = resolve(certain[0].path);
       oldSpellings.push(certain[0].path);
     } else if (certain.length > 1) {
-      console.error(`Several registered hubs share this hub's identity — name the old path:`);
-      for (const h of certain) console.error(`  khb update ${newPath} --path --from ${h.path}`);
+      console.error(
+        paintErr.warn(`Several registered hubs share this hub's identity — name the old path:`),
+      );
+      for (const candidate of certain)
+        console.error(`  ${paintErr.cmd(`khb update ${newPath} --path --from ${candidate.path}`)}`);
       process.exit(1);
     } else if (likely.length === 1) {
       // A name match is circumstantial — hubs registered before khb recorded an identity
@@ -411,18 +443,21 @@ function repairPaths(newPath: string, fromOpt: string | undefined, dryRun: boole
       const guess = likely[0];
       const yes = ask(`Was this hub at ${guess.path} (registered as "${guess.name}")? [y/N] `);
       if (yes === undefined) {
-        console.error(`This hub carries no identity stamp, so the old path cannot be proven.`);
-        console.error(`Likely: ${guess.path}`);
-        console.error(`Confirm it:  khb update --path --from ${guess.path}`);
+        console.error(paintErr.warn(`This hub carries no identity stamp, so the old path cannot be proven.`));
+        console.error(`Likely: ${paintErr.path(guess.path)}`);
+        console.error(`Confirm it:  ${paintErr.cmd(`khb update --path --from ${guess.path}`)}`);
         process.exit(1);
       }
       if (!/^y/i.test(yes.trim())) process.exit(0);
       oldPath = resolve(guess.path);
       oldSpellings.push(guess.path);
     } else if (likely.length > 1) {
-      console.error(`No registered hub matches this one's identity, but these went missing:`);
-      for (const h of likely) console.error(`  ${h.name}  ${h.path}`);
-      console.error(`\nIf one of those is this hub, say so:  khb update --path --from <old-path>`);
+      console.error(paintErr.warn(`No registered hub matches this one's identity, but these went missing:`));
+      for (const candidate of likely)
+        console.error(`  ${paintErr.name(candidate.name)}  ${paintErr.path(candidate.path)}`);
+      console.error(
+        `\nIf one of those is this hub, say so:  ${paintErr.cmd("khb update --path --from <old-path>")}`,
+      );
       process.exit(1);
     }
   }
@@ -439,9 +474,11 @@ function repairPaths(newPath: string, fromOpt: string | undefined, dryRun: boole
   }
 
   if (sameLocation(oldPath, newPath)) {
-    console.error(`Old and new paths are the same directory:`);
-    console.error(`  ${newPath}`);
-    console.error(`There is no move to repair. Name the real old path:  khb update --path --from <old-path>`);
+    console.error(paintErr.bad(`Old and new paths are the same directory:`));
+    console.error(`  ${paintErr.path(newPath)}`);
+    console.error(
+      `There is no move to repair. Name the real old path:  ${paintErr.cmd("khb update --path --from <old-path>")}`,
+    );
     process.exit(1);
   }
 
@@ -469,9 +506,10 @@ function repairPaths(newPath: string, fromOpt: string | undefined, dryRun: boole
     detail(`no old-path references in ${scanned} text file(s) — nothing inside the hub to fix`);
   } else {
     detail(`${total} reference(s) in ${hits.length} of ${scanned} text file(s):`);
-    for (const h of hits) console.log(`    ${String(h.count).padStart(3)}  ${h.file}`);
+    for (const hit of hits) console.log(`    ${paint.warn(String(hit.count).padStart(3))}  ${hit.file}`);
   }
-  for (const f of failed) console.error(`    could not write ${f.file}: ${f.reason}`);
+  for (const failure of failed)
+    console.error(`    ${paintErr.bad("could not write")} ${failure.file}: ${failure.reason}`);
 
   if (dryRun) {
     detail(`nothing was written`);
@@ -497,17 +535,17 @@ function repairSchema(hub: string, dryRun: boolean): void {
     detail(`sources.yaml already current in every bundle`);
     return;
   }
-  const totalFields = diffs.reduce((n, d) => n + d.changes.length, 0);
+  const totalFields = diffs.reduce((total, diff) => total + diff.changes.length, 0);
   detail(`${totalFields} field(s) across ${diffs.length} bundle(s):`);
-  for (const d of diffs) {
-    console.log(`    ${relative(hub, d.path)}`);
-    for (const c of d.changes) console.log(`      ${c}`);
+  for (const diff of diffs) {
+    console.log(`    ${paint.name(relative(hub, diff.path))}`);
+    for (const change of diff.changes) console.log(`      ${paint.ok(change)}`);
   }
   if (dryRun) {
     detail(`nothing was written`);
     return;
   }
-  for (const d of diffs) applySourcesDiff(d);
+  for (const diff of diffs) applySourcesDiff(diff);
   detail(`${diffs.length} file(s) updated`);
 }
 
@@ -523,14 +561,16 @@ if (cmd === "update") {
   // The hub is wherever it is now: the path given, else the hub containing cwd.
   const newPath = canonical(dest ?? findHub() ?? process.cwd());
   if (!markerIn(newPath)) {
-    console.error(`Not a KHB hub: ${newPath}`);
-    console.error(`Run 'khb update' from inside the moved hub, or name it: khb update <new-path>`);
+    console.error(`${paintErr.bad("Not a KHB hub:")} ${paintErr.path(newPath)}`);
+    console.error(
+      `Run '${paintErr.cmd("khb update")}' from inside the moved hub, or name it: ${paintErr.cmd("khb update <new-path>")}`,
+    );
     process.exit(1);
   }
 
   // State the whole plan before doing any of it — same contract as ingest: a command that
   // rewrites files says what it is about to rewrite, and where, before the first write.
-  console.log(`khb update${dryRun ? " (dry run)" : ""}`);
+  console.log(`${paint.head("khb update")}${dryRun ? paint.dim(" (dry run)") : ""}`);
 
   let failed = false;
   if (both || doPath) {
@@ -542,28 +582,69 @@ if (cmd === "update") {
     repairSchema(newPath, dryRun);
   }
 
-  console.log(`\ndone in ${totalElapsed()}`);
-  if (dryRun) console.log(`Re-run without --dry-run to apply.`);
-  else console.log(`Next: khb lint`);
+  console.log(`\n${failed ? paint.warn("done") : paint.ok("done")} in ${totalElapsed()}`);
+  if (dryRun) console.log(`Re-run without ${paint.cmd("--dry-run")} to apply.`);
+  else console.log(`Next: ${paint.cmd("khb lint")}`);
   process.exit(failed ? 1 : 0);
 }
 
 // --------------------------------------------------------------------------- forget
 
 if (cmd === "forget") {
-  rejectUnknownFlags(argv, "khb forget <name|path>");
-  const [what] = argv;
-  if (!what) {
-    console.error(`Usage: khb forget <name|path>`);
-    console.error(`Removes the shortcut only — the hub folder is left untouched.`);
+  rejectUnknownFlags(argv, FORGET_USAGE);
+  // Naming a hub means knowing what it is called here, and the name in the shortcut list
+  // is not always the folder's — so the answer to a bare `khb forget` is where to look it
+  // up, not just the usage line it already failed to satisfy.
+  if (!argv.length) {
+    console.error(`Usage: ${paintErr.cmd(FORGET_USAGE)}`);
+    console.error(`See the names of every hub on this machine:  ${paintErr.cmd("khb list")}`);
+    console.error(paintErr.dim(`Removes shortcuts only — the hub folders are left untouched.`));
     process.exit(1);
   }
-  const gone = forgetHub(findHubEntry(what)?.path ?? what);
-  if (!gone) {
-    console.error(`Not registered: ${what}`);
+
+  // Resolve every target BEFORE removing any of them. A target may be a list position
+  // (`khb forget 2`), and positions renumber the moment the first entry is gone — resolving
+  // as we went would drop the wrong hub from the second name onward. Two spellings of one
+  // hub collapse here as well, so `khb forget work D:\work` is one removal rather than one
+  // removal and a mystery "not registered".
+  const seen = new Set<string>();
+  const targets: { asked: string; entry?: HubEntry }[] = [];
+  for (const asked of argv) {
+    const entry = findHubEntry(asked);
+    const key = entry?.path ?? asked;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    targets.push({ asked, entry });
+  }
+
+  const gone: HubEntry[] = [];
+  const unknown: string[] = [];
+  for (const target of targets) {
+    // Best effort, like `rm`: a typo among five names should not cost you the other four,
+    // and forgetting is reversible — any khb command run inside a hub re-registers it.
+    const dropped = target.entry && forgetHub(target.entry.path);
+    if (dropped) gone.push(dropped);
+    else unknown.push(target.asked);
+  }
+
+  if (gone.length === 1) {
+    const [only] = gone;
+    console.log(
+      `${paint.ok("Forgot")} ${paint.name(only.name)} ${paint.path(`(${only.path})`)}. The folder itself is untouched.`,
+    );
+  } else if (gone.length) {
+    console.log(`${paint.ok(`Forgot ${gone.length} shortcuts`)}:`);
+    const nameWidth = Math.max(...gone.map((entry) => entry.name.length));
+    for (const entry of gone)
+      console.log(`  ${paint.name(entry.name.padEnd(nameWidth))}  ${paint.path(entry.path)}`);
+    console.log(paint.dim(`The folders themselves are untouched.`));
+  }
+
+  for (const name of unknown) console.error(`${paintErr.bad("Not registered:")} ${name}`);
+  if (unknown.length) {
+    console.error(`Registered hubs:  ${paintErr.cmd("khb list")}`);
     process.exit(1);
   }
-  console.log(`Forgot ${gone.name} (${gone.path}). The folder itself is untouched.`);
   process.exit(0);
 }
 
@@ -578,20 +659,27 @@ if (cmd === "agent") {
 
   if (!name && !command) {
     const cur = agentFor(cfg);
-    console.log(`Default agent: ${cur ? `${cur.name} (${cur.spec.command})` : "none"}`);
-    console.log(`\nKnown:`);
-    for (const [k, v] of Object.entries(cfg.agents))
-      console.log(`  ${k === cfg.defaultAgent ? "*" : " "} ${k.padEnd(8)} ${[v.command, ...(v.args ?? [])].join(" ")}`);
-    console.log(`\nSet:   khb agent codex`);
-    console.log(`       khb agent claude --command claude --args "--continue"`);
-    console.log(`Off:   khb agent none        (khb go just prints the path)`);
+    console.log(
+      `Default agent: ${cur ? `${paint.name(cur.name)} ${paint.dim(`(${cur.spec.command})`)}` : "none"}`,
+    );
+    console.log(`\n${paint.head("Known")}:`);
+    for (const [agentKey, agentSpec] of Object.entries(cfg.agents))
+      console.log(
+        `  ${agentKey === cfg.defaultAgent ? paint.ok("*") : " "} ${paint.name(agentKey.padEnd(8))} ` +
+          paint.dim([agentSpec.command, ...(agentSpec.args ?? [])].join(" ")),
+      );
+    console.log(`\nSet:   ${paint.cmd("khb agent codex")}`);
+    console.log(`       ${paint.cmd('khb agent claude --command claude --args "--continue"')}`);
+    console.log(
+      `Off:   ${paint.cmd("khb agent none")}        ${paint.dim("(khb go just prints the path)")}`,
+    );
     process.exit(0);
   }
 
   if (name === "none") {
     cfg.defaultAgent = "";
     saveConfig(cfg);
-    console.log(`Default agent cleared — khb go will print the hub path and stop.`);
+    console.log(`Default agent cleared — ${paint.cmd("khb go")} will print the hub path and stop.`);
     process.exit(0);
   }
 
@@ -604,8 +692,10 @@ if (cmd === "agent") {
   cfg.defaultAgent = key;
   saveConfig(cfg);
   const spec = cfg.agents[key];
-  console.log(`Default agent: ${key} — ${[spec.command, ...(spec.args ?? [])].join(" ")}`);
-  console.log(`Saved to ${CONFIG}`);
+  console.log(
+    `Default agent: ${paint.name(key)} — ${paint.dim([spec.command, ...(spec.args ?? [])].join(" "))}`,
+  );
+  console.log(paint.dim(`Saved to ${CONFIG}`));
   process.exit(0);
 }
 
@@ -623,13 +713,15 @@ if (what) {
   let entry = findHubEntry(what);
   if (!entry && existsSync(resolve(what)) && markerIn(resolve(what))) entry = registerHub(resolve(what));
   if (!entry) {
-    console.error(`No such hub: ${what}`);
-    console.error(`Registered hubs:  khb list`);
+    console.error(`${paintErr.bad("No such hub:")} ${what}`);
+    console.error(`Registered hubs:  ${paintErr.cmd("khb list")}`);
     process.exit(1);
   }
   if (!isAlive(entry)) {
-    console.error(`${entry.name} is registered at ${entry.path}, but that is no longer a hub.`);
-    console.error(`Drop the shortcut:  khb forget ${entry.name}`);
+    console.error(
+      `${paintErr.name(entry.name)} is registered at ${paintErr.path(entry.path)}, but ${paintErr.bad("that is no longer a hub")}.`,
+    );
+    console.error(`Drop the shortcut:  ${paintErr.cmd(`khb forget ${entry.name}`)}`);
     process.exit(1);
   }
   if (wantPath) {
@@ -661,9 +753,9 @@ if (hubs.length === 1) {
   );
   if (answer === undefined) {
     // No terminal to ask on — say where it is and how to go there, then stop.
-    console.log(`One hub registered:\n`);
+    console.log(`${paint.head("One hub registered")}:\n`);
     printList([only]);
-    console.log(`\nOpen it:  khb go ${only.name}`);
+    console.log(`\nOpen it:  ${paint.cmd(`khb go ${only.name}`)}`);
     process.exit(0);
   }
   if (/^n/i.test(answer.trim())) process.exit(0);
@@ -671,21 +763,21 @@ if (hubs.length === 1) {
 }
 
 // More than one: show the list and take a pick.
-console.log(`Hubs on this machine  (${CONFIG})\n`);
+console.log(`${paint.head("Hubs on this machine")}  ${paint.path(`(${CONFIG})`)}\n`);
 printList(hubs);
 
 if (wantPath) process.exit(0); // ambiguous: a script must name the hub it means
 
 const answer = ask(`\nOpen which? [1-${hubs.length}, Esc to cancel] `);
 if (answer === undefined) {
-  console.log(`\nOpen one:  khb go ${hubs[0].name}    |    khb go 1`);
+  console.log(`\nOpen one:  ${paint.cmd(`khb go ${hubs[0].name}`)}    |    ${paint.cmd("khb go 1")}`);
   process.exit(0);
 }
 const picked = answer.trim();
 if (!picked) process.exit(0);
 const chosen = findHubEntry(picked);
 if (!chosen || !isAlive(chosen)) {
-  console.error(`Not a listed hub: ${picked}`);
+  console.error(`${paintErr.bad("Not a listed hub:")} ${picked}`);
   process.exit(1);
 }
 launch(chosen, agentName, noAgent);

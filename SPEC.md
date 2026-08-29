@@ -123,9 +123,12 @@ acting on them** — an agent can never read a protocol the CLI no longer implem
 │   ├── lint.ts                # enforce skills/lint/SKILL.md across the hub
 │   ├── doctor.ts              # read-only state report; writes nothing, repairs nothing
 │   ├── visualize.ts           # serve the live bundle graph from indexes + refs
+│   ├── config.ts              # khb config: view / edit / check / fix the machine config
 │   ├── ingest/                # folder.ts / files.ts / web.ts → acquire.ts → bundle/raw
 │   └── lib/
 │       ├── args.ts            # argv helpers; what they consume they remove, leaving positionals
+│       ├── color.ts           # semantic terminal colour; one palette per stream
+│       ├── config-check.ts    # the machine config's schema: findings + the repairs for them
 │       ├── create.ts          # making a hub, shared by `khb init` and the first-run wizard
 │       ├── extract.ts         # every local extractor + the content-hash cache
 │       ├── graph.ts           # graph data for the visualizer — read-only, never writes
@@ -187,8 +190,9 @@ Three properties define it:
   Delete it and nothing is lost — the next command run inside each hub puts it back.
 - **It fills itself in.** Every khb command that resolves a hub registers it, so hubs made
   before the registry existed appear the first time anything is run in them. There is no
-  migration and no `register` command to remember. `khb forget <name>` drops a shortcut and
-  never touches the folder.
+  migration and no `register` command to remember. `khb forget <name> [more…]` drops one or more
+  shortcuts and never touches the folders. Every target is resolved before any is removed,
+  so list positions still mean what they meant when the command was typed.
 - **The hub is the authority on its own identity.** `name` and `description` are read out
   of the hub's `khb.json` (`khb init --name --description`, or edit the file), so a hub
   moved to another machine or cloned by a colleague describes itself the same way there.
@@ -196,15 +200,27 @@ Three properties define it:
   the bundles inside. `khb upgrade` merges rather than replaces the marker, so keys khb
   does not own survive an upgrade.
 
-The commands over it are `khb list`, `khb go`, `khb agent`, `khb update` and `khb forget` —
-the only ones that run **outside** a hub, and therefore the only ones that skip hub
-resolution and the version drift check. A bare `khb` is `khb go`: one hub asks to open it,
+The commands over it are `khb list`, `khb go`, `khb agent`, `khb update`, `khb forget` and
+`khb config` — the only ones that run **outside** a hub, and therefore the only ones that
+skip hub resolution and the version drift check. A bare `khb` is `khb go`: one hub asks to open it,
 several show the list and take a pick, none prints the help.
 
 `khb go` ends by launching your configured agent with the hub as its working directory.
 No process can change its parent shell's directory, so `khb go` prints the `cd` line for
 the human and passes the path to the agent as cwd — `khb go --path <name>` prints only the
 path, for `cd "$(khb go --path work)"`. `khb agent none` turns the launch off entirely.
+
+**The file is hand-editable, so it is also checked.** `loadConfig` is deliberately
+forgiving — unknown keys ignored, a file that will not parse treated as empty — which is
+right at load time and wrong as the only feedback anyone gets: a typo'd `defaultagent`
+silently does nothing, and broken JSON silently costs you every shortcut. So the schema
+is stated once, in `lib/config-check.ts`, as findings with repairs attached. `khb config
+check` lists them, `khb config fix` applies the mechanical ones, and `khb doctor` reports
+them without writing. A finding carries a repair only when the fix loses nothing:
+canonicalizing a path, merging a duplicate entry, re-deriving a stale name from the hub's
+own marker. Anything needing a human decision — which of two same-named hubs to rename,
+whether a missing folder was deleted or is on an unplugged drive — is reported with the
+command to run and left alone.
 
 Every path stored in or compared against the registry is canonicalized first (`realpath`,
 case-folded on Windows). One directory has several true names — `C:\Users\MANASV~1\…` and

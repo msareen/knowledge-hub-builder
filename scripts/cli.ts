@@ -2,6 +2,7 @@
 // khb — the CLI. Subcommands are loaded lazily: `init` must run before a hub exists,
 // so nothing that resolves a hub may be imported at module scope.
 import { version, findHub, markerIn, MARKER } from "./lib/paths";
+import { paint, paintErr } from "./lib/color";
 
 const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; desc: string }> = {
   init: { load: () => import("./init"), usage: 'khb init [dir] [--name N] [--description "…"]', desc: "create a hub here (or in dir)" },
@@ -36,14 +37,23 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
     usage: "khb update [new-path] [--path|-p] [--schema|-s] [--from <old>] [--dry-run]",
     desc: "repair a moved hub's paths, and/or backfill sources.yaml",
   },
-  forget: { load: () => import("./hubs"), usage: "khb forget <name|path>", desc: "drop a hub from the list (folder untouched)" },
+  forget: {
+    load: () => import("./hubs"),
+    usage: "khb forget <name|path> [more…]",
+    desc: "drop one or more hubs from the list (folders untouched)",
+  },
+  config: {
+    load: () => import("./config"),
+    usage: "khb config [view|edit|check|fix|path]",
+    desc: "the machine config: show it, open it, validate it, repair it",
+  },
 };
 
 /**
  * Commands that work *outside* a hub, against ~/.khb/hubs-config.json. They must not
  * resolve or upgrade a hub — their whole job is running before you are in one.
  */
-const REGISTRY_COMMANDS = new Set(["list", "go", "agent", "forget", "update"]);
+const REGISTRY_COMMANDS = new Set(["list", "go", "agent", "forget", "update", "config"]);
 
 // Short forms that just resolve to a canonical command above — kept out of COMMANDS
 // itself so help text lists each command once. `-v` is taken by --version, so
@@ -79,19 +89,20 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
   const usages = Object.values(COMMANDS).map((c) => c.usage.length);
   const width = Math.max(...usages.filter((n) => n <= CAP));
   const printSection = (title: string, names: string[]) => {
-    console.log(title);
+    console.log(paint.head(title));
     for (const name of names) {
-      const c = COMMANDS[name];
-      if (c.usage.length > width) {
-        console.log(`  ${c.usage}`);
-        console.log(`  ${" ".repeat(width)}   ${c.desc}`);
+      const entry = COMMANDS[name];
+      // Pad before painting: escape sequences have width in the string and none on screen.
+      if (entry.usage.length > width) {
+        console.log(`  ${paint.cmd(entry.usage)}`);
+        console.log(`  ${" ".repeat(width)}   ${entry.desc}`);
       } else {
-        console.log(`  ${c.usage.padEnd(width)}   ${c.desc}`);
+        console.log(`  ${paint.cmd(entry.usage.padEnd(width))}   ${entry.desc}`);
       }
     }
   };
 
-  console.log(`khb ${version()} — Knowledge Hub Builder`);
+  console.log(`${paint.head(`khb ${version()}`)} — Knowledge Hub Builder`);
   console.log();
   console.log(`khb is the supporting tool: it handles deterministic extraction, file plumbing,`);
   console.log(`validation, and export. Your AI agent — Claude, Codex, Gemini, or another`);
@@ -109,14 +120,16 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
   );
   console.log();
 
-  console.log(`Global:  --hub <dir>              operate on that hub instead of searching upward from cwd`);
-  console.log(`         help | --help | -h       this help          --version | -v   version`);
-  console.log(`Env:     KHB_HUB                  same as --hub`);
-  console.log(`         KHB_HOME                 where the hub list lives (default ~/.khb)`);
-  console.log(`         KHB_NO_AUTO_UPGRADE      don't refresh a hub's contract docs on version drift`);
-  console.log(`Exit:    0 on success, 1 on a usage error or a failure. An unknown option is an error;`);
-  console.log(`         a source khb cannot extract is not — it becomes a pending row in log.md.`);
-  console.log(`Docs:    https://github.com/msareen/knowledge-hub-builder`);
+  const label = (text: string) => paint.head(text.padEnd(9));
+  console.log(`${label("Global:")}${paint.cmd("--hub <dir>")}              operate on that hub instead of searching upward from cwd`);
+  console.log(`${" ".repeat(9)}${paint.cmd("help | --help | -h")}       this help          ${paint.cmd("--version | -v")}   version`);
+  console.log(`${label("Env:")}${paint.cmd("KHB_HUB")}                  same as --hub`);
+  console.log(`${" ".repeat(9)}${paint.cmd("KHB_HOME")}                 where the hub list lives (default ~/.khb)`);
+  console.log(`${" ".repeat(9)}${paint.cmd("KHB_NO_AUTO_UPGRADE")}      don't refresh a hub's contract docs on version drift`);
+  console.log(`${label("Colour:")}on when stdout is a terminal — ${paint.cmd("NO_COLOR")} turns it off, ${paint.cmd("FORCE_COLOR")} forces it on`);
+  console.log(`${label("Exit:")}0 on success, 1 on a usage error or a failure. An unknown option is an error;`);
+  console.log(`${" ".repeat(9)}a source khb cannot extract is not — it becomes a pending row in log.md.`);
+  console.log(`${label("Docs:")}${paint.path("https://github.com/msareen/knowledge-hub-builder")}`);
   process.exit(0);
 }
 
@@ -127,8 +140,8 @@ if (cmd === "--version" || cmd === "-v") {
 
 const entry = COMMANDS[cmd];
 if (!entry) {
-  console.error(`Unknown command: ${cmd}`);
-  console.error(`Try: khb help`);
+  console.error(`${paintErr.bad("Unknown command:")} ${cmd}`);
+  console.error(`Try: ${paintErr.cmd("khb help")}`);
   process.exit(1);
 }
 
@@ -154,9 +167,13 @@ if (cmd !== "init" && cmd !== "upgrade" && !REGISTRY_COMMANDS.has(cmd)) {
     const { recordLocation } = await import("./lib/upgrade");
     const { moved } = recordLocation(hub);
     if (moved) {
-      console.error(`khb: this hub was at ${moved} and is now at ${hub}.`);
-      console.error(`khb:   absolute paths recorded inside it still name the old location.`);
-      console.error(`khb:   repair them:  khb update --path           (--dry-run to preview)`);
+      console.error(
+        `${paintErr.warn("khb:")} this hub was at ${paintErr.path(moved)} and is now at ${paintErr.path(hub)}.`,
+      );
+      console.error(`${paintErr.warn("khb:")}   absolute paths recorded inside it still name the old location.`);
+      console.error(
+        `${paintErr.warn("khb:")}   repair them:  ${paintErr.cmd("khb update --path")}           (--dry-run to preview)`,
+      );
     }
   }
   if (hub && !process.env.KHB_NO_AUTO_UPGRADE) {
@@ -166,10 +183,13 @@ if (cmd !== "init" && cmd !== "upgrade" && !REGISTRY_COMMANDS.has(cmd)) {
       const { from, to, pruned, renamed } = upgradeHub(hub);
       // stderr, so a command's own output stays pipeable.
       console.error(
-        `khb: hub was built by ${from ?? "an unknown version"}, khb is ${to} — refreshed its contract docs.`,
+        `${paintErr.warn("khb:")} hub was built by ${from ?? "an unknown version"}, khb is ${to} — refreshed its contract docs.`,
       );
-      if (renamed) console.error(`khb:   renamed ${renamed} -> khb.json`);
-      if (pruned.length) console.error(`khb:   removed (no longer part of the contract): ${pruned.join(", ")}`);
+      if (renamed) console.error(`${paintErr.warn("khb:")}   renamed ${renamed} -> khb.json`);
+      if (pruned.length)
+        console.error(
+          `${paintErr.warn("khb:")}   removed (no longer part of the contract): ${pruned.join(", ")}`,
+        );
       const hint = updateHint(hub);
       if (hint) console.error(hint);
     }

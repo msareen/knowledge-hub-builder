@@ -15,6 +15,7 @@ import { detail, section, totalElapsed } from "../lib/log";
 import { bundleForIngest, listBundles, DEFAULT_BUNDLE } from "../lib/scaffold";
 import { readLedger, writeLedger } from "../lib/ledger";
 import { takeFlag, rejectUnknownFlags } from "../lib/args";
+import { paint, paintErr } from "../lib/color";
 import { ingestFolder } from "./folder";
 import { ingestFiles } from "./files";
 import { ingestWeb } from "./web";
@@ -37,7 +38,7 @@ const opts: Options = {
 rejectUnknownFlags(argv, USAGE);
 const positional = argv;
 if (positional.length > 1) {
-  console.error(`Usage: ${USAGE}`);
+  console.error(`Usage: ${paintErr.cmd(USAGE)}`);
   process.exit(1);
 }
 // No bundle named: which one owns the material is a human decision (AGENTS.md) and a CLI
@@ -49,10 +50,10 @@ if (!bundle) {
   const have = listBundles();
   const onlyLanding = have.length === 1 && have[0] === DEFAULT_BUNDLE;
   if (have.length && !onlyLanding) {
-    console.error(`Usage: ${USAGE}`);
-    console.error(`\nBundles in this hub: ${have.join(", ")}`);
+    console.error(`Usage: ${paintErr.cmd(USAGE)}`);
+    console.error(`\nBundles in this hub: ${have.map((name) => paintErr.name(name)).join(", ")}`);
     console.error(`Name the one that owns this material, or start a new one:`);
-    console.error(`  khb new-bundle <name> "<scope>"`);
+    console.error(`  ${paintErr.cmd('khb new-bundle <name> "<scope>"')}`);
     process.exit(1);
   }
   bundle = DEFAULT_BUNDLE;
@@ -101,8 +102,10 @@ for (const [i, s] of sources.entries()) {
   }
 }
 if (!sources.length) {
-  console.log(`${bundle}: no sources configured.`);
-  console.log(`Declare them in bundles/${bundle}/sources.yaml, then re-run: khb ingest ${bundle}`);
+  console.log(`${paint.name(bundle)}: ${paint.warn("no sources configured")}.`);
+  console.log(
+    `Declare them in ${paint.path(`bundles/${bundle}/sources.yaml`)}, then re-run: ${paint.cmd(`khb ingest ${bundle}`)}`,
+  );
   process.exit(0);
 }
 
@@ -110,7 +113,7 @@ const entries = readLedger(dir);
 
 // State the whole plan before doing any of it: which hub (a --hub/$KHB_HUB run can target a
 // folder you did not expect), which bundle, and which of the expensive extractors are armed.
-console.log(`khb ingest → bundle '${bundle}'`);
+console.log(`${paint.head("khb ingest")} → bundle ${paint.name(`'${bundle}'`)}`);
 detail(`hub:      ${HUB}`);
 detail(`bundle:   ${dir}`);
 detail(`sources:  ${sources.length} declared in bundles/${bundle}/sources.yaml`);
@@ -128,7 +131,11 @@ for (const [i, s] of sources.entries()) {
   if (s.type === "folder") await ingestFolder(s, rawDir, dir, entries, opts);
   else if (s.type === "files") await ingestFiles(s, rawDir, dir, entries, opts);
   else if (s.type === "web") await ingestWeb(s, rawDir, dir, entries, opts);
-  else console.warn(`  '${(s as any).type}' has no scripted ingester — the agent pulls it via MCP/CLI (see skills/ingest/SKILL.md)`);
+  else console.warn(
+      paintErr.warn(
+        `  '${(s as any).type}' has no scripted ingester — the agent pulls it via MCP/CLI (see skills/ingest/SKILL.md)`,
+      ),
+    );
 }
 
 writeLedger(dir, entries, bundle);
@@ -136,8 +143,9 @@ writeLedger(dir, entries, bundle);
 const all = [...entries.values()];
 const pending = all.filter((e) => !e.raw).length;
 const uncurated = all.filter((e) => e.raw && !e.curated).length;
-console.log(`\ndone in ${totalElapsed()}`);
-console.log(`ledger: ${all.length} source(s) in ${join(dir, "log.md")}`);
-if (pending) console.log(`  ${pending} with an empty 'raw' — not extracted; see the reasons above`);
-console.log(`  ${uncurated} in raw/ but not yet cataloged (empty 'curated')`);
-console.log(`Next: catalog ${bundle} — turn raw/ into concept docs (skills/catalog/SKILL.md).`);
+console.log(`\n${paint.ok("done")} in ${totalElapsed()}`);
+console.log(`ledger: ${all.length} source(s) in ${paint.path(join(dir, "log.md"))}`);
+if (pending)
+  console.log(`  ${paint.warn(String(pending))} with an empty 'raw' — not extracted; see the reasons above`);
+console.log(`  ${uncurated ? paint.warn(String(uncurated)) : "0"} in raw/ but not yet cataloged (empty 'curated')`);
+console.log(`Next: catalog ${paint.name(bundle)} — turn raw/ into concept docs (skills/catalog/SKILL.md).`);
