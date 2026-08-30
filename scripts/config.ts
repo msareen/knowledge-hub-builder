@@ -138,8 +138,9 @@ if (action === "check") {
   if (!report.findings.length) detail(paint.ok("none — nothing here needs attention."));
   else for (const finding of report.findings) printFinding(finding);
   summarize(report.findings);
-  // Exit 0 with findings, like `khb lint` and `khb doctor`: the exit code says the command
-  // ran, not that the thing it inspected is perfect.
+  // Exit 0 with findings, like `khb doctor`: the exit code says the command ran, not that
+  // the thing it inspected is perfect. `khb lint` is deliberately the exception — it is a
+  // validator run in CI, so structural errors there must fail the build.
   process.exit(0);
 }
 

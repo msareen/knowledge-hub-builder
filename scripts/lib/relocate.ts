@@ -30,12 +30,12 @@ function* walk(dir: string, root = dir): Generator<string> {
   } catch {
     return; // unreadable directory: nothing to rewrite in what we cannot open
   }
-  for (const e of entries) {
-    const p = join(dir, e.name);
-    if (e.isDirectory()) {
-      if (!SKIP_DIRS.has(e.name)) yield* walk(p, root);
-    } else if (e.isFile()) {
-      yield p;
+  for (const entry of entries) {
+    const entryPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (!SKIP_DIRS.has(entry.name)) yield* walk(entryPath, root);
+    } else if (entry.isFile()) {
+      yield entryPath;
     }
   }
 }
@@ -44,15 +44,15 @@ function* walk(dir: string, root = dir): Generator<string> {
 function readText(path: string): string | undefined {
   try {
     if (statSync(path).size > MAX_BYTES) return undefined;
-    const buf = readFileSync(path);
-    if (buf.subarray(0, 8192).includes(0)) return undefined;
-    return buf.toString("utf8");
+    const buffer = readFileSync(path);
+    if (buffer.subarray(0, 8192).includes(0)) return undefined;
+    return buffer.toString("utf8");
   } catch {
     return undefined;
   }
 }
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRe = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * The spellings one path takes in a hub's files, in a fixed order. A Windows path appears
@@ -76,11 +76,11 @@ function spellings(path: string): string[] {
  * times, and a repair that fixed only the canonical one would leave the rest dangling.
  */
 function pairs(froms: string[], to: string): { find: string; replace: string }[] {
-  const out = new Map<string, string>();
-  const news = spellings(to);
+  const mapping = new Map<string, string>();
+  const newSpellings = spellings(to);
   for (const from of froms) {
-    spellings(from).forEach((form, i) => {
-      if (form && !out.has(form)) out.set(form, news[i]);
+    spellings(from).forEach((oldSpelling, spellingIndex) => {
+      if (oldSpelling && !mapping.has(oldSpelling)) mapping.set(oldSpelling, newSpellings[spellingIndex]);
     });
   }
   // The new path also maps to itself. Two cases need it, and both are ordinary moves:
@@ -89,11 +89,51 @@ function pairs(froms: string[], to: string): { find: string; replace: string }[]
   // and in the second case the old path matches *inside* every reference that is already
   // correct — prepending the move a second time. Claiming those matches for an identity
   // rewrite is what makes the overlap safe, and makes any re-run a no-op.
-  for (const form of news) if (form && !out.has(form)) out.set(form, form);
+  for (const newSpelling of newSpellings) if (newSpelling && !mapping.has(newSpelling)) mapping.set(newSpelling, newSpelling);
   // Longest first, so a `\\`-escaped form is consumed whole rather than partly matched by
   // a shorter spelling of the same path — and so the identity above wins wherever it and
   // an old path could both match, alternation being ordered.
-  return [...out].map(([find, replace]) => ({ find, replace })).sort((a, b) => b.find.length - a.find.length);
+  return [...mapping]
+    .map(([find, replace]) => ({ find, replace }))
+    .sort((left, right) => right.find.length - left.find.length);
+}
+
+/**
+ * Build the pure text substitution for a move: every reference to any of `froms` becomes
+ * `to`, respecting path-boundary lookahead and identity-shielding the new path. Split out of
+ * `rewritePaths` so the four interacting invariants (longest-match ordering, identity
+ * shielding, per-spelling mapping, boundary lookahead) are testable as strings in, strings
+ * out — no filesystem involved.
+ *
+ * `caseInsensitive` is a parameter rather than a `process.platform` read so both branches
+ * are exercisable on any OS; `rewritePaths` passes `process.platform === "win32"`.
+ */
+export function substituter(
+  froms: string[],
+  to: string,
+  opts: { caseInsensitive?: boolean } = {},
+): (text: string) => { text: string; count: number } {
+  const table = pairs(froms, to);
+  const caseInsensitive = !!opts.caseInsensitive;
+  const key = (value: string) => (caseInsensitive ? value.toLowerCase() : value);
+  const lookup = new Map(table.map((pair) => [key(pair.find), pair.replace]));
+  // Only where the match ends at a path boundary: without the lookahead, moving `…/old`
+  // would also rewrite `…/older`, a sibling whose name merely starts the same way.
+  const referencePattern = new RegExp(
+    `(?:${table.map((pair) => escapeRe(pair.find)).join("|")})(?=[\\\\/"'\\s,;:)\\]}]|$)`,
+    caseInsensitive ? "gi" : "g",
+  );
+  return (text: string) => {
+    let count = 0;
+    const next = text.replace(referencePattern, (matched) => {
+      const replacement = lookup.get(key(matched));
+      if (replacement === undefined) return matched; // not one of ours; leave the text exactly as found
+      if (key(replacement) === key(matched)) return matched; // already the new path — matched only to shield it
+      count++;
+      return replacement;
+    });
+    return { text: next, count };
+  };
 }
 
 /**
@@ -106,16 +146,7 @@ export function rewritePaths(
   to: string,
   opts: { dryRun?: boolean; onStart?: (files: number) => void } = {},
 ): RewriteResult {
-  const table = pairs(froms, to);
-  const ci = process.platform === "win32";
-  const key = (s: string) => (ci ? s.toLowerCase() : s);
-  const lookup = new Map(table.map((p) => [key(p.find), p.replace]));
-  // Only where the match ends at a path boundary: without the lookahead, moving `…/old`
-  // would also rewrite `…/older`, a sibling whose name merely starts the same way.
-  const re = new RegExp(
-    `(?:${table.map((p) => escapeRe(p.find)).join("|")})(?=[\\\\/"'\\s,;:)\\]}]|$)`,
-    ci ? "gi" : "g",
-  );
+  const substitute = substituter(froms, to, { caseInsensitive: process.platform === "win32" });
   const hits: Hit[] = [];
   const failed: { file: string; reason: string }[] = [];
   let scanned = 0;
@@ -132,21 +163,14 @@ export function rewritePaths(
     const text = readText(file);
     if (text === undefined) continue;
     scanned++;
-    let count = 0;
-    const next = text.replace(re, (m) => {
-      const to = lookup.get(key(m));
-      if (to === undefined) return m; // not one of ours; leave the text exactly as found
-      if (key(to) === key(m)) return m; // already the new path — matched only to shield it
-      count++;
-      return to;
-    });
+    const { text: next, count } = substitute(text);
     if (!count) continue;
     hits.push({ file: relative(root, file) || file, count });
     if (opts.dryRun) continue;
     try {
       writeFileSync(file, next);
-    } catch (e) {
-      failed.push({ file: relative(root, file) || file, reason: (e as Error).message });
+    } catch (error) {
+      failed.push({ file: relative(root, file) || file, reason: (error as Error).message });
     }
   }
   progress.done();
@@ -160,6 +184,7 @@ export function rewritePaths(
  * itself, which is what made the overlap safe to rewrite.
  */
 export function sameLocation(from: string, to: string): boolean {
-  const norm = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p).replace(/[\\/]+$/, "");
-  return norm(from) === norm(to);
+  const normalize = (value: string) =>
+    (process.platform === "win32" ? value.toLowerCase() : value).replace(/[\\/]+$/, "");
+  return normalize(from) === normalize(to);
 }

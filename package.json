@@ -40,7 +40,9 @@
     "visualize": "bun scripts/cli.ts visualize",
     "new-bundle": "bun scripts/cli.ts new-bundle",
     "export": "bun scripts/cli.ts export",
-    "ingest": "bun scripts/cli.ts ingest"
+    "ingest": "bun scripts/cli.ts ingest",
+    "test": "bun test tests/",
+    "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
     "@hyzyla/pdfium": "^2.1.13",
@@ -50,5 +52,9 @@
     "tesseract.js": "^7.0.0",
     "unpdf": "^1.6.2",
     "yaml": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "typescript": "^7.0.2"
   }
 }

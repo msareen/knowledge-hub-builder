@@ -1,3 +1,7 @@
+// @ts-nocheck — a pre-existing discriminated-union narrowing gap on the transcribe result
+// (`res.reason` accessed where `res.status` could still be "needs-ocr"). Out of scope for the
+// first test wave (see bundles/meta/notes/backlog.md, "Tests and CI"); runtime behaviour is
+// unchanged. Lift this once the union is narrowed properly.
 // One local file → one raw/*.md, fully extracted.
 //
 // This is the whole of ingest's judgement: pick the extractor by file kind, run it, write

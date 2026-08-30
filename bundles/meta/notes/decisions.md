@@ -6,6 +6,26 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-08-30 — First unit tests + CI live in root `tests/`, not beside the code.**
+  `package.json`'s `files` allowlist ships `scripts/` into every install, and that allowlist
+  has already shipped a hub-breaking mistake once (2026-08-24, `export/` matching
+  `skills/export/`) — so co-located `*.test.ts` would ship to users. A root-level `tests/`
+  mirroring `scripts/` sits outside `files` with no new config, and outside `bundles/`, so
+  `khb lint` (which only walks `bundles/`) never sees it. `bun test tests/` is scoped
+  explicitly rather than bare `bun test`, because `.claude/worktrees/` can hold a full second
+  checkout of the repo.
+
+  First wave covers exactly what the backlog named as concentrated exposure:
+  `lib/relocate.ts`'s path-rewrite invariants (its substitution logic was split out as a pure
+  `substituter()` so it's testable without touching disk) and `lib/ledger.ts`'s
+  `identify()`. `khb lint` also gained `process.exitCode = errors ? 1 : 0` — it printed an
+  error count but always exited 0, which would have made `bun run lint` in CI meaningless.
+  `tsconfig.json` uses `strict: false` + `noImplicitAny: true` rather than full `strict`:
+  `lib/extract.ts` and `ingest/acquire.ts` have pre-existing type gaps against third-party
+  extractor libraries unrelated to this change, carved out with `// @ts-nocheck` and a
+  backlog line rather than fixed here — blocking tests on an unrelated type cleanup was the
+  wrong trade.
+
 - **2026-08-30 — The machine config gets a command, and a schema with repairs attached.**
   `~/.khb/hubs-config.json` was documented but unreachable from the CLI: you had to know the
   path, and nothing ever told you a hand edit had gone wrong. `loadConfig` is forgiving by
