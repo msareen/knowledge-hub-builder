@@ -274,3 +274,5 @@ console.log(
     `${warnings ? paint.warn(`${warnings} warning(s)`) : paint.ok("0 warnings")} ` +
     `across ${bundles.length} bundle(s) in ${totalElapsed()}`,
 );
+
+process.exitCode = errors ? 1 : 0;

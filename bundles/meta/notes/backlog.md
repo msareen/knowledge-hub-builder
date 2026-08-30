@@ -33,13 +33,24 @@ extractors in `scripts/lib/extract.ts`.
       with hash-based move detection (`identify()`/`adopt()`) so a renamed source keeps its
       `curated` value instead of returning as a second row
 - [x] visualizer: click a bundle → its concept graph, with a panel for the concept body
-- [ ] **Tests and CI.** ~4,600 lines of TypeScript with no test file, no `tsconfig.json`,
-      and no CI. The exposure is concentrated: `lib/relocate.ts` rewrites paths across the
-      whole hub — including the user's `raw/` — on four interacting invariants (longest-match
-      ordering, identity-shielding the new path, per-spelling mapping, path-boundary
-      lookahead), and `lib/ledger.ts`'s `identify()` decides moved/copy/ambiguous by hash.
-      Both are pure string functions and cheap to cover; `bun test` needs no new dependency.
-      Verification today is manual and one-shot, as the decision log records case by case.
+- [x] **Tests and CI, wave one.** `tests/relocate.test.ts` and `tests/ledger.test.ts` cover
+      the exposure the backlog named: `lib/relocate.ts`'s four interacting invariants
+      (longest-match ordering, identity-shielding the new path, per-spelling mapping,
+      path-boundary lookahead — the substitution logic was split out as `substituter()` to
+      make this testable without touching disk) and `lib/ledger.ts`'s `identify()`
+      moved/copy/ambiguous decision. `tsconfig.json` (`strict: false`, `noImplicitAny: true`
+      — full `strict` surfaces pre-existing third-party typing gaps, tracked below) and
+      `.github/workflows/ci.yml` run `bun test`, `tsc --noEmit`, and `khb lint` on every
+      push/PR; `lint` now sets a non-zero exit code on errors so CI can actually fail on it.
+- [ ] **Tests and CI, wave two.** Second-wave pure-function candidates not yet covered:
+      `captionText` (`lib/extract.ts`), `makeExcluder` (`ingest/exclude.ts`),
+      `diffSourcesYamlAll`/`diffSourcesYaml` (`lib/schema.ts`), `lib/config-check.ts`'s
+      validation. Also: extracting `lint.ts`'s `resolveLink`/`stripNonProse` into a testable
+      module (a production refactor of a working script, not just added coverage — separate
+      decision). And a strictness ratchet: `lib/extract.ts` and `ingest/acquire.ts` currently
+      carry `// @ts-nocheck` (mammoth's default-export shape, a pdfium callback signature, and
+      a discriminated-union narrowing gap on the transcribe result) — lift those once the
+      underlying type gaps are reconciled.
 - [ ] Pre-publish smoke test: `npm pack` → install into a scratch dir → `init`, `ingest`,
       `lint`. The `files` allowlist and `.gitignore` have shipped a hub-breaking mistake
       before (2026-08-24, `export/` matching `skills/export/`), found by accident.

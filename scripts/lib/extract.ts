@@ -1,3 +1,7 @@
+// @ts-nocheck — pre-existing type gaps against third-party extractor libraries (mammoth's
+// default-export shape lacks a `convertToMarkdown` type; pdfium's render callback signature).
+// Out of scope for the first test wave (see bundles/meta/notes/backlog.md, "Tests and CI");
+// runtime behaviour is unchanged. Lift this once those libraries' types are reconciled.
 // Content-addressed extraction cache: .ingest-cache/extracted/<sha256>.md
 //
 // Binary formats have to be converted before anything can read them. That conversion is
