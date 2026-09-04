@@ -24,13 +24,13 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
   list: { load: () => import("./hubs"), usage: "khb list [--json]", desc: "every hub on this machine" },
   go: {
     load: () => import("./hubs"),
-    usage: "khb go [name|N] [--path] [--no-agent] [--agent X]",
-    desc: "open a hub with your agent (bare 'khb' picks one)",
+    usage: "khb go [name|N] [--path] [--no-agent] [--agent X] [--respond|-r] [--file|-f <path>]",
+    desc: "open a hub with your agent (bare 'khb' picks one); --respond saves a session write-up back here",
   },
   agent: {
     load: () => import("./hubs"),
-    usage: 'khb agent [name|none] [--command X] [--args "…"]',
-    desc: "which agent 'khb go' launches",
+    usage: 'khb agent [name|none] [--command X] [--args "…"] [--respond-args "…"]',
+    desc: "which agent 'khb go' launches, and how it continues a session for --respond",
   },
   update: {
     load: () => import("./hubs"),

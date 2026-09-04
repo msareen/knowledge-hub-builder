@@ -13,23 +13,27 @@ export function takeFlag(args: string[], ...names: string[]): boolean {
 
 /**
  * Take `--name value`, removing both. Also accepts `--name=value`, since that is the form
- * fingers produce when the docs show the spaced one.
+ * fingers produce when the docs show the spaced one. Multiple `names` are aliases for the
+ * same option (e.g. a long and a short spelling) — the first one found wins.
  */
-export function takeOpt(args: string[], name: string): string | undefined {
-  const eq = args.findIndex((a) => a.startsWith(`${name}=`));
-  if (eq >= 0) {
-    const [v] = args.splice(eq, 1);
-    return v.slice(name.length + 1);
+export function takeOpt(args: string[], ...names: string[]): string | undefined {
+  for (const name of names) {
+    const eq = args.findIndex((a) => a.startsWith(`${name}=`));
+    if (eq >= 0) {
+      const [v] = args.splice(eq, 1);
+      return v.slice(name.length + 1);
+    }
+    const i = args.indexOf(name);
+    if (i < 0) continue;
+    const v = args[i + 1];
+    if (v === undefined) {
+      console.error(`${name} needs a value`);
+      process.exit(1);
+    }
+    args.splice(i, 2);
+    return v;
   }
-  const i = args.indexOf(name);
-  if (i < 0) return undefined;
-  const v = args[i + 1];
-  if (v === undefined) {
-    console.error(`${name} needs a value`);
-    process.exit(1);
-  }
-  args.splice(i, 2);
-  return v;
+  return undefined;
 }
 
 /**

@@ -292,8 +292,8 @@ These run **outside** any hub, from any terminal:
 |---|---|
 | `khb` | Open a hub. One registered hub asks; several show a list and take a pick; none walks you through creating the first |
 | `khb list [--json]` | Every hub on this machine, with its description and path |
-| `khb go [name\|N] [--path] [--no-agent] [--agent X]` | Open one by name or list position. `--path` prints just the path, for `cd "$(khb go --path work)"`; `--no-agent` prints the path and the `cd` line without launching anything; `--agent X` launches `X` for this run only, leaving the configured default alone |
-| `khb agent [name\|none] [--command X] [--args "…"]` | Which agent `khb go` launches — `claude`, `codex`, anything on your PATH, or `none` to just print the path |
+| `khb go [name\|N] [--path] [--no-agent] [--agent X] [--respond\|-r] [--file\|-f <path>]` | Open one by name or list position. `--path` prints just the path, for `cd "$(khb go --path work)"`; `--no-agent` prints the path and the `cd` line without launching anything; `--agent X` launches `X` for this run only, leaving the configured default alone; `--respond`/`-r` (or naming a `--file`/`-f`) carries the session's answer back out as a file — see below |
+| `khb agent [name\|none] [--command X] [--args "…"] [--respond-args "…"]` | Which agent `khb go` launches — `claude`, `codex`, anything on your PATH, or `none` to just print the path. `--respond-args` sets how that agent is re-invoked to continue a session for `khb go --respond` |
 | `khb update [new-path] [--path\|-p] [--schema\|-s] [--from <old>] [--dry-run]` | Repair the hub: path references after a move, and/or backfill `sources.yaml` to the current schema. No flag runs both |
 | `khb forget <name> [more…]` | Drop one or more hubs from the list. The folders are untouched. With no name it points you at `khb list` for the names |
 | `khb config [view\|edit\|check\|fix\|path]` | The config file itself — see below |
@@ -311,6 +311,36 @@ Delete the file and the next command in each hub puts it back.
 A hub's name and description come from its own `khb.json`, so they travel with the hub
 rather than living in one machine's list. Set them with `khb init --name --description`,
 or edit those two keys in the marker later.
+
+### `khb go --respond` — carrying a session's answer back out
+
+`khb go` spawns your agent with its working directory set to the hub, not to wherever you
+ran `khb go` from — so when you close the session and land back in your own shell, nothing
+from it comes with you. `--respond`/`-r` fixes that: once the interactive session ends,
+khb re-invokes the same agent non-interactively, continuing that session, and asks it to
+write a complete, coherent account of what was discussed — not a bullet summary — to a
+file in the directory you originally ran `khb go` from. Name the file with `--file`/`-f`;
+without one, khb generates `khb-response-<hub>-<timestamp>.md`. Naming a `--file` implies
+`--respond` — you don't need both.
+
+Leave off `-r` entirely and khb asks `Save a response to a file? [y/N]` after the session
+closes (default no, and skipped on a non-interactive terminal). Pass `-f` alone to save to
+that name without being asked.
+
+How to continue a session non-interactively is per-agent and configurable via
+`khb agent <name> --respond-args "…"` (shipped defaults: `claude -p --continue` and
+`codex exec resume --last`). Anthropic's own docs note `--continue` in `-p` mode can
+occasionally start a fresh session instead of truly resuming — a known flakiness in the
+agent, not something khb can paper over.
+
+The respond call never asks the agent to write a file at all — every attempt at that ran
+into the same wall: a non-interactive continuation has no way to satisfy the one-time
+approval most agents require for a file write, and that gate fires on any path the session
+hasn't touched before, inside the hub or out. There's no file path that dodges it. Instead,
+khb leans on what `-p`/`exec` print mode is actually built for: printing the final answer
+to stdout, with no filesystem tool involved at all. The agent is asked to simply answer in
+full, and khb captures that output itself and writes it to the destination — nothing for a
+permission gate to block.
 
 ### `khb config` — the file itself
 

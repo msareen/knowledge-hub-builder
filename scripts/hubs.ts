@@ -5,9 +5,9 @@
 // one. Nothing here touches knowledge — see lib/registry.ts for why the registry is
 // disposable by design.
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { findHub, markerIn, version } from "./lib/paths";
 import { sameLocation, rewritePaths } from "./lib/relocate";
@@ -27,11 +27,13 @@ import {
   relocationCandidates,
   saveConfig,
   touchHub,
+  type AgentSpec,
   type HubEntry,
 } from "./lib/registry";
 import { takeFlag, takeOpt, rejectUnknownFlags } from "./lib/args";
 import { detail, section, totalElapsed } from "./lib/log";
 import { paint, paintErr } from "./lib/color";
+import { defaultResponseFile, shouldRespond } from "./lib/respond";
 
 const cmd = process.env.KHB_SUBCOMMAND ?? "go";
 const argv = process.argv.slice(2);
@@ -188,12 +190,89 @@ function finish(stdin: typeof process.stdin, line: string): string {
 }
 
 /**
+ * After the interactive session closes, optionally re-invoke the same agent non-interactively
+ * to continue it and write out a full account of what happened — back in the directory
+ * `khb go` was originally run from, not the hub. Best-effort: a misconfigured or uncooperative
+ * agent gets a warning here, never a crash, since the interactive session it's reporting on
+ * already succeeded.
+ *
+ * Never asks the agent to write a file. Two attempts at that both ran into the same wall:
+ * a non-interactive respond call has no way to satisfy the one-time approval most agents
+ * require for a file write, and that gate turns out to fire on any path the session hasn't
+ * touched before — inside the project or out, freshly created or pre-existing. There's no
+ * file path that dodges it. But `-p`/`exec` print mode's entire contract is printing the
+ * final answer to stdout with no filesystem tool involved at all — nothing to gate. So the
+ * agent is asked to simply answer in full, and khb (unrestricted) captures that stream and
+ * writes it to `dest` itself.
+ */
+function maybeSaveResponse(
+  hub: HubEntry,
+  agent: { name: string; spec: AgentSpec },
+  originDir: string,
+  respond: boolean,
+  file?: string,
+): void {
+  // Only ask when neither -r nor -f already answered the question.
+  const answer = respond || file ? undefined : ask(`Save a response to a file? [y/N] `);
+  if (!shouldRespond(respond, file, answer)) return;
+
+  if (!agent.spec.respondArgs?.length) {
+    console.error(`\n${paintErr.warn(`No continuation command configured for ${agent.name}.`)}`);
+    console.error(`Set one:  ${paintErr.cmd(`khb agent ${agent.name} --respond-args "..."`)}`);
+    return;
+  }
+
+  const dest = resolve(originDir, file ?? defaultResponseFile(hub.name));
+  console.log(`\n${paint.dim(`asking ${agent.name} to write a response…`)}\n`);
+  const prompt =
+    `Write a complete, coherent, and canonical account of what was discussed, asked, and ` +
+    `concluded in this session — not a brief bullet-point summary, capture the substance and ` +
+    `reasoning in full. Reply with the write-up itself as your answer. Do not use a file-writing ` +
+    `tool and do not create or edit any file — the text of your response is all that is needed.`;
+  // The prompt travels over stdin, not argv — see the note on AgentSpec.respondArgs. stdout
+  // is captured, not inherited, since the answer itself is what gets saved; stderr still
+  // shows through so a real failure remains visible.
+  const r = spawnSync(agent.spec.command, agent.spec.respondArgs, {
+    cwd: hub.path,
+    input: prompt,
+    stdio: ["pipe", "pipe", "inherit"],
+    shell: process.platform === "win32",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const text = r.stdout?.toString("utf8").trim() ?? "";
+  if (r.error || !text) {
+    console.error(`\n${paintErr.bad("Could not save a response.")}`);
+    if (r.error) console.error(paintErr.dim(r.error.message));
+    return;
+  }
+
+  // The session already succeeded; a directory that won't take the file is a warning, not a
+  // stack trace. Real cases: a read-only or full volume anywhere, and on macOS a terminal
+  // without Full Disk Access hitting EPERM on ~/Desktop, ~/Documents or ~/Downloads — all
+  // directories someone plausibly ran `khb go` from.
+  try {
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, text + "\n");
+  } catch (e) {
+    console.error(`\n${paintErr.bad("Could not write the response to")} ${paintErr.path(dest)}`);
+    console.error(paintErr.dim(e instanceof Error ? e.message : String(e)));
+    return;
+  }
+  console.log(`\n${paint.ok("Response saved:")} ${paint.path(dest)}`);
+}
+
+/**
  * Hand the terminal to the configured agent, running in the hub. This is the payoff of
  * the registry: `khb` from a cold shell anywhere ends with an agent open on the right
  * folder. khb cannot change the caller's shell directory — no child process can — so the
  * `cd` line is printed for the human and the hub is passed to the agent as its cwd.
  */
-function launch(hub: HubEntry, agentName?: string, noAgent = false): never {
+function launch(
+  hub: HubEntry,
+  agentName?: string,
+  noAgent = false,
+  respondOpts: { respond?: boolean; file?: string; originDir?: string } = {},
+): never {
   touchHub(hub.path);
   console.log(`\n${paint.name(hub.name)} — ${paint.path(hub.path)}`);
   console.log(`  ${paint.cmd(`cd ${/\s/.test(hub.path) ? JSON.stringify(hub.path) : hub.path}`)}`);
@@ -209,11 +288,20 @@ function launch(hub: HubEntry, agentName?: string, noAgent = false): never {
   console.log(`  ${paint.dim(`launching ${agent.name}…`)}\n`);
   // shell:true on Windows so PATH shims (claude.cmd, codex.cmd) resolve; stdio inherited
   // so the agent owns the terminal from here.
+  //
+  // Ctrl-C sends SIGINT to the whole foreground process group — the agent AND khb, since
+  // stdio is inherited. Node's default SIGINT disposition is to terminate immediately,
+  // which used to kill khb before spawnSync could even return, losing the chance to offer
+  // --respond on a session that was interrupted rather than exited cleanly. A no-op handler
+  // here means the agent still dies on Ctrl-C as expected, but khb survives to ask.
+  const survive = () => {};
+  process.on("SIGINT", survive);
   const r = spawnSync(agent.spec.command, agent.spec.args ?? [], {
     cwd: hub.path,
     stdio: "inherit",
     shell: process.platform === "win32",
   });
+  process.off("SIGINT", survive);
   if (r.error) {
     console.error(
       `\n${paintErr.bad(`Could not launch ${agent.name}`)} (${agent.spec.command}): ${r.error.message}`,
@@ -221,6 +309,8 @@ function launch(hub: HubEntry, agentName?: string, noAgent = false): never {
     console.error(`Fix the command:  ${paintErr.cmd(`khb agent ${agent.name} --command <exe>`)}`);
     process.exit(1);
   }
+  if (respondOpts.originDir)
+    maybeSaveResponse(hub, agent, respondOpts.originDir, !!respondOpts.respond, respondOpts.file);
   process.exit(r.status ?? 0);
 }
 
@@ -653,9 +743,13 @@ if (cmd === "forget") {
 if (cmd === "agent") {
   const command = takeOpt(argv, "--command");
   const argsOpt = takeOpt(argv, "--args");
-  rejectUnknownFlags(argv, 'khb agent [name|none] [--command X] [--args "…"]');
+  const respondArgsOpt = takeOpt(argv, "--respond-args");
+  rejectUnknownFlags(argv, 'khb agent [name|none] [--command X] [--args "…"] [--respond-args "…"]');
   const [name] = argv;
   const cfg = loadConfig();
+
+  const respondLine = (spec: AgentSpec): string =>
+    `${[spec.command, ...spec.respondArgs!].join(" ")}  (prompt piped via stdin)`;
 
   if (!name && !command) {
     const cur = agentFor(cfg);
@@ -663,13 +757,17 @@ if (cmd === "agent") {
       `Default agent: ${cur ? `${paint.name(cur.name)} ${paint.dim(`(${cur.spec.command})`)}` : "none"}`,
     );
     console.log(`\n${paint.head("Known")}:`);
-    for (const [agentKey, agentSpec] of Object.entries(cfg.agents))
+    for (const [agentKey, agentSpec] of Object.entries(cfg.agents)) {
       console.log(
         `  ${agentKey === cfg.defaultAgent ? paint.ok("*") : " "} ${paint.name(agentKey.padEnd(8))} ` +
           paint.dim([agentSpec.command, ...(agentSpec.args ?? [])].join(" ")),
       );
+      if (agentSpec.respondArgs?.length)
+        console.log(`    ${paint.dim(`--respond: ${respondLine(agentSpec)}`)}`);
+    }
     console.log(`\nSet:   ${paint.cmd("khb agent codex")}`);
     console.log(`       ${paint.cmd('khb agent claude --command claude --args "--continue"')}`);
+    console.log(`       ${paint.cmd('khb agent claude --respond-args "-p --continue"')}`);
     console.log(
       `Off:   ${paint.cmd("khb agent none")}        ${paint.dim("(khb go just prints the path)")}`,
     );
@@ -688,6 +786,10 @@ if (cmd === "agent") {
   cfg.agents[key] = {
     command: command ?? existing?.command ?? key,
     args: argsOpt !== undefined ? argsOpt.split(" ").filter(Boolean) : (existing?.args ?? []),
+    respondArgs:
+      respondArgsOpt !== undefined
+        ? respondArgsOpt.split(" ").filter(Boolean)
+        : existing?.respondArgs,
   };
   cfg.defaultAgent = key;
   saveConfig(cfg);
@@ -695,6 +797,7 @@ if (cmd === "agent") {
   console.log(
     `Default agent: ${paint.name(key)} — ${paint.dim([spec.command, ...(spec.args ?? [])].join(" "))}`,
   );
+  if (spec.respondArgs?.length) console.log(paint.dim(`  --respond: ${respondLine(spec)}`));
   console.log(paint.dim(`Saved to ${CONFIG}`));
   process.exit(0);
 }
@@ -704,8 +807,14 @@ if (cmd === "agent") {
 const wantPath = takeFlag(argv, "--path");
 const noAgent = takeFlag(argv, "--no-agent") || wantPath;
 const agentName = takeOpt(argv, "--agent");
-rejectUnknownFlags(argv, "khb go [name|N] [--path] [--no-agent] [--agent X]");
+const respond = takeFlag(argv, "--respond", "-r");
+const fileOpt = takeOpt(argv, "--file", "-f");
+rejectUnknownFlags(argv, "khb go [name|N] [--path] [--no-agent] [--agent X] [--respond|-r] [--file|-f <path>]");
 const [what] = argv;
+// Where `khb go` was actually run from — the destination for a saved response, since the
+// agent itself runs with cwd set to the hub, not here.
+const originDir = process.cwd();
+const respondOpts = { respond, file: fileOpt, originDir };
 
 // Named target: resolve through the registry, then fall back to any path that is a hub —
 // `khb go ../other-hub` should work whether or not it has been seen before.
@@ -728,7 +837,7 @@ if (what) {
     console.log(entry.path);
     process.exit(0);
   }
-  launch(entry, agentName, noAgent);
+  launch(entry, agentName, noAgent, respondOpts);
 }
 
 const hubs = listHubs().filter(isAlive);
@@ -759,7 +868,7 @@ if (hubs.length === 1) {
     process.exit(0);
   }
   if (/^n/i.test(answer.trim())) process.exit(0);
-  launch(only, agentName, noAgent);
+  launch(only, agentName, noAgent, respondOpts);
 }
 
 // More than one: show the list and take a pick.
@@ -780,4 +889,4 @@ if (!chosen || !isAlive(chosen)) {
   console.error(`${paintErr.bad("Not a listed hub:")} ${picked}`);
   process.exit(1);
 }
-launch(chosen, agentName, noAgent);
+launch(chosen, agentName, noAgent, respondOpts);

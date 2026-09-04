@@ -17,8 +17,26 @@ import { markerIn } from "./paths";
 export const KHB_HOME = process.env.KHB_HOME ? resolve(process.env.KHB_HOME) : join(homedir(), ".khb");
 export const CONFIG = join(KHB_HOME, "hubs-config.json");
 
-/** How to start an agent in a hub folder. `args` is appended after the hub is cd'd into. */
-export type AgentSpec = { command: string; args?: string[] };
+/**
+ * How to start an agent in a hub folder. `args` is appended after the hub is cd'd into.
+ * `respondArgs`, when set, is how to re-invoke the same agent non-interactively to continue
+ * the session just closed and write out an answer — see `khb go --respond` in hubs.ts. The
+ * instruction prompt itself is piped to the process over stdin, not appended as an argv
+ * element: a long free-text argument survives `spawnSync`'s Windows `shell: true` path
+ * unreliably (cmd.exe re-tokenizes on whitespace and mangles embedded quotes), where stdin
+ * has no such limit and matches the documented non-interactive usage of both shipped agents.
+ *
+ * The respond call never asks the agent to write a file at all — it asks for the write-up as
+ * the answer, and khb captures stdout and writes it out itself. Two earlier designs did ask
+ * for a file: one wrote straight to the destination with a `--add-dir`-style flag for
+ * cross-directory access, the other wrote inside the hub for khb to copy out. Both hit the
+ * same wall — separate from the CLI's directory sandboxing, agents gate each write behind a
+ * one-time approval that a non-interactive `-p`/`exec` run has no way to give, and that gate
+ * fires on any path the session hasn't already touched, inside the hub or out. Print mode's
+ * whole contract is printing the answer to stdout with no filesystem tool in play, so there
+ * is nothing left to gate.
+ */
+export type AgentSpec = { command: string; args?: string[]; respondArgs?: string[] };
 
 export type HubEntry = {
   name: string;
@@ -49,9 +67,33 @@ export type Config = {
  * khb pretending to know where it lives.
  */
 const DEFAULT_AGENTS: Record<string, AgentSpec> = {
-  claude: { command: "claude", args: [] },
-  codex: { command: "codex", args: [] },
+  claude: { command: "claude", args: [], respondArgs: ["-p", "--continue"] },
+  codex: { command: "codex", args: [], respondArgs: ["exec", "resume", "--last"] },
 };
+
+/** Fields backfilled onto a saved agent entry when the entry predates them — see below. */
+const BACKFILL_FIELDS = ["respondArgs"] as const;
+
+/**
+ * `{ ...DEFAULT_AGENTS, ...raw }` merges whole agent entries, so a `claude`/`codex` entry
+ * saved before a shipped field existed (e.g. `respondArgs`, added for `khb go --respond`)
+ * would silently lose that field forever — the saved entry has no such key, but it still
+ * fully overwrites the default that does. Backfill field-by-field for the two known keys
+ * instead; a saved `command`/`args` customization is left exactly as the user set it. `""`
+ * is a deliberate override to disable a flag, so only `undefined` backfills.
+ */
+function mergeAgents(raw: Record<string, AgentSpec> | undefined): Record<string, AgentSpec> {
+  const merged: Record<string, AgentSpec> = { ...DEFAULT_AGENTS, ...(raw ?? {}) };
+  for (const key of Object.keys(DEFAULT_AGENTS)) {
+    if (!raw?.[key]) continue;
+    const patch: Partial<AgentSpec> = {};
+    for (const field of BACKFILL_FIELDS)
+      if (raw[key][field] === undefined && DEFAULT_AGENTS[key][field] !== undefined)
+        (patch as Record<string, unknown>)[field] = DEFAULT_AGENTS[key][field];
+    if (Object.keys(patch).length) merged[key] = { ...raw[key], ...patch };
+  }
+  return merged;
+}
 
 const blank = (): Config => ({
   version: 1,
@@ -76,7 +118,7 @@ export function loadConfig(): Config {
     return {
       version: 1,
       defaultAgent: raw.defaultAgent ?? "claude",
-      agents: { ...DEFAULT_AGENTS, ...(raw.agents ?? {}) },
+      agents: mergeAgents(raw.agents),
       hubs: Array.isArray(raw.hubs) ? raw.hubs.filter((h) => h && typeof h.path === "string") : [],
     };
   } catch {
