@@ -6,7 +6,7 @@ Routing only. One line of scope + when to route there. No knowledge content here
 
 | Bundle | Scope | Route here when |
 |---|---|---|
-| [meta](bundles/meta/index.md) | KHB itself: conventions, decisions, backlog | Question is about how this system works or should evolve |
+| [meta](bundles/meta/index.md) | Owner: the KHB maintainers. Covers KHB's own design decisions (dated, with rationale) and its planned/known-broken work (extractors, ingesters, tooling, routing defects) | Question is about how this hub/tool itself works, why it works that way, or what's still unbuilt/broken in it |
 
 ## Groups
 
