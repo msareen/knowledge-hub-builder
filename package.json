@@ -1,6 +1,6 @@
 {
   "name": "@msareen/knowledge-hub-builder",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Knowledge Hub Builder — a bundle-of-bundles knowledge base you build with an agent",
   "keywords": ["knowledge-base", "okf", "agent", "wiki", "bundles", "claude", "codex", "rag"],
   "license": "MIT",
