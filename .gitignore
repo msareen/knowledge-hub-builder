@@ -17,6 +17,18 @@ bundles/*/raw/
 /export/
 visualizer/graph.html
 
+# Python bytecode. khb runs `pyscripts/onenote.py` as a script, which writes none — but
+# importing it (a test, an ad-hoc look at a `.one`) makes CPython drop a __pycache__ beside
+# it: regenerated on demand, interpreter-version specific, and inside a directory the
+# `files` allowlist publishes, so `package.json` excludes it from the tarball as well.
+__pycache__/
+*.pyc
+
+# `khb go --respond` writes its account of a session into the directory you launched from —
+# which, for this repo, is the repo root. Derived output, often long, sometimes private. One
+# worth keeping belongs in a bundle as a concept doc, not loose at the root.
+khb-response-*.md
+
 # Publishing and OS leftovers
 *.tgz
 .DS_Store

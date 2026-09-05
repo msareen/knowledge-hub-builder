@@ -11,13 +11,13 @@
 //
 // Nothing here interprets content. Ingest ends the moment bytes have become text — deciding
 // what the text *says* is the catalog pass (skills/catalog/SKILL.md).
-import { readFileSync, existsSync } from "node:fs";
-import { basename } from "node:path";
-import { writeRaw, sha256, sha256File, rawNameFor, retargetRaw, normPath } from "../lib/util";
+import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, copyFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { writeRaw, sha256, sha256File, rawNameFor, rawRel, retargetRaw, normPath } from "../lib/util";
 import { record, isFresh, identify, adopt, type Entry } from "../lib/ledger";
 import {
   extractCached, ocrCached, ocrImageCached, transcribeCached,
-  extractedBody, extractedPath, type Extraction,
+  extractedBody, extractedPath, extractedFilesDir, CONTAINED_FILES, type Extraction,
 } from "../lib/extract";
 import { captionFor, kindOf, mediaFor, extOf, mdName } from "./exts";
 import { detectPasswordProtected, PROTECTABLE } from "./protect";
@@ -43,6 +43,7 @@ export type Counters = {
   ocrd: number;
   transcribed: number;
   captioned: number;    // read from a caption sidecar — the whisper run it saved
+  embedded: number;     // payloads unpacked out of a container and ingested in their own right
   lowQuality: number;   // OCR/ASR output — worth re-reading from source during curation
   skipped: number;      // unchanged since last ingest
   moved: number;        // same bytes at a new path — row re-pointed, nothing re-extracted
@@ -54,30 +55,50 @@ export type Counters = {
 
 export const newCounters = (): Counters => ({
   copied: 0, extracted: 0, fromCache: 0, ocrd: 0, transcribed: 0, captioned: 0,
-  lowQuality: 0, skipped: 0, moved: 0, pending: 0,
+  embedded: 0, lowQuality: 0, skipped: 0, moved: 0, pending: 0,
 });
 
 /** Record the source with an empty `raw` so the owed work survives this process. */
-function pend(entries: Map<string, Entry>, path: string, hash: string, c: Counters, why: string) {
-  record(entries, { source: path, sha256: hash, fetched: new Date().toISOString(), raw: "" });
-  c.pending++;
+function pend(entries: Map<string, Entry>, source: string, hash: string, counters: Counters, why: string) {
+  record(entries, { source, sha256: hash, fetched: new Date().toISOString(), raw: "" });
+  counters.pending++;
   // The path is already on this item's own line; say only why it stopped.
   outcome(`pending — ${why}`);
 }
 
+/**
+ * A file that arrived from inside another source rather than from a path of its own — an
+ * attachment unpacked out of a OneNote section, say.
+ *
+ * `uri` is what the ledger records (`…\Docker.one#diagram.png`): the bytes are in `raw/`,
+ * which is derived and rebuildable, so the durable identity has to name the container and
+ * the file within it. It also settles the identity question — a payload cannot "move" on its
+ * own, so move detection is skipped for it rather than being asked a question it would
+ * answer wrongly the moment two sections embed the same image.
+ */
+export type Origin = { uri: string; container: string; depth: number };
+
+/** A container inside a container is legitimate; an unbounded chain of them is not. */
+const MAX_CONTAINER_DEPTH = 2;
+
 export async function acquireFile(
-  at: string,
+  position: string,
   path: string,
   name: string,
   rawDir: string,
   bundleDir: string,
   entries: Map<string, Entry>,
-  c: Counters,
+  counters: Counters,
   opts: Options,
+  origin?: Origin,
 ): Promise<void> {
+  // What the ledger and every provenance header call this source. For a file on disk that
+  // is its path; for an unpacked payload it is the container plus its name inside it.
+  const source = origin?.uri ?? path;
+  const rawRoot = join(bundleDir, "raw");
   // Announce the file first: hashing a multi-GB binary and every extractor below can take
   // real time, and a run that printed only successes left the slow file unnamed.
-  item(at, path);
+  item(position, source);
   const kind = kindOf(path);
 
   // A caption sidecar is not a source of its own: `talk.vtt` beside `talk.mp4` is that
@@ -96,32 +117,34 @@ export async function acquireFile(
   // Identity of a captioned recording is the pair's, not the file's. Hashing the media
   // alone would let a corrected transcript sit next to an "unchanged, skipped" row forever.
   const captions = kind === "av" ? captionFor(path) : undefined;
-  const own = await sha256File(path);
-  const capHash = captions ? await sha256File(captions) : kind === "caption" ? own : undefined;
-  const hash = captions ? sha256(`${own}:${capHash}`) : own;
+  const ownHash = await sha256File(path);
+  const captionHash = captions ? await sha256File(captions) : kind === "caption" ? ownHash : undefined;
+  const hash = captions ? sha256(`${ownHash}:${captionHash}`) : ownHash;
   if (kind === "skip") {
-    pend(entries, path, hash, c, "no extractor for this format");
+    pend(entries, source, hash, counters, "no extractor for this format");
     return;
   }
   // Identity before freshness. A file that moved is the row it already has: resolve that
   // first, or it reads as an unrelated arrival and earns a second raw/ file, a second row
   // with an empty `curated`, and eventually a second concept for material already written.
+  // A payload out of a container is exempt: it has no path of its own to have moved from.
   let adopted: Entry | undefined;
-  const id = identify(entries, bundleDir, path, hash);
-  if (id.kind === "moved") {
-    adopted = adopt(entries, id.from, path);
+  const identity = origin ? ({ kind: "new" } as const) : identify(entries, bundleDir, path, hash);
+  if (identity.kind === "moved") {
+    adopted = adopt(entries, identity.from, path);
     retargetRaw(bundleDir, adopted.raw, path);
-    c.moved++;
-    outcome(`moved from ${id.from.source} — kept ${adopted.raw}${adopted.curated ? " and its catalog entry" : ""}`);
+    retargetContained(entries, bundleDir, identity.from.source, path);
+    counters.moved++;
+    outcome(`moved from ${identity.from.source} — kept ${adopted.raw}${adopted.curated ? " and its catalog entry" : ""}`);
     if (!opts.force) return;
-  } else if (id.kind === "copy") {
-    note(`same bytes as ${id.twin.source}, which is also still on disk — ingesting as its own source`);
-  } else if (id.kind === "ambiguous") {
-    note(`same bytes as ${id.twins.length} rows whose sources have all gone — not guessing which one moved here`);
+  } else if (identity.kind === "copy") {
+    note(`same bytes as ${identity.twin.source}, which is also still on disk — ingesting as its own source`);
+  } else if (identity.kind === "ambiguous") {
+    note(`same bytes as ${identity.twins.length} rows whose sources have all gone — not guessing which one moved here`);
   }
 
-  if (!opts.force && isFresh(entries, bundleDir, path, hash)) {
-    c.skipped++;
+  if (!opts.force && isFresh(entries, bundleDir, source, hash)) {
+    counters.skipped++;
     outcome("unchanged, skipped");
     return;
   }
@@ -130,17 +153,17 @@ export async function acquireFile(
   // every run means a file that moved and *then* changed re-extracts under a new name,
   // stranding the old raw file with the concept's Citations still pointing at it. Only fall
   // back to a fresh name when this source has no raw file in this directory yet.
-  const held = adopted ?? entries.get(path);
-  const file =
-    held?.raw?.startsWith(`raw/${basename(rawDir)}/`)
-      ? basename(held.raw)
-      : rawNameFor(rawDir, mdName(name), path, entries.values());
-  const stamp = (raw: string) => record(entries, { source: path, sha256: hash, fetched: new Date().toISOString(), raw });
+  const existing = adopted ?? entries.get(source);
+  const rawName =
+    existing?.raw?.startsWith(`${rawRel(rawDir, rawRoot)}/`)
+      ? basename(existing.raw)
+      : rawNameFor(rawDir, mdName(name), source, entries.values(), rawRoot);
+  const stamp = (raw: string) => record(entries, { source, sha256: hash, fetched: new Date().toISOString(), raw });
 
   if (kind === "text") {
-    const raw = writeRaw(rawDir, file, { source: path, sha256: hash.slice(0, 12), tool: "copy", quality: "high" }, readFileSync(path, "utf8"));
+    const raw = writeRaw(rawDir, rawName, { source, sha256: hash.slice(0, 12), tool: "copy", quality: "high" }, readFileSync(path, "utf8"), rawRoot);
     stamp(raw);
-    c.copied++;
+    counters.copied++;
     outcome(`copied → ${raw}`);
     return;
   }
@@ -150,58 +173,59 @@ export async function acquireFile(
   // mystery empty file — the remedy (supply the password, re-export) is the user's.
   const ext = extOf(path);
   if (PROTECTABLE.has(ext) && detectPasswordProtected(path, ext, Bun.file(path).size)) {
-    pend(entries, path, hash, c, "password-protected");
+    pend(entries, source, hash, counters, "password-protected");
     return;
   }
 
   // The extraction cache is keyed on the bytes that actually get converted, which for a
   // captioned recording is the sidecar — so the same captions beside a re-encoded copy of
   // the video, or ingested alone into another bundle, hit the same entry.
-  const key = capHash ?? hash;
-  const hit = existsSync(extractedPath(key));
-  let res: Extraction;
+  const cacheKey = captionHash ?? hash;
+  const wasCached = existsSync(extractedPath(cacheKey));
+  let extraction: Extraction;
 
   if (kind === "doc") {
-    note(hit ? `${ext.slice(1)} — reusing cached extraction` : `extracting ${ext.slice(1)} …`);
-    res = await extractCached(path, key, ext);
+    const label = ext === ".one" ? "OneNote section" : ext.slice(1);
+    note(wasCached ? `${label} — reusing cached extraction` : `extracting ${label} …`);
+    extraction = await extractCached(path, cacheKey, ext);
     // Pages but no text layer: the file is fine, the reader was wrong. OCR is the remedy,
     // and running it here is what keeps ingest a single pass instead of a hunt afterwards.
-    if (res.status === "needs-ocr") {
+    if (extraction.status === "needs-ocr") {
       if (!opts.ocr) {
-        pend(entries, path, hash, c, `scanned, ${res.pages}p (--skip-ocr)`);
+        pend(entries, source, hash, counters, `scanned, ${extraction.pages}p (--skip-ocr)`);
         return;
       }
-      note(`no text layer, ${res.pages}p — scanned, running OCR (seconds per page)`);
-      res = await ocrCached(path, key);
-      if (res.status === "ok") c.ocrd++;
+      note(`no text layer, ${extraction.pages}p — scanned, running OCR (seconds per page)`);
+      extraction = await ocrCached(path, cacheKey);
+      if (extraction.status === "ok") counters.ocrd++;
     }
   } else if (kind === "image") {
     if (!opts.ocr) {
-      pend(entries, path, hash, c, "image (--skip-ocr)");
+      pend(entries, source, hash, counters, "image (--skip-ocr)");
       return;
     }
-    note(hit ? "image — reusing cached OCR" : "image — running OCR …");
-    res = await ocrImageCached(path, key);
-    if (res.status === "ok" && !hit) c.ocrd++;
+    note(wasCached ? "image — reusing cached OCR" : "image — running OCR …");
+    extraction = await ocrImageCached(path, cacheKey);
+    if (extraction.status === "ok" && !wasCached) counters.ocrd++;
   } else if (kind === "caption" || captions) {
     // Ahead of the --skip-audio check on purpose: that flag exists to skip minutes of CPU
     // per file, and reading a sidecar costs none. A pair is acquired even on a fast run.
     const src = captions ?? path;
-    note(hit ? "captions — reusing cached extraction" : `reading captions from ${basename(src)} …`);
-    res = await extractCached(src, key, extOf(src));
-    if (res.status === "ok" && captions) c.captioned++;
+    note(wasCached ? "captions — reusing cached extraction" : `reading captions from ${basename(src)} …`);
+    extraction = await extractCached(src, cacheKey, extOf(src));
+    if (extraction.status === "ok" && captions) counters.captioned++;
   } else {
     if (!opts.audio) {
-      pend(entries, path, hash, c, "audio/video (--skip-audio)");
+      pend(entries, source, hash, counters, "audio/video (--skip-audio)");
       return;
     }
-    note(hit ? "audio/video — reusing cached transcript" : "no captions beside it — transcribing (minutes per file) …");
-    res = await transcribeCached(path, key);
-    if (res.status === "ok" && !hit) c.transcribed++;
+    note(wasCached ? "audio/video — reusing cached transcript" : "no captions beside it — transcribing (minutes per file) …");
+    extraction = await transcribeCached(path, cacheKey);
+    if (extraction.status === "ok" && !wasCached) counters.transcribed++;
   }
 
-  if (res.status !== "ok") {
-    pend(entries, path, hash, c, res.status === "unsupported" ? "no extractor for this format" : res.reason);
+  if (extraction.status !== "ok") {
+    pend(entries, source, hash, counters, extraction.status === "unsupported" ? "no extractor for this format" : extraction.reason);
     return;
   }
 
@@ -210,27 +234,103 @@ export async function acquireFile(
   // Name the sidecar in the provenance header, not just in this run's output: the recording
   // is the source, but which file the words were read from is what a curator needs to know
   // when the transcript and the audio disagree.
-  const tool = captions ? `${res.tool} (sidecar: ${basename(captions)})` : res.tool;
-  const raw = writeRaw(rawDir, file, { source: path, sha256: hash.slice(0, 12), tool, quality: res.quality }, extractedBody(res.path));
+  const tool = captions ? `${extraction.tool} (sidecar: ${basename(captions)})` : extraction.tool;
+  // A container's markdown links its payloads through a placeholder, because the directory
+  // they land in is named after *this* raw file and the cache entry is shared between
+  // bundles. Substituting here is the only point that knows both.
+  const attachments = existsSync(extractedFilesDir(cacheKey)) ? `${rawName.replace(/\.md$/i, "")}.files` : "";
+  const body = extractedBody(extraction.path);
+  const raw = writeRaw(
+    rawDir,
+    rawName,
+    { source, sha256: hash.slice(0, 12), tool, quality: extraction.quality },
+    attachments ? body.replaceAll(CONTAINED_FILES, `${encodeURIComponent(attachments)}/`) : body,
+    rawRoot,
+  );
   stamp(raw);
-  if (hit) c.fromCache++;
-  else if (kind === "doc" || kind === "caption") c.extracted++;
-  if (res.quality === "low") c.lowQuality++;
+  if (wasCached) counters.fromCache++;
+  else if (kind === "doc" || kind === "caption") counters.extracted++;
+  if (extraction.quality === "low") counters.lowQuality++;
   // Name the tool and the quality on the line: `quality: low` is the flag that tells
   // curation to re-read the original, and burying it in the file made it easy to miss.
-  outcome(`${hit ? "cached" : "extracted"} → ${raw}  [${tool}, quality: ${res.quality}]`);
+  outcome(`${wasCached ? "cached" : "extracted"} → ${raw}  [${tool}, quality: ${extraction.quality}]`);
+
+  if (attachments)
+    await acquireContained(cacheKey, source, join(rawDir, attachments), bundleDir, entries, counters, opts, origin?.depth ?? 0);
 }
 
-export function report(c: Counters) {
-  const line = (n: number, s: string) => (n ? console.log(`  ${n} ${s}`) : undefined);
-  line(c.skipped, "unchanged, skipped");
-  line(c.moved, "moved/renamed — existing raw file and catalog entry kept");
-  line(c.copied, "text file(s) copied");
-  line(c.extracted, "extracted");
-  line(c.fromCache, "reused from the extraction cache (.ingest-cache/extracted/)");
-  line(c.ocrd, "read by OCR");
-  line(c.transcribed, "transcribed");
-  line(c.captioned, "read from a caption sidecar (no transcription needed)");
-  line(c.lowQuality, "marked `quality: low` — verify against the source when curating");
-  line(c.pending, "not extracted (empty `raw` in log.md)");
+/**
+ * Ingest the files a container held, as sources in their own right.
+ *
+ * The payloads are already unpacked in the extraction cache; this copies them next to the
+ * container's own raw file — where its links point — and then runs each one back through
+ * `acquireFile`. That recursion is the whole point: an embedded PDF gets khb's PDF reader at
+ * `quality: high`, an embedded screenshot gets OCR'd, each earns its own ledger row and so
+ * its own place in the catalog backlog, and the flags (`--skip-ocr`) mean the same thing
+ * inside a notebook as outside one. Nothing here knows what a OneNote section is.
+ */
+async function acquireContained(
+  cacheKey: string,
+  container: string,
+  dest: string,
+  bundleDir: string,
+  entries: Map<string, Entry>,
+  counters: Counters,
+  opts: Options,
+  depth: number,
+): Promise<void> {
+  if (depth >= MAX_CONTAINER_DEPTH) {
+    note(`embedded files nested ${depth} deep — not unpacking further`);
+    return;
+  }
+  const cachedDir = extractedFilesDir(cacheKey);
+  const names = readdirSync(cachedDir).filter((name) => statSync(join(cachedDir, name)).isFile()).sort();
+  if (!names.length) return;
+
+  note(`${names.length} embedded file(s) → ${basename(dest)}/`);
+  mkdirSync(dest, { recursive: true });
+  for (const [index, name] of names.entries()) {
+    // The bytes live in raw/ from here on: derived, rebuildable, and where the container's
+    // own links resolve. The ledger still names the container, not this copy.
+    copyFileSync(join(cachedDir, name), join(dest, name));
+    counters.embedded++;
+    await acquireFile(`${index + 1}/${names.length} in ${basename(container)}`, join(dest, name), name, dest, bundleDir, entries, counters, opts, {
+      uri: `${container}#${name}`,
+      container,
+      depth: depth + 1,
+    });
+  }
+}
+
+/**
+ * Follow a moved container with the rows of what it contained.
+ *
+ * `…\old\notes.one#scan.pdf` names a file inside a path that no longer exists. The payload
+ * did not move on its own — its container did — so the rows are re-pointed by prefix rather
+ * than left to look like sources that vanished and arrived.
+ */
+function retargetContained(entries: Map<string, Entry>, bundleDir: string, from: string, to: string): void {
+  for (const entry of [...entries.values()]) {
+    if (!entry.source.startsWith(`${from}#`)) continue;
+    const moved = `${to}#${entry.source.slice(from.length + 1)}`;
+    entries.delete(entry.source);
+    entry.source = moved;
+    entries.set(moved, entry);
+    if (entry.raw) retargetRaw(bundleDir, entry.raw, moved);
+  }
+}
+
+export function report(counters: Counters) {
+  const line = (count: number, label: string) => (count ? console.log(`  ${count} ${label}`) : undefined);
+  line(counters.skipped, "unchanged, skipped");
+  line(counters.moved, "moved/renamed — existing raw file and catalog entry kept");
+  line(counters.copied, "text file(s) copied");
+  line(counters.extracted, "extracted");
+  line(counters.fromCache, "reused from the extraction cache (.ingest-cache/extracted/)");
+  line(counters.ocrd, "read by OCR");
+  line(counters.transcribed, "transcribed");
+  line(counters.captioned, "read from a caption sidecar (no transcription needed)");
+  line(counters.embedded, "embedded file(s) unpacked from a container and ingested as sources");
+  line(counters.lowQuality, "marked `quality: low` — verify against the source when curating");
+  line(counters.pending, "not extracted (empty `raw` in log.md)");
 }

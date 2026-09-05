@@ -43,11 +43,11 @@ KHB's own contribution is the bundle-of-bundles layer over both — see §1.
    markdown in `raw/` and stops. `catalog` — an agent pass, no command — turns that text
    into concepts. Splitting them means a bad extraction is a re-run, not a re-think, and
    every concept traces back through a provenance header to the original file.
-6. **Extract to markdown, locally** — binary/opaque formats (PDF, DOCX, XLSX, images,
-   audio) are converted to markdown so every bundle's knowledge is plain, greppable text.
-   Every extractor is local and deterministic: pure-JS libraries, tesseract WASM,
-   whisper.cpp.
-   Lossy routes (OCR, ASR) are marked `quality: low` rather than hidden.
+6. **Extract to markdown, locally** — binary/opaque formats (PDF, DOCX, XLSX, OneNote,
+   images, audio) are converted to markdown so every bundle's knowledge is plain, greppable
+   text. Every extractor is local and deterministic: pure-JS libraries, tesseract WASM,
+   whisper.cpp, pyOneNote.
+   Lossy routes (OCR, ASR, OneNote) are marked `quality: low` rather than hidden.
 7. **Bun** is the scripting language for all tooling and third-party interfaces.
 
 ## 2. Two directories, one of them yours
@@ -142,6 +142,8 @@ acting on them** — an agent can never read a protocol the CLI no longer implem
 │       ├── schema.ts          # khb update --schema: sources.yaml field diff/apply
 │       ├── upgrade.ts         # the refresh itself: `khb upgrade` and the drift check
 │       └── util.ts            # hub resolution + shared helpers
+├── pyscripts/                 # the only non-Bun code, spawned as a subprocess, never
+│   └── onenote.py             #   imported: the `.one` parser (needs pyOneNote's object model)
 ├── .bundle_template/          # copied by `khb new-bundle`
 ├── templates/hub/             # copied by `khb init`
 └── AGENTS.md, skills/, …      # the masters that `khb init`/`upgrade` copy into hubs
@@ -516,6 +518,7 @@ puts them on the CLI side of the §Division-of-labor line.
 | DOCX | `mammoth`, `pandoc` if present | bundled | high |
 | ODT, PPTX | `fflate` + XML | bundled | high |
 | XLSX | `fflate` → one markdown table per sheet | bundled | high |
+| OneNote (`.one`) | `pyOneNote` + `pyscripts/onenote.py` on a local python | opt-in, pip | low |
 | scanned PDF | `pdfium` + `tesseract.js` (WASM) | bundled, ~75 MB | low |
 | Images (png/jpg/webp/tif) | `tesseract.js` | bundled, ~75 MB | low |
 | Audio, video | `vno` (whisper.cpp), else `whisper` / `faster-whisper` | opt-in, npm or pip | low |
@@ -535,6 +538,35 @@ is an external executable, not something khb's own dependency tree can carry: `v
 faster than the Python whisper and hands back WebVTT the caption reader can anchor, else
 `whisper` / `faster-whisper`. A vno that is installed but not set up degrades to the
 fallback, or to pending rows, and never to a failed run.
+
+OneNote is opt-in for the same reason: `.one` is a proprietary binary store, and the reader
+for it is pyOneNote, found on `python`, `python3` or `py`.
+
+```
+pip install -U https://github.com/DissectMalware/pyOneNote/archive/master.zip
+```
+
+khb drives it through `pyscripts/onenote.py` rather than pyOneNote's own CLI, so that
+asking for text writes nothing next to the notebook and unpacks no attachments. That script
+holds the parser, and its header documents the invariants a faithful read depends on:
+advance the object-reference cursor (installed pyOneNote does not), resolve each page's
+explicitly current revision and its dependency chain, take a page's title and level from its
+root-role-2 metadata, walk real content references in order rather than de-duplicating text
+fragments, and resolve file containers to payloads rather than to a document's icon.
+
+One section becomes one `raw/` file: `#` the section, `##` a page in section order, deeper
+for a subpage by its own `PageLevel`, with tables, lists and creation timestamps — so a
+catalog pass can split pages into concepts by reading the headings. Its embedded files are
+unpacked into `<that file>.files/`, linked from the page they sit on, and then **ingested as
+sources in their own right**: an embedded PDF gets the PDF reader at `quality: high`, a
+screenshot gets OCR, and each earns a `log.md` row of its own keyed
+`<container>#<name>` — a source identity for bytes that have no path, and one that follows
+its container when that container moves. Ink, freeform positioning and styling are not
+recoverable, which is why `quality: low` holds for the section text even though it is real:
+a page can still be a screenshot with nothing under it. pyOneNote is a forensic parser and
+can abort on property types it does not implement; the row then pends with the parser's own
+reason, and re-exporting the page from OneNote as PDF or DOCX is the user's decision to make,
+not khb's.
 
 A missing dep degrades to a ledger row with an empty `raw` and a printed install
 hint — never to a failed run. `quality: low` output is a standing invitation for the catalog

@@ -7,8 +7,12 @@ import { dirname, basename, join } from "node:path";
 import { normPath } from "../lib/util";
 
 export const TEXT = [".md", ".txt", ".rst", ".adoc", ".html", ".csv", ".json", ".yaml", ".yml"];
-/** Born-digital documents: khb's own pure-JS libraries read these, no system install. */
-export const DOC = [".pdf", ".docx", ".odt", ".xlsx", ".pptx"];
+/**
+ * Born-digital documents. khb's own pure-JS libraries read all of these but `.one`, a
+ * proprietary binary store with no JS reader worth carrying: that one goes out to pyOneNote
+ * where the user has it, and pends a row naming the install where they don't (lib/extract).
+ */
+export const DOC = [".pdf", ".docx", ".odt", ".xlsx", ".pptx", ".one"];
 /** Pixels. Read by tesseract OCR (lossy — `quality: low`), or by an agent vision pass. */
 export const IMAGE = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".gif"];
 /** Audio and video: local whisper. Minutes of CPU per file, hence `--skip-audio`. */

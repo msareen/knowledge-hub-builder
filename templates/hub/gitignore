@@ -11,3 +11,8 @@ bundles/*/raw/
 # these files ship with, and silently drops the export skill from the hub's own history.
 visualizer/graph.html
 /export/
+
+# `khb go --respond` saves its account of a session where you ran `khb go` — often the hub
+# itself. Derived output, and sometimes private. A response worth keeping is worth cataloging
+# into a bundle as a concept doc rather than committing at the root.
+khb-response-*.md

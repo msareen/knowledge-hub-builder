@@ -10,3 +10,4 @@ bundles/*/raw/** -text
 *.docx binary
 *.xlsx binary
 *.pptx binary
+*.one binary

@@ -13,20 +13,25 @@
 // mammoth and fflate are pure JS with no native build and no PATH assumptions, which is
 // what lets `khb ingest` work on a bare machine. External CLIs are a bonus, not a
 // requirement: if `pdftotext` or `pandoc` happen to be installed they get a second shot at
-// anything the library couldn't read, because poppler still wins on gnarly layouts.
+// anything the library couldn't read, because poppler still wins on gnarly layouts. The one
+// document format with no built-in route at all is OneNote's `.one`, which needs pyOneNote
+// on a local python — see the OneNote section below for why it is worth the exception.
 //
 // Every route out of here is LOCAL and deterministic — pure-JS libraries, tesseract WASM,
-// a whisper binary. None of it contacts a model. That is the AGENTS.md division of labor:
-// khb converts bytes to text as cheaply as possible, and the agent's judgement is spent on
-// curation, not on transcription.
+// a whisper binary, a python parser. None of it contacts a model. That is the AGENTS.md
+// division of labor: khb converts bytes to text as cheaply as possible, and the agent's
+// judgement is spent on curation, not on transcription.
 //
-// The two lossy routes (OCR, ASR) are marked `quality: low` rather than hidden. A pixel or
-// audio source that extracted badly is not a dead end — the original file is still on disk
-// and named in the provenance header, so curation can escalate to a vision read of the
-// source instead of trusting garbled text.
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from "node:fs";
+// The three lossy routes (OCR, ASR, OneNote) are marked `quality: low` rather than hidden.
+// A pixel, audio or notebook source that extracted badly is not a dead end — the original
+// file is still on disk and named in the provenance header, so curation can escalate to a
+// vision read of the source instead of trusting garbled text.
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, openSync, readSync, closeSync } from "node:fs";
 import { INGEST_CACHE, join, basename } from "./util";
 import { note } from "./log";
+// The pyOneNote probe is shared with `khb init --with-onenote`, which runs before a hub
+// exists — hence its own hub-free module rather than a copy on each side (lib/pyonenote.ts).
+import { PYONENOTE_INSTALL, probePyOneNote, runCapture, lastLine } from "./pyonenote";
 
 export const EXTRACTED = join(INGEST_CACHE, "extracted");
 
@@ -45,6 +50,28 @@ export type Extraction =
 export function extractedPath(hash: string): string {
   return join(EXTRACTED, `${hash}.md`);
 }
+
+/**
+ * Where a container's payloads are cached: `<hash>.files/` beside `<hash>.md`.
+ *
+ * Cached alongside the text, and for the same reason — the same OneNote section ingested
+ * into two bundles should unpack once — so one cache entry is one markdown file plus, for
+ * the formats that have them, one directory of extracted attachments.
+ */
+export function extractedFilesDir(hash: string): string {
+  return join(EXTRACTED, `${hash}.files`);
+}
+
+/**
+ * The link prefix that cached container markdown carries, rewritten per bundle on the way
+ * into `raw/`.
+ *
+ * The cache is shared and content-addressed; the directory those links must point at is
+ * named after the *raw file*, which differs between bundles (a `files:` source names it by
+ * basename, a `folder:` source by flattened path). So the cached text holds a placeholder
+ * and the acquiring side, which alone knows the raw name, substitutes it.
+ */
+export const CONTAINED_FILES = "khb-attachments/";
 
 /** Cached text minus the provenance header — what a `raw/` copy actually wants. */
 export function extractedBody(path: string): string {
@@ -323,12 +350,273 @@ function cacheHit(dest: string): Extraction {
   return { status: "ok", path: dest, ...extractedMeta(dest) };
 }
 
+// --- OneNote ---------------------------------------------------------------------------
+//
+// `.one` is a proprietary binary section store, and there is no pure-JS reader for it worth
+// carrying — so it is the one document format khb cannot open by itself. pyOneNote
+// (github.com/DissectMalware/pyOneNote) can: a forensic parser that walks the file node
+// lists and hands back the property sets, locally, deterministically, and without contacting
+// a model. That puts it on khb's side of the AGENTS.md line, exactly like tesseract and
+// whisper, so khb drives it where the user has it and pends an actionable ledger row where
+// they don't.
+//
+// It is driven as a library rather than through its CLI on purpose. `pyonenote -j` builds
+// the JSON and then discards it (upstream `Main.py` returns the string and prints nothing),
+// and the printing mode dumps every embedded attachment into an output directory as a side
+// effect of asking for text. `pyscripts/onenote.py` gets the same parse with neither problem
+// and no files written anywhere near the source.
+//
+// That script — not this file — holds the parser: revision resolution, page order, titles,
+// levels, content trees, tables, lists, embedded-file identity. It has to be python because
+// the object model is pyOneNote's, and its own header documents the five invariants that
+// separate a faithful read from a plausible-looking wrong one. This side turns its JSON into
+// markdown and nothing else.
+//
+// It lives in `pyscripts/` rather than beside this file: everything under `scripts/` is Bun
+// TypeScript, and a `.py` in that tree reads as one more module the CLI can import when it
+// is really a subprocess in another language. Resolved from this module rather than from cwd
+// — khb runs from anywhere inside a hub, and the package may be installed globally.
+const ONENOTE_PY = join(import.meta.dir, "..", "..", "pyscripts", "onenote.py");
+
+/** The two file signatures pyOneNote itself accepts: a section store, and a notebook TOC. */
+const ONE_MAGIC = [
+  "e4525c7b8cd8a74daeb15378d02996d3",
+  "a12fff43d9ef764c9ee210ea5722765f",
+].map((hex) => Buffer.from(hex, "hex"));
+
+function isOneNote(path: string): boolean {
+  let fd: number;
+  try {
+    fd = openSync(path, "r");
+  } catch {
+    return false; // unreadable or gone since it was hashed — reported as a failed extraction
+  }
+  try {
+    const buf = Buffer.alloc(16);
+    return readSync(fd, buf, 0, 16, 0) === 16 && ONE_MAGIC.some((magic) => buf.equals(magic));
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** The reader, probed once per process — spawning three probes per file would cost more. */
+type OneNoteReader = { bin: string };
+let oneReader: OneNoteReader | null | undefined;
+let oneAmber: string | undefined; // set when no reader is available; printed once
+
+async function oneNoteReader(): Promise<OneNoteReader | null> {
+  if (oneReader !== undefined) return oneReader;
+
+  const probe = await probePyOneNote();
+  if (probe.bin) return (oneReader = { bin: probe.bin });
+
+  oneAmber =
+    probe.without ?
+      `pyOneNote is not installed (${probe.without} has no pyOneNote) — run:  ${PYONENOTE_INSTALL}`
+    : `no python on PATH — OneNote sections need python 3 and then:  ${PYONENOTE_INSTALL}`;
+  console.warn(`  ${oneAmber}`);
+  return (oneReader = null);
+}
+
+/** What `pyscripts/onenote.py` hands back: one section, its pages in order, their content blocks. */
+export type OneNoteFile = {
+  kind: "file";
+  guid: string;
+  name: string;
+  ext: string;
+  bytes: number;
+  image: boolean;
+  icon: boolean;      // an embedded document's thumbnail, not the document
+  revision: boolean;  // present only in a stored revision of this page
+  recovered: boolean; // its payload is in the file, whether or not khb writes it out
+  file?: string;      // the name it was written out as, when payloads were unpacked
+};
+export type OneNoteBlock = { kind: "text" | "table"; md: string } | OneNoteFile;
+export type OneNotePage = {
+  title: string;
+  level: number;
+  created?: string;
+  blocks: OneNoteBlock[];
+  unresolved?: string[];
+};
+export type OneNoteSection = {
+  sectionName?: string;
+  pages: OneNotePage[];
+  orphanFiles?: OneNoteFile[];
+  stats?: { pages: number; files: number; claimed: number; unassigned: number; unresolved: number };
+};
+
+/**
+ * Keep a page's own text from impersonating the document's structure.
+ *
+ * The headings in this file are the seams a catalog pass splits on, so a note that pastes a
+ * Dockerfile — `# installing base image` — must not arrive as an h1 sitting between two
+ * pages. Escaping is deliberately narrow: a leading `#` run and a lone rule line, nothing
+ * else. Bullets and pipes are left alone because the parser emits those itself, on purpose.
+ */
+const deStructure = (md: string) =>
+  md
+    .split("\n")
+    .map((line) => line.replace(/^(\s*)(#{1,6})(\s|$)/, "$1\\$2$3").replace(/^(\s*)(---+|===+)\s*$/, "$1\\$2"))
+    .join("\n");
+
+/** Readable size for an attachment khb names but (for now) does not write out. */
+function fileSize(bytes: number): string {
+  if (!bytes) return "size unknown";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) (value /= 1024), unit++;
+  return `${value < 10 && unit ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
+/**
+ * A parsed section → one markdown document, pages in section order.
+ *
+ * KHB's unit of ingest is the source, so a `.one` becomes one `raw/` file rather than a tree
+ * of per-page files: splitting pages into concepts is judgement, and judgement belongs to
+ * the catalog pass. What this owes that pass is a document whose seams are unambiguous —
+ * `#` for the section, `##` for a page, deeper for a subpage by its own `PageLevel` — so
+ * that "one concept per page" is a mechanical read of the headings.
+ *
+ * Embedded files are *named* here, not written: their bytes stay in the `.one`. An
+ * attachment that only exists in a stored revision is labeled as one, an icon is dropped
+ * (the document it belongs to is named on its own line), and files no current page claims
+ * are listed at the end rather than guessed onto an owner.
+ */
+export function oneNoteMarkdown(section: OneNoteSection, fallbackName = ""): string {
+  const out: string[] = [];
+  const title = (section?.sectionName || fallbackName).trim();
+  if (title) out.push(`# ${title}`);
+
+  const fileLine = (file: OneNoteFile): string => {
+    const name = file.name || (file.image ? `Image${file.ext}` : `Attachment${file.ext}`);
+    const kind = file.image ? "Image" : "Embedded file";
+    const label = file.revision ? `${kind} from an earlier revision` : kind;
+    const size = file.recovered ? fileSize(file.bytes) : "not recoverable from this file";
+    // Written out: link it, and show an image rather than describing one. The prefix is a
+    // placeholder the acquiring side rewrites to this raw file's own attachment directory.
+    if (file.file) {
+      const href = CONTAINED_FILES + encodeURIComponent(file.file);
+      if (file.image && !file.revision) return `![${file.file}](${href})`;
+      return `_${label}: [${file.file}](${href}) (${size})_`;
+    }
+    return `_${label}: ${name} (${size})_`;
+  };
+
+  for (const page of section?.pages ?? []) {
+    // A subpage is one level deeper than its parent; markdown runs out at h6.
+    const depth = Math.min(Math.max(page.level || 1, 1) + 1, 6);
+    out.push(`${"#".repeat(depth)} ${page.title || "Untitled"}`);
+    if (page.created) out.push(`_Created: ${page.created}_`);
+
+    for (const block of page.blocks ?? []) {
+      if (block.kind === "file") {
+        if (!block.icon) out.push(fileLine(block));
+      } else if (block.md?.trim()) {
+        out.push(block.kind === "table" ? block.md.trim() : deStructure(block.md.trim()));
+      }
+    }
+    if (page.unresolved?.length)
+      out.push(`_${page.unresolved.length} content reference(s) on this page could not be resolved._`);
+  }
+
+  const orphans = section?.orphanFiles ?? [];
+  if (orphans.length) {
+    out.push(`## Unassigned embedded files`);
+    out.push(
+      "These are stored in the section but belong to no current page — a deleted page, or a" +
+        " revision OneNote no longer shows. No owner is inferred for them.",
+    );
+    for (const file of orphans) out.push(`- ${fileLine(file).replace(/^_|_$/g, "")}`);
+  }
+
+  return out.join("\n\n");
+}
+
+/**
+ * Read a OneNote section through pyOneNote. Owns its own cache write, because unlike the
+ * built-in formats there is no second attempt to fall through to: either the parse produced
+ * text or the row pends with the reason.
+ */
+async function extractOneNote(path: string, hash: string, dest: string): Promise<Extraction> {
+  if (!isOneNote(path)) return { status: "failed", reason: "not a OneNote section store (file signature does not match)" };
+
+  // A cache entry for a section is its text *and* its payloads. If the text is cached but
+  // the payload directory has gone (a half-cleaned cache), the markdown links at files
+  // nobody will copy, so read the section again rather than serve dead links.
+  const filesDir = extractedFilesDir(hash);
+  if (existsSync(dest) && (existsSync(filesDir) || !readFileSync(dest, "utf8").includes(CONTAINED_FILES)))
+    return cacheHit(dest);
+
+  const reader = await oneNoteReader();
+  if (!reader) return { status: "failed", reason: oneAmber ?? `pyOneNote is not installed — run:  ${PYONENOTE_INSTALL}` };
+
+  note(`reading with pyOneNote (${reader.bin}) …`);
+  // Payloads are unpacked into the cache in the same pass that reads the text, so a cache
+  // entry is never half a section. A directory left behind by an interrupted run is
+  // replaced rather than added to, or its stale files would outlive the section they came
+  // from and be copied into raw/ as if current.
+  rmSync(filesDir, { recursive: true, force: true });
+  const { code, out, err } = await runCapture([reader.bin, ONENOTE_PY, path, "--files", filesDir]);
+  if (code !== 0 || !out.trim()) {
+    // pyOneNote is a forensic parser, not a renderer: some property types abort its walk.
+    // Name what it said and leave the row pending — re-exporting the page from OneNote as
+    // PDF or DOCX is a route khb reads well, and that is the user's call to make.
+    const why = lastLine(err) || "no output";
+    rmSync(filesDir, { recursive: true, force: true }); // no half-unpacked section in the cache
+    return { status: "failed", reason: `pyOneNote could not parse it: ${why}` };
+  }
+
+  let section: OneNoteSection;
+  try {
+    section = JSON.parse(out);
+  } catch {
+    return { status: "failed", reason: "the OneNote reader returned no usable JSON" };
+  }
+
+  // Say what was found before saying where it went: page and file counts are what a curator
+  // checks a section against, and an unresolved reference is a fact about *this* run.
+  const stats = section.stats;
+  if (stats)
+    note(
+      `${stats.pages} page(s), ${stats.files} embedded file(s)` +
+        `${stats.unassigned ? `, ${stats.unassigned} unassigned` : ""}` +
+        `${stats.unresolved ? `, ${stats.unresolved} unresolved reference(s)` : ""}`,
+    );
+
+  const text = oneNoteMarkdown(section, basename(path).replace(/\.one$/i, ""));
+  if (!text.trim()) return { status: "failed", reason: "no pages recovered — the section may hold only ink" };
+  return { status: "ok", path: writeCache(dest, path, "pyOneNote", "low", text), tool: "pyOneNote", quality: "low" };
+}
+
+/**
+ * Whether a `.one` file could be read on this machine, as a fact to report rather than as a
+ * step in a run — `khb doctor`'s counterpart to `transcriberStatus()`, and the same reason
+ * for existing: the probe above caches its answer and warns on stderr, which is right in the
+ * middle of an ingest and wrong in the middle of a report.
+ */
+export async function oneNoteStatus(): Promise<{ ready: boolean; detail: string; fix?: string }> {
+  const probe = await probePyOneNote();
+  if (probe.bin) return { ready: true, detail: `pyOneNote (${probe.bin})` };
+
+  const pend = ".one sections pend as rows, everything else ingests";
+  // Same three answers as the run, so the report and the ledger never disagree about the
+  // reason — and a machine with no python is told to get one rather than handed a pip line.
+  return probe.without ?
+      { ready: false, detail: `pyOneNote not installed in ${probe.without} — ${pend}`, fix: PYONENOTE_INSTALL }
+    : { ready: false, detail: `no python on PATH — ${pend}`, fix: `install python 3, then:  ${PYONENOTE_INSTALL}` };
+}
+
 /**
  * Fill the cache for this file's extracted text and say what happened.
  * Never throws — a run over thousands of files degrades per file instead of aborting.
  */
 export async function extractCached(path: string, hash: string, ext: string): Promise<Extraction> {
   const dest = extractedPath(hash);
+  // Ahead of the cache check: a container owns what "cached" means for it, since its entry
+  // is a markdown file plus a directory of unpacked payloads.
+  if (ext === ".one") return await extractOneNote(path, hash, dest);
   if (existsSync(dest)) return cacheHit(dest);
   if (!LIBRARY[ext]) return { status: "unsupported" };
 

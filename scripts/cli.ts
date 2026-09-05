@@ -5,7 +5,7 @@ import { version, findHub, markerIn, MARKER } from "./lib/paths";
 import { paint, paintErr } from "./lib/color";
 
 const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; desc: string }> = {
-  init: { load: () => import("./init"), usage: 'khb init [dir] [--name N] [--description "…"]', desc: "create a hub here (or in dir)" },
+  init: { load: () => import("./init"), usage: 'khb init [dir] [--name N] [--description "…"] [--with-onenote]', desc: "create a hub here (or in dir)" },
   upgrade: { load: () => import("./init"), usage: "khb upgrade", desc: "refresh this hub's contract docs" },
   "new-bundle": { load: () => import("./new-bundle"), usage: 'khb new-bundle <name> ["scope"]', desc: "scaffold a bundle + register it" },
   ingest: {
