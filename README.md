@@ -19,7 +19,8 @@ KHB keeps two jobs separate:
   judgement and has no CLI command.
 
 Full design: [SPEC.md](SPEC.md). Agent contract: [AGENTS.md](AGENTS.md). Common workflow
-questions: [FAQ](document/faq.md).
+questions: [FAQ](document/faq.md). Ingesting a OneNote notebook:
+[Ingesting OneNote](document/onenote.md).
 
 ## Quick Start
 
@@ -77,6 +78,57 @@ there — see [Moving between hubs](#moving-between-hubs).
 
 ## How It Works
 
+The whole path, and where the money goes. `khb` does the mechanical half — deterministic,
+offline, contacts no model, costs nothing to run. An agent does the interpreting half, and
+that is the half that spends tokens.
+
+```
+   MECHANICAL — khb only. Deterministic, offline, contacts no model, costs no tokens.
+  ═══════════════════════════════════════════════════════════════════════════════════
+
+   khb init
+        │      the hub: khb.json · outer.index.md · bundles/
+        ▼
+   khb new-bundle <name> "<scope>"                                    ×N, as needed
+        │      one bundle per *owner* — a person, a team, a client, a project.
+        │      Topics live in subdirectories inside a bundle, not in bundles of
+        │      their own. Name none and material lands in `default`.
+        │      → index.md · refs.md · sources.yaml · log.md
+        ▼
+   edit bundles/<name>/sources.yaml                          ← your decision, one file
+        │      folders, files, urls (+ optional exclude:). Nothing is copied yet.
+        ▼
+   khb ingest <bundle>
+        │      every declared source → bundles/<name>/raw/*.md, one log.md row each
+        │      text · PDF · DOCX · ODT · XLSX · PPTX · OneNote · OCR · whisper · captions
+        │      files embedded in a document are unpacked and ingested in their own right
+        │      re-runs skip anything whose content hash has not changed
+        ▼
+  ═══════════════════════════════════════════════════════════════════════════════════
+   JUDGEMENT — an agent, following the skills in skills/. This is what spends tokens.
+  ═══════════════════════════════════════════════════════════════════════════════════
+
+   catalog        (no command — ask your agent to catalog the bundle)
+        │      raw/*.md → concept docs with front matter, linked, listed in index.md,
+        │      and log.md's `curated` column filled in
+        │      COST scales with the corpus: every raw file is read once. The expensive
+        │      step, and the only one that turns text into knowledge.
+        ▼
+   query          (no command — just ask)
+        │      outer.index.md ─► one bundle's index.md ─► only the concepts it points at
+        │      spanning two bundles: resolve in the first, follow refs.md, enter the
+        │      second through its own index.md; join the answers in the reply.
+        │      COST is bounded by routing, not by hub size — two hops, then a handful
+        │      of files. That is what the router is for.
+        ▼
+     an answer, cited to concept docs (never to raw/)
+
+   ANY TIME, MECHANICAL:  khb lint · khb doctor · khb visualize · khb export · khb upgrade
+```
+
+So: ingest as much as you like for free, spend judgement once per source when cataloging,
+and per question when querying.
+
 ### 1. Ingest
 
 `khb ingest <bundle>` reads `sources.yaml` and writes extracted markdown under
@@ -96,7 +148,7 @@ so installing KHB pulls them down whether or not you ever ingest a scan. That co
 75 MB of WASM plus `sharp`'s native binaries — the price of an ingest that never stalls
 waiting for a setup step.
 
-One extractor is genuinely optional:
+Two extractors are genuinely optional:
 
 - audio and video transcription needs a transcriber on `PATH`. KHB prefers
   [`vno`](https://www.npmjs.com/package/@msareen/voice-notes-organizer)
@@ -106,9 +158,29 @@ One extractor is genuinely optional:
   but not yet set up leaves recordings pending with `run: vno setup` and holds up nothing
   else in the run. A recording that already has a `.vtt` or `.srt` beside
   it needs neither — those captions are read instead
+- OneNote sections (`.one`) need
+  [pyOneNote](https://github.com/DissectMalware/pyOneNote) on a local python
+  (`pip install -U https://github.com/DissectMalware/pyOneNote/archive/master.zip`). KHB
+  finds it on `python`, `python3` or `py`. One section becomes one markdown file: pages in
+  section order as `##` headings, subpages nested by their own level, each page's current
+  revision only, with tables, lists and creation timestamps. Files embedded in the notes are
+  unpacked beside it, linked, and ingested as sources of their own — so an attached PDF is
+  read at `quality: high` and an attached screenshot is OCR'd, each with its own ledger row.
+  Ink and freeform layout are not recoverable, so the section text stays `quality: low`.
+  A modern OneNote notebook is cloud-first and is not a file on your disk, so this route
+  starts with OneNote's own **Save a Copy** — see
+  **[Ingesting OneNote](document/onenote.md)** for the export step, the setup, and what
+  survives the trip
 
-Without it, KHB leaves a pending row in `log.md` and prints the required setup rather than
+Without them, KHB leaves a pending row in `log.md` and prints the required setup rather than
 failing the run.
+
+`khb init --with-onenote` will install pyOneNote for you at setup time — the one moment
+you're asking KHB to prepare things. It is opt-in and forgiving in every direction: no
+python, no pip, a distro python that refuses a global install (it retries with `--user`), no
+network — any of those prints the `pip` line to run later and **still creates the hub**.
+Nothing else in KHB ever installs software on its own; an ingest that finds no pyOneNote
+pends those rows and tells you what to run.
 
 Every raw markdown file carries provenance:
 
@@ -251,7 +323,7 @@ Commands can be run directly or requested through the matching agent skill.
 | `khb new-bundle <name> ["scope"]` | Create and register a bundle |
 | `khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]` | Acquire and extract declared sources |
 | `khb lint` | Validate routing, bundle structure, and OKF metadata |
-| `khb doctor` | Read-only report: version, location, per-bundle counts, catalog backlog, transcriber |
+| `khb doctor` | Read-only report: version, location, per-bundle counts, catalog backlog, extractors. Alias: `khb status` |
 | `khb visualize [--port N] [--no-open]` (aliases: `vis`, `viz`) | Serve the live bundle graph on a random free port and open it in your default browser — pan/zoomable cross-bundle map, drill into a bundle for its folder-clustered concepts, rebuild-on-refresh, exits when you close the tab |
 | `khb export <bundle> [dest]` | Export one standalone bundle |
 
@@ -264,8 +336,8 @@ stdout is plain text either way.
 
 ### `khb doctor` — what state is this hub in?
 
-A single read-only report. It writes nothing and repairs nothing; each finding names the
-command that does.
+A single read-only report, also spelled `khb status`. It writes nothing and repairs
+nothing; each finding names the command that does.
 
 ```text
 Hub            name, description, stamped version vs installed, location, registered

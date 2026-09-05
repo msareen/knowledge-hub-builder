@@ -72,11 +72,11 @@ Claude loads it through `CLAUDE.md`; Codex loads it directly.
 One hard boundary governs every workflow and every future change to the tooling:
 
 - **`khb` converts bytes to text.** Hashing, caching, file plumbing, ledger-keeping, and
-  *every* local extractor: PDF/DOCX/ODT/XLSX/PPTX libraries, tesseract OCR for scans and
-  images, whisper.cpp (via `vno`) or whisper for audio and video, and the caption reader
-  that spares them the job whenever a `.vtt`/`.srt` sits beside the recording. All of it
-  deterministic, offline, and free of charge. It **never contacts a model** — not directly,
-  not by shelling out.
+  *every* local extractor: PDF/DOCX/ODT/XLSX/PPTX libraries, pyOneNote for OneNote `.one`
+  sections, tesseract OCR for scans and images, whisper.cpp (via `vno`) or whisper for audio
+  and video, and the caption reader that spares them the job whenever a `.vtt`/`.srt` sits
+  beside the recording. All of it deterministic, offline, and free of charge. It **never
+  contacts a model** — not directly, not by shelling out.
 - **The agent decides what the text means.** Splitting a document into concepts, labeling
   and linking them, curating `raw/` into the wiki, escalating a bad OCR to a vision read,
   and judging when a query has produced a new concept worth keeping.
@@ -137,7 +137,7 @@ From outside, pass `--hub <dir>` or set `$KHB_HUB`.
 | Command | Purpose |
 |---|---|
 | `khb lint` | validate structure against `skills/lint/SKILL.md` |
-| `khb doctor` | read-only report on the hub: version, location, per-bundle concept/raw/backlog counts, transcriber, the machine config's schema findings, and the command that fixes each finding. Writes nothing, and does not duplicate `lint` |
+| `khb doctor` (alias `khb status`) | read-only report on the hub: version, location, per-bundle concept/raw/backlog counts, transcriber, the OneNote reader, the machine config's schema findings, and the command that fixes each finding. Writes nothing, and does not duplicate `lint` |
 | `khb upgrade` | refresh this hub's package-owned contract docs — runs by itself whenever `khb.json`'s stamped version differs from the installed khb, so these docs always match the CLI |
 | `khb visualize [--port N] [--no-open]` | serve the live bundle graph in your browser; aliases `vis`, `viz` |
 | `khb new-bundle <name>` | scaffold + register a bundle |
@@ -167,11 +167,11 @@ There is no `khb catalog` command — cataloging is entirely a judgement pass.
 
 **Ingest** (`skills/ingest/SKILL.md`) is mechanical and flat: `khb ingest <bundle>` pulls
 every declared source into `raw/` as markdown with a provenance header, extracting
-everything it can locally — text, PDF, DOCX, ODT, XLSX, PPTX, images by OCR, audio and
-video by whisper — or, where a recording has a `.vtt`/`.srt` beside it, from those captions,
-the pair acquired as a single source. Sources behind an authenticated API (Confluence, ADO,
-git hosts) you pull yourself via MCP/CLI into the same `raw/` shape. Ingest never interprets
-content.
+everything it can locally — text, PDF, DOCX, ODT, XLSX, PPTX, OneNote `.one` sections by
+pyOneNote, images by OCR, audio and video by whisper — or, where a recording has a
+`.vtt`/`.srt` beside it, from those captions, the pair acquired as a single source. Sources
+behind an authenticated API (Confluence, ADO, git hosts) you pull yourself via MCP/CLI into
+the same `raw/` shape. Ingest never interprets content.
 
 When the user has not named a bundle, **ask** which existing bundle owns the material or
 whether to start a new one, and for an existing bundle ask whether to re-ingest what its

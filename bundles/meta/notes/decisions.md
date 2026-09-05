@@ -6,6 +6,115 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-09-06 — `khb status` is an alias of `khb doctor`, and `khb init` closes with the
+  OneNote hint.** Two small surface fixes with one theme: telling people a thing they would
+  otherwise have to already know. `status` is simply the word people reach for; it lives in
+  `ALIASES` rather than `COMMANDS` so help still lists the command once. The init hint prints
+  the `pip` line — never `khb init --with-onenote`, which cannot be re-run on a hub that
+  already exists — and only when the reader is actually missing, since "run this to enable
+  it" is noise to someone for whom it is enabled. The same hint closes the first-run wizard.
+
+- **2026-09-05 — `khb init --with-onenote` may install pyOneNote; nothing else may install
+  anything.** This does not weaken the rule it looks like it weakens. The rule is that khb
+  never installs software *on its own initiative* — an ingest that finds no transcriber or no
+  pyOneNote pends those rows and prints the command (see the vno amber gate). `init` is the
+  other case entirely: an explicit flag, at the one moment the user is asking khb to set
+  things up. Off by default, and it is the only surface with an installer.
+
+  Forgiving is the whole design: the hub is the deliverable, so no python, no pip, a
+  PEP 668 distro python (retried once with `--user`), a dead network, or a pip that claims
+  success while the import still fails all end the same way — the hub exists, and the `pip`
+  line is printed for later. Success is confirmed by importing the module, never by pip's
+  exit code, because a "ready" that cannot read a `.one` is worse than an honest failure.
+
+  Mechanically it forced the pyOneNote probe out of `lib/extract.ts` into `lib/pyonenote.ts`:
+  `init` runs before a hub exists and `lib/util` resolves a hub or exits, so the probe had to
+  live somewhere hub-free. Both sides now share one probe rather than each keeping a copy
+  that could disagree about what "installed" means.
+
+- **2026-09-05 — OneNote `.one` is read by pyOneNote through `pyscripts/onenote.py`, at
+  `quality: low`.** `.one` is a proprietary binary store with no pure-JS reader worth
+  carrying, so it is the first *document* format with an outside dependency — pyOneNote
+  (`pip install -U https://github.com/DissectMalware/pyOneNote/archive/master.zip`), probed
+  on `python`, `python3`, `py`. It stays on the khb side of the division-of-labor line for
+  the same reason tesseract and whisper do: a local, deterministic conversion that contacts
+  no model. A missing python or a python without pyOneNote is an amber gate — those rows pend
+  with which of the two it is, and the rest of the corpus ingests.
+
+  **The parser lives in `pyscripts/`, not under `scripts/`.** Everything in `scripts/` is Bun
+  TypeScript the CLI imports; a `.py` sitting in that tree reads as one more module rather
+  than what it is — a subprocess in another language. `pyscripts/` is published by its own
+  `files` entry, and `extract.ts` resolves the script from `import.meta.dir` so a global
+  install finds it from any working directory. `__pycache__` is gitignored *and* excluded
+  from the tarball: `.gitignore` alone does not stop npm, because a directory named in
+  `files` is published whether git ignores its contents or not (verified with `npm pack
+  --dry-run`, which was shipping a 31 kB `.pyc`).
+
+  **The parser lives in python, in its own file, not in a snippet.** The first cut called
+  `get_properties()` and rendered the flat node stream it returned, which produces text that
+  looks plausible and is wrong. The parser was then rewritten against a working exporter for
+  these notebooks (a page-per-file exporter, kept outside this repo) and its
+  stated invariants, all five of which the snippet violated or dodged:
+
+  - installed pyOneNote's `ObjectSpaceObjectStreamOfIDs.read()` returns `body[head]` without
+    advancing `head`, so *every* object reference resolves to the same first object — no
+    content tree can be walked until that is corrected locally;
+  - a page's text is its **explicitly current** revision (role 1) composed over its
+    dependency chain, not whatever traversal order yields;
+  - title and level come from root-role-2 metadata, or one series' first title gets stamped
+    on all of its subpages;
+  - content is walked by real references, in order — never reconstructed by globally
+    de-duplicating text fragments, which was exactly the old snippet's trick;
+  - an embedded document's `PictureContainer` is its *icon*; substituting it loses the
+    document.
+
+  Verified against 34 real sections: 405 pages, matching that exporter's own verified output
+  section for section, with zero unresolved references.
+
+  **Output shape is KHB's, not the exporter's.** That tool writes a tree of one file per page
+  plus extracted attachments; ingest writes **one `raw/` file per source** — `#` section,
+  `##` page in section order, deeper for subpages by `PageLevel` — because "this page is a
+  concept" is judgement and belongs to catalog. Page text that would fake those seams (a
+  pasted `# comment`) is escaped, so every heading in a raw file is a real page.
+
+  `quality: low` stands for the section text: ink, freeform positioning and styling are
+  unrecoverable, so a page can still be a screenshot with nothing under it.
+
+- **2026-09-05 — A file inside a source is a source: `<container>#<name>` rows.** Embedded
+  files are unpacked (into `<hash>.files/` beside the cached markdown, so one cache entry is
+  one section) and then re-enter `acquireFile` as ordinary sources. An attached PDF therefore
+  gets khb's PDF reader at `quality: high`, an attached screenshot gets tesseract, and each
+  earns its own `log.md` row and its own catalog backlog entry — which is the whole point:
+  the knowledge in a notebook is often *in* the attachments, and naming them was leaving it
+  on the floor.
+
+  Consequences worth remembering:
+
+  - **Identity for bytes with no path.** The row is `…\Docker.one#diagram.png`. The payload
+    copy lives in `raw/`, which is derived and rebuildable, so it cannot be the identity.
+    Move detection is skipped for these rows (a payload cannot move on its own) and
+    `retargetContained` re-points them by prefix when their container moves — otherwise every
+    section that moved would strand its attachments as vanished sources.
+  - **`writeRaw`/`rawNameFor` learned the raw root** (`rawRel`), because payloads nest one
+    level deeper (`raw/folder/Docker.one.files/`) and a row whose `raw` dropped the middle
+    segment names a file that is not there. Callers that pass no root keep the old
+    `basename` behaviour exactly.
+  - **The cached markdown cannot name a bundle's raw file**, since the cache is shared and
+    the attachment directory is named after the raw file — which differs between a `files:`
+    and a `folder:` source. So the cache holds a `khb-attachments/` placeholder and the
+    acquiring side, which alone knows both, substitutes it.
+  - **Payloads are deduplicated by digest.** A section stores the same document under
+    several object ids routinely; without this each copy became a file, a row, an extraction
+    and eventually a duplicate concept. A revision-only attachment identical to one the page
+    still shows is likewise not listed twice.
+  - Icons are never unpacked: OCR'ing a PDF thumbnail is waste, and the document it stands
+    for is written out under its own name.
+
+  Verified end to end on a real 15-page section: 17 file references → 8 distinct payloads,
+  8 attachment rows, embedded PDFs read at `quality: high`, a scanned one falling through to
+  OCR automatically, every link in the section resolving, `khb lint` clean, and a second run
+  skipping the lot rather than re-extracting.
+
 - **2026-08-30 — First unit tests + CI live in root `tests/`, not beside the code.**
   `package.json`'s `files` allowlist ships `scripts/` into every install, and that allowlist
   has already shipped a hub-breaking mistake once (2026-08-24, `export/` matching

@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, existsSync, statSync, mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { join, basename, resolve } from "node:path";
+import { join, basename, resolve, relative } from "node:path";
 import { MARKER, markerIn, findHub } from "./paths";
 
 /**
@@ -70,6 +70,20 @@ export type RawMeta = {
 const safeRawName = (name: string) => name.replace(/[^\w.-]+/g, "_") || "source.md";
 
 /**
+ * How the ledger spells a directory inside `raw/`.
+ *
+ * Almost every source lands one level down (`raw/folder/`, `raw/web/`), which `basename` got
+ * right on its own — but a container's contents nest one deeper (`raw/folder/notes.one.files/`
+ * for the attachments pulled out of a OneNote section), and a row whose `raw` value dropped
+ * the middle segment would name a file that is not there. Given the bundle's `raw` root, the
+ * path is computed from it instead of guessed at.
+ */
+export function rawRel(dir: string, rawRoot?: string): string {
+  const rel = rawRoot ? relative(rawRoot, dir).replaceAll("\\", "/") : basename(dir);
+  return rel && rel !== "." ? `raw/${rel}` : "raw";
+}
+
+/**
  * Keep the readable filename unless another source already owns it. The suffix is based on
  * source identity, not content, so identical bytes acquired from two origins retain honest
  * provenance instead of overwriting each other.
@@ -79,9 +93,10 @@ export function rawNameFor(
   name: string,
   source: string,
   entries: Iterable<{ source: string; raw: string }>,
+  rawRoot?: string,
 ): string {
   const safe = safeRawName(name);
-  const rel = `raw/${basename(dir)}/${safe}`;
+  const rel = `${rawRel(dir, rawRoot)}/${safe}`;
   const owner = [...entries].find((e) => e.raw === rel);
   if ((!owner || owner.source === source) && (owner || !existsSync(join(dir, safe)))) return safe;
   const stem = safe.toLowerCase().endsWith(".md") ? safe.slice(0, -3) : safe;
@@ -93,7 +108,7 @@ export function rawNameFor(
  * Silent by design — the caller owns the per-file line, and knows the verb ("copied",
  * "extracted", "transcribed") that a write on its own cannot.
  */
-export function writeRaw(dir: string, name: string, meta: RawMeta, body: string): string {
+export function writeRaw(dir: string, name: string, meta: RawMeta, body: string, rawRoot?: string): string {
   mkdirSync(dir, { recursive: true });
   const safe = safeRawName(name);
   const fm =
@@ -103,9 +118,7 @@ export function writeRaw(dir: string, name: string, meta: RawMeta, body: string)
     (meta.quality ? `quality: ${meta.quality}\n` : "") +
     `---\n\n`;
   writeFileSync(join(dir, safe), fm + body);
-  // dir is <bundle>/raw/<type>; report the path as the ledger stores it
-  const type = basename(dir);
-  return `raw/${type}/${safe}`;
+  return `${rawRel(dir, rawRoot)}/${safe}`;
 }
 
 /**

@@ -443,6 +443,12 @@ async function wizard(): Promise<never> {
       `Next: add sources to ${paint.path(`bundles/${bundle}/sources.yaml`)}, then ${paint.cmd(`khb ingest ${bundle}`)}.`,
     );
 
+  // The same closing hint `khb init` prints: every extractor works out of the box except
+  // OneNote, and this is the moment someone is still setting things up.
+  const { oneNoteHint } = await import("./lib/pyonenote");
+  const oneNote = await oneNoteHint();
+  if (oneNote) console.log(oneNote);
+
   const go = askWith(`\nOpen it now?`, "y");
   if (!/^y/i.test(go)) process.exit(0);
   launch({ ...entry, path: hub });

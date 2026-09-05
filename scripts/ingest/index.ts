@@ -5,10 +5,10 @@
 // Whatever the text means is the catalog pass's problem (skills/catalog/SKILL.md).
 //
 // Everything mechanically convertible is converted here in one go — text, PDF, DOCX, ODT,
-// XLSX, PPTX, images (OCR), audio and video (whisper) — because leaving half the corpus as
-// "pending, agent please run a CLI" made ingest a multi-round negotiation rather than a
-// step. Sources that need an authenticated API (Confluence, ADO, git hosts) stay with the
-// agent via MCP/CLI, which is a plugin boundary, not a phase.
+// XLSX, PPTX, OneNote (pyOneNote), images (OCR), audio and video (whisper) — because leaving
+// half the corpus as "pending, agent please run a CLI" made ingest a multi-round negotiation
+// rather than a step. Sources that need an authenticated API (Confluence, ADO, git hosts)
+// stay with the agent via MCP/CLI, which is a plugin boundary, not a phase.
 import { parse } from "yaml";
 import { read, join, HUB } from "../lib/util";
 import { detail, section, totalElapsed } from "../lib/log";
@@ -63,8 +63,8 @@ const dir = bundleForIngest(bundle);
 let cfg: unknown;
 try {
   cfg = parse(read(join(dir, "sources.yaml")));
-} catch (e) {
-  console.error(`${bundle}: sources.yaml is not valid YAML: ${(e as Error).message}`);
+} catch (error) {
+  console.error(`${bundle}: sources.yaml is not valid YAML: ${(error as Error).message}`);
   process.exit(1);
 }
 const declared =
@@ -76,28 +76,28 @@ if (declared !== undefined && !Array.isArray(declared)) {
   process.exit(1);
 }
 const sources = (declared ?? []) as any[];
-for (const [i, s] of sources.entries()) {
-  const at = `sources.yaml sources[${i}]`;
-  if (!s || typeof s !== "object" || typeof s.type !== "string") {
-    console.error(`${bundle}: ${at} must be an object with a string 'type'`);
+for (const [index, source] of sources.entries()) {
+  const where = `sources.yaml sources[${index}]`;
+  if (!source || typeof source !== "object" || typeof source.type !== "string") {
+    console.error(`${bundle}: ${where} must be an object with a string 'type'`);
     process.exit(1);
   }
-  if (s.type === "folder" && typeof s.path !== "string") {
-    console.error(`${bundle}: ${at}.path must be a string`);
+  if (source.type === "folder" && typeof source.path !== "string") {
+    console.error(`${bundle}: ${where}.path must be a string`);
     process.exit(1);
   }
   for (const [type, field] of [["files", "paths"], ["web", "urls"]] as const) {
-    if (s.type === type && (!Array.isArray(s[field]) || s[field].some((v: unknown) => typeof v !== "string"))) {
-      console.error(`${bundle}: ${at}.${field} must be a list of strings`);
+    if (source.type === type && (!Array.isArray(source[field]) || source[field].some((value: unknown) => typeof value !== "string"))) {
+      console.error(`${bundle}: ${where}.${field} must be a list of strings`);
       process.exit(1);
     }
   }
   if (
-    (s.type === "folder" || s.type === "files") &&
-    s.exclude !== undefined &&
-    (!Array.isArray(s.exclude) || s.exclude.some((v: unknown) => typeof v !== "string"))
+    (source.type === "folder" || source.type === "files") &&
+    source.exclude !== undefined &&
+    (!Array.isArray(source.exclude) || source.exclude.some((value: unknown) => typeof value !== "string"))
   ) {
-    console.error(`${bundle}: ${at}.exclude must be a list of strings`);
+    console.error(`${bundle}: ${where}.exclude must be a list of strings`);
     process.exit(1);
   }
 }
@@ -120,31 +120,33 @@ detail(`sources:  ${sources.length} declared in bundles/${bundle}/sources.yaml`)
 detail(`options:  ocr=${opts.ocr ? "on" : "off"}  audio=${opts.audio ? "on" : "off"}  force=${opts.force ? "on" : "off"}`);
 detail(`ledger:   ${entries.size} existing row(s) in log.md`);
 
-for (const [i, s] of sources.entries()) {
+for (const [index, source] of sources.entries()) {
   const label =
-    s.type === "folder" ? s.path
-    : s.type === "files" ? `${s.paths.length} path(s)`
-    : s.type === "web" ? `${s.urls.length} url(s)`
+    source.type === "folder" ? source.path
+    : source.type === "files" ? `${source.paths.length} path(s)`
+    : source.type === "web" ? `${source.urls.length} url(s)`
     : "";
-  section(`[${i + 1}/${sources.length}] ${s.type}${label ? ` — ${label}` : ""} → bundles/${bundle}/raw/${s.type}/`);
-  const rawDir = join(dir, "raw", s.type);
-  if (s.type === "folder") await ingestFolder(s, rawDir, dir, entries, opts);
-  else if (s.type === "files") await ingestFiles(s, rawDir, dir, entries, opts);
-  else if (s.type === "web") await ingestWeb(s, rawDir, dir, entries, opts);
+  section(
+    `[${index + 1}/${sources.length}] ${source.type}${label ? ` — ${label}` : ""} → bundles/${bundle}/raw/${source.type}/`,
+  );
+  const rawDir = join(dir, "raw", source.type);
+  if (source.type === "folder") await ingestFolder(source, rawDir, dir, entries, opts);
+  else if (source.type === "files") await ingestFiles(source, rawDir, dir, entries, opts);
+  else if (source.type === "web") await ingestWeb(source, rawDir, dir, entries, opts);
   else console.warn(
       paintErr.warn(
-        `  '${(s as any).type}' has no scripted ingester — the agent pulls it via MCP/CLI (see skills/ingest/SKILL.md)`,
+        `  '${(source as any).type}' has no scripted ingester — the agent pulls it via MCP/CLI (see skills/ingest/SKILL.md)`,
       ),
     );
 }
 
 writeLedger(dir, entries, bundle);
 
-const all = [...entries.values()];
-const pending = all.filter((e) => !e.raw).length;
-const uncurated = all.filter((e) => e.raw && !e.curated).length;
+const rows = [...entries.values()];
+const pending = rows.filter((row) => !row.raw).length;
+const uncurated = rows.filter((row) => row.raw && !row.curated).length;
 console.log(`\n${paint.ok("done")} in ${totalElapsed()}`);
-console.log(`ledger: ${all.length} source(s) in ${paint.path(join(dir, "log.md"))}`);
+console.log(`ledger: ${rows.length} source(s) in ${paint.path(join(dir, "log.md"))}`);
 if (pending)
   console.log(`  ${paint.warn(String(pending))} with an empty 'raw' — not extracted; see the reasons above`);
 console.log(`  ${uncurated ? paint.warn(String(uncurated)) : "0"} in raw/ but not yet cataloged (empty 'curated')`);

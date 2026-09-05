@@ -149,6 +149,7 @@ curation, not transcription.
 | `.pdf` (born-digital) | `unpdf`, then `pdftotext` if on PATH | high |
 | `.docx` / `.odt` / `.pptx` | `mammoth` / `fflate` / `fflate`, `pandoc` if on PATH | high |
 | `.xlsx` | `fflate` → one markdown table per sheet | high |
+| `.one` (OneNote section) | `pyOneNote` + `pyscripts/onenote.py` on a local python, if installed | **low** |
 | `.pdf` (scanned, no text layer) | `pdfium` + `tesseract.js`, automatically | **low** |
 | `.png .jpg .webp .tif .gif` | `tesseract.js`, automatically | **low** |
 | `.mp3 .wav .m4a .mp4 .mov .mkv` | local `vno` (whisper.cpp), else `whisper` / `faster-whisper` | **low** |
@@ -186,7 +187,94 @@ transcript that reads like a machine wrote it the way you would treat one.
 itself, so a scanned PDF or a photographed page is read on the first run, in any hub, without
 asking the user to install anything.
 
-Transcription is the one route that can be absent. It wants a transcriber on `PATH`, and
+**OneNote sections need pyOneNote.** `.one` is a proprietary binary store with no pure-JS
+reader worth carrying, so it is the one *document* format with an outside dependency:
+
+```
+pip install -U https://github.com/DissectMalware/pyOneNote/archive/master.zip
+```
+
+`khb init --with-onenote` runs that at hub-creation time, if the user asked for it there.
+Nothing else in khb installs it, and you should not either: an ingest that finds no
+pyOneNote pends those rows with the command and carries on. Suggest the `pip` line; let the
+user run it.
+
+**A modern notebook is not a file on disk.** OneNote for Microsoft 365 keeps notebooks in
+the service, so there is nothing under OneDrive to point a source at — the user first has to
+export one with OneNote's own **Notebook Properties → Save a Copy**, which writes a folder
+of `.one` sections. If someone asks to ingest OneNote and names a OneDrive path with no
+`.one` files under it, that is what is missing; walk them through
+`document/onenote.md` rather than guessing at a path.
+
+khb looks for it on `python`, `python3` and `py`, in that order, and drives it through
+`pyscripts/onenote.py` rather than pyOneNote's own CLI — that way nothing is written next
+to the user's notebook and no attachment is unpacked as a side effect of asking for text.
+
+**One `.one` becomes one `raw/` file, with the page structure intact.** A `.one` is a
+*section* (one tab of a notebook), and it lands as a single markdown document because
+splitting pages into concepts is judgement, and judgement is the catalog pass's job. What
+that pass gets is a document whose seams are unambiguous:
+
+```markdown
+# Docker                       ← the section
+## Docker Cheat sheet          ← a page, in the order the section shows them
+_Created: 2019-03-03 16:59:47_
+…text, lists and tables in content order…
+![diagram.png](Docker.one.files/diagram.png)
+### 20 Oct 2022                ← a subpage, nested by its own PageLevel
+## Unassigned embedded files   ← files no current page claims
+```
+
+So "one concept per page" is a mechanical read of the `##` headings. Content that would
+otherwise fake those seams — a pasted Dockerfile's `# comment` line — is escaped, so every
+heading in the file is a real page.
+
+What is preserved: pages in section order; each page's **current** revision only; parent and
+subpage titles kept apart; text in content order; tables as markdown tables; basic lists as
+bullets; each page's creation timestamp; every embedded file, written out and linked; an
+attachment that exists only in a stored revision, labeled as such under the page that owns
+it; and files with no current owner, listed at the end with no owner invented for them.
+
+**Embedded files become sources of their own.** The payloads are written next to the
+section's raw file, in `<that file>.files/`, and each one is then ingested exactly as if it
+had been named in `sources.yaml`:
+
+```
+raw/files/Docker.one.md                        ← the section
+raw/files/Docker.one.files/diagram.png         ← the payload, linked from above
+raw/files/Docker.one.files/diagram.png.md      ← what khb read out of it (OCR here)
+```
+
+So an embedded PDF goes through khb's PDF reader at `quality: high`, a screenshot is OCR'd,
+and each gets its **own `log.md` row** — `…\Docker.one#diagram.png`, the container plus the
+name inside it — and therefore its own place in the catalog backlog. `--skip-ocr` means the
+same thing inside a notebook as outside one. Identical payloads (a section routinely stores
+the same document under several object ids) collapse to one file, one row, one extraction.
+
+What is still not recoverable: ink strokes, freeform page positioning, styling. That is why
+the output stays **`quality: low`** even though the words are real text and not a guess —
+when a page matters and reads thin, open the section in OneNote. Re-run with `--force` to
+unpack a section again; an unchanged section is skipped whole, attachments included.
+
+**No python is an amber gate, never a red one** — the same shape as an unset-up `vno`. A
+machine without python, or with a python that has no pyOneNote, does not fail the run and
+holds up nothing else: the `.one` rows pend with which of the two it is and what to do about
+it ("no python on PATH — OneNote sections need python 3 and then: `pip install …`"), and
+every other file in the corpus ingests normally in the same pass. Install it later and
+re-run the ingest; the pending rows fill in.
+
+pyOneNote is a forensic parser rather than a renderer, and it gives up on some property
+types. When it does, the row pends with what it said, and the fix is the user's to choose:
+export the page from OneNote as PDF or DOCX and ingest that instead — khb reads both at
+`quality: high`, structure included. A run that *did* parse still reports what it could not
+resolve — `9 page(s), 12 embedded file(s), 2 unassigned` on the file's own line, and a note
+on any page with unresolved references — because a partial extraction that reads as complete
+is the one failure this route can hide. Two neighboring formats are not OneNote sections and
+get no extractor: `.onetoc2` is a notebook's table of contents and holds no page text (add
+it to the source's `exclude:` list so a folder ingest stops pending it), and `.onepkg` is a
+packed notebook — unpack it and ingest the `.one` files inside.
+
+Transcription is the other route that can be absent. It wants a transcriber on `PATH`, and
 takes the first of these it finds:
 
 ```
@@ -277,13 +365,17 @@ a concept doc, and committed, so it survives `raw/` being deleted and re-derived
 
 | column | owner | meaning |
 |---|---|---|
-| `source` | khb | origin URI: absolute path, url, or tool query |
+| `source` | khb | origin URI: absolute path, url, tool query, or `<container>#<name>` for a file unpacked from inside another source |
 | `sha256` | khb | content hash (12-char prefix) — drives skip-unchanged, move detection and dedup |
 | `fetched` | khb | ISO timestamp of last acquisition |
 | `raw` | khb | bundle-relative `raw/` path; **empty = never extracted** |
 | `curated` | agent | concept doc(s) distilled from it; **empty = catalog backlog** |
 
 `khb ingest` maintains the first four and never touches `curated`.
+
+A `#` row is a real source with a real backlog entry — an attachment out of a OneNote
+section, whose bytes are the copy in `raw/`. It cannot move on its own, so when its
+container moves those rows follow it rather than looking like sources that vanished.
 
 ### Moved and renamed sources
 

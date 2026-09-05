@@ -11,7 +11,7 @@
 import { resolve, basename } from "node:path";
 import { MARKER, markerIn } from "./lib/paths";
 import { recordLocation, upgradeHub, updateHint } from "./lib/upgrade";
-import { takeOpt, rejectUnknownFlags } from "./lib/args";
+import { takeOpt, takeFlag, rejectUnknownFlags } from "./lib/args";
 import { paint, paintErr } from "./lib/color";
 
 const upgrading = process.env.KHB_SUBCOMMAND === "upgrade";
@@ -25,7 +25,13 @@ const argv = process.argv.slice(2);
 // command whose help says it takes no flags at all.
 const nameOpt = upgrading ? undefined : takeOpt(argv, "--name");
 const descOpt = upgrading ? undefined : takeOpt(argv, "--description");
-rejectUnknownFlags(argv, upgrading ? "khb upgrade" : 'khb init [dir] [--name N] [--description "…"]');
+// Opt-in, and only here: khb never installs software on its own initiative, but `init` is
+// the user saying "set this up". See the note at the call site below.
+const withOneNote = upgrading ? false : takeFlag(argv, "--with-onenote");
+rejectUnknownFlags(
+  argv,
+  upgrading ? "khb upgrade" : 'khb init [dir] [--name N] [--description "…"] [--with-onenote]',
+);
 const [dirArg] = argv;
 
 if (upgrading) {
@@ -83,6 +89,36 @@ if (upgrading) {
   console.log(`${paint.ok("Hub created:")} ${paint.path(hub)}`);
   console.log(`  khb.json, outer.index.md, bundles/, .gitignore, .gitattributes`);
   console.log(`  contract docs (package-owned, refreshed by 'khb upgrade'): ${synced.join(", ")}`);
+
+  // Asked for, and forgiving in every direction. khb's own extractors need no setup and its
+  // transcriber is left to the user (skills/ingest/SKILL.md); pyOneNote is the one python
+  // dependency, so `--with-onenote` exists for the moment someone is already setting up. It
+  // cannot fail the command: the hub above is the deliverable, and an extractor that could
+  // not be installed is a printed pip line, not a half-made hub.
+  if (withOneNote) {
+    const { installPyOneNote, PYONENOTE_INSTALL } = await import("./lib/pyonenote");
+    const result = await installPyOneNote();
+    const manually = `  install it yourself when convenient:  ${paint.cmd(PYONENOTE_INSTALL)}`;
+    if (result.status === "already")
+      console.log(`\n${paint.ok("OneNote:")} pyOneNote is already installed (${result.bin}) — .one sections will be read.`);
+    else if (result.status === "installed")
+      console.log(
+        `\n${paint.ok("OneNote:")} pyOneNote installed for ${result.bin}` +
+          `${result.userSite ? " (into your user site-packages)" : ""} — .one sections will be read.`,
+      );
+    else if (result.status === "no-python") {
+      console.log(`\n${paint.warn("OneNote:")} no python on PATH, so pyOneNote was not installed.`);
+      console.log(`  install python 3, then:  ${paint.cmd(PYONENOTE_INSTALL)}`);
+    } else if (result.status === "no-pip") {
+      console.log(`\n${paint.warn("OneNote:")} ${result.bin} has no pip, so pyOneNote was not installed.`);
+      console.log(manually);
+    } else {
+      console.log(`\n${paint.warn("OneNote:")} pyOneNote could not be installed — ${result.reason}`);
+      console.log(manually);
+    }
+    console.log(`  everything else ingests either way; .one files pend with the reason until it is there.`);
+  }
+
   console.log(`\n${paint.head("Next")}:`);
   console.log(`  ${paint.cmd(`cd ${basename(hub)}`)}`);
   console.log(`  ${paint.cmd("git init")}                              ${paint.dim("# optional, but recommended")}`);
@@ -93,4 +129,13 @@ if (upgrading) {
   console.log(
     `Registered as ${paint.name(`"${entry.name}"`)} — from any terminal, '${paint.cmd("khb")}' comes back here and starts your agent.`,
   );
+
+  // Everything khb extracts works out of the box except OneNote, so this is the one gap
+  // worth naming while the user is still setting up. Printed only when it *is* a gap, and
+  // skipped entirely when --with-onenote already reported above.
+  if (!withOneNote) {
+    const { oneNoteHint } = await import("./lib/pyonenote");
+    const hint = await oneNoteHint();
+    if (hint) console.log(`\n${hint}`);
+  }
 }

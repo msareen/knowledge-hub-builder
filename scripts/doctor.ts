@@ -14,7 +14,7 @@ import { HUB, BUNDLES, listBundles, read, join, existsSync } from "./lib/util";
 import { readLedger } from "./lib/ledger";
 import { staleLocations, hubVersion } from "./lib/upgrade";
 import { diffSourcesYamlAll } from "./lib/schema";
-import { transcriberStatus } from "./lib/extract";
+import { oneNoteStatus, transcriberStatus } from "./lib/extract";
 import { version, MARKER, markerIn } from "./lib/paths";
 import { listHubs, canonical, loadConfig, agentFor, isAlive } from "./lib/registry";
 import { checkConfig } from "./lib/config-check";
@@ -192,6 +192,14 @@ const transcriber = await transcriberStatus();
 detail(`transcriber   ${transcriber.detail}`);
 if (!transcriber.ready)
   flag(`no transcriber is ready, so audio and video will pend.`, transcriber.fix);
+
+// Reported, but deliberately not a finding when it is absent. Recordings turn up in most
+// corpora; `.one` sections turn up in few, and flagging a python package on every hub that
+// will never see one is noise. A hub that does hold them says so through the pending-row
+// finding above, which carries this same fix in the row's own reason.
+const onenote = await oneNoteStatus();
+detail(`onenote       ${onenote.detail}`);
+if (onenote.fix) detail(`              ${paint.cmd(onenote.fix)}`);
 
 // ---- Findings ---------------------------------------------------------------------------
 section(findings.length ? `Findings (${findings.length})` : "Findings");
