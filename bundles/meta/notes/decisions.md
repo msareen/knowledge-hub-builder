@@ -6,6 +6,14 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-09-06 — `khb status` is an alias of `khb doctor`, and `khb init` closes with the
+  OneNote hint.** Two small surface fixes with one theme: telling people a thing they would
+  otherwise have to already know. `status` is simply the word people reach for; it lives in
+  `ALIASES` rather than `COMMANDS` so help still lists the command once. The init hint prints
+  the `pip` line — never `khb init --with-onenote`, which cannot be re-run on a hub that
+  already exists — and only when the reader is actually missing, since "run this to enable
+  it" is noise to someone for whom it is enabled. The same hint closes the first-run wizard.
+
 - **2026-09-05 — `khb init --with-onenote` may install pyOneNote; nothing else may install
   anything.** This does not weaken the rule it looks like it weakens. The rule is that khb
   never installs software *on its own initiative* — an ingest that finds no transcriber or no

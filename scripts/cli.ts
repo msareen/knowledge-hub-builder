@@ -14,7 +14,11 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
     desc: "acquire + extract declared sources → raw/",
   },
   lint: { load: () => import("./lint"), usage: "khb lint", desc: "validate the hub against skills/lint/SKILL.md" },
-  doctor: { load: () => import("./doctor"), usage: "khb doctor", desc: "read-only report on this hub's state" },
+  doctor: {
+    load: () => import("./doctor"),
+    usage: "khb doctor",
+    desc: "read-only report on this hub's state; alias: status",
+  },
   visualize: {
     load: () => import("./visualize"),
     usage: "khb visualize [--port N] [--no-open]",
@@ -57,8 +61,9 @@ const REGISTRY_COMMANDS = new Set(["list", "go", "agent", "forget", "update", "c
 
 // Short forms that just resolve to a canonical command above — kept out of COMMANDS
 // itself so help text lists each command once. `-v` is taken by --version, so
-// `visualize` gets word-shaped aliases instead of a letter one.
-const ALIASES: Record<string, string> = { vis: "visualize", viz: "visualize" };
+// `visualize` gets word-shaped aliases instead of a letter one. `status` is the word people
+// reach for when they want to know how a thing is doing, and here that is `doctor`.
+const ALIASES: Record<string, string> = { vis: "visualize", viz: "visualize", status: "doctor" };
 
 const argv = process.argv.slice(2);
 

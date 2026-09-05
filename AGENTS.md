@@ -137,7 +137,7 @@ From outside, pass `--hub <dir>` or set `$KHB_HUB`.
 | Command | Purpose |
 |---|---|
 | `khb lint` | validate structure against `skills/lint/SKILL.md` |
-| `khb doctor` | read-only report on the hub: version, location, per-bundle concept/raw/backlog counts, transcriber, the machine config's schema findings, and the command that fixes each finding. Writes nothing, and does not duplicate `lint` |
+| `khb doctor` (alias `khb status`) | read-only report on the hub: version, location, per-bundle concept/raw/backlog counts, transcriber, the OneNote reader, the machine config's schema findings, and the command that fixes each finding. Writes nothing, and does not duplicate `lint` |
 | `khb upgrade` | refresh this hub's package-owned contract docs — runs by itself whenever `khb.json`'s stamped version differs from the installed khb, so these docs always match the CLI |
 | `khb visualize [--port N] [--no-open]` | serve the live bundle graph in your browser; aliases `vis`, `viz` |
 | `khb new-bundle <name>` | scaffold + register a bundle |

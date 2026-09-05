@@ -318,7 +318,7 @@ Commands can be run directly or requested through the matching agent skill.
 | `khb new-bundle <name> ["scope"]` | Create and register a bundle |
 | `khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]` | Acquire and extract declared sources |
 | `khb lint` | Validate routing, bundle structure, and OKF metadata |
-| `khb doctor` | Read-only report: version, location, per-bundle counts, catalog backlog, transcriber |
+| `khb doctor` | Read-only report: version, location, per-bundle counts, catalog backlog, extractors. Alias: `khb status` |
 | `khb visualize [--port N] [--no-open]` (aliases: `vis`, `viz`) | Serve the live bundle graph on a random free port and open it in your default browser — pan/zoomable cross-bundle map, drill into a bundle for its folder-clustered concepts, rebuild-on-refresh, exits when you close the tab |
 | `khb export <bundle> [dest]` | Export one standalone bundle |
 
@@ -331,8 +331,8 @@ stdout is plain text either way.
 
 ### `khb doctor` — what state is this hub in?
 
-A single read-only report. It writes nothing and repairs nothing; each finding names the
-command that does.
+A single read-only report, also spelled `khb status`. It writes nothing and repairs
+nothing; each finding names the command that does.
 
 ```text
 Hub            name, description, stamped version vs installed, location, registered

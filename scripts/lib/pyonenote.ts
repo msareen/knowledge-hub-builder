@@ -98,6 +98,22 @@ export function retryAsUser(stderr: string): boolean {
   );
 }
 
+/**
+ * The closing line of a setup run: how to turn OneNote import on, when it is off.
+ *
+ * Silent when the reader is already there — "run this to enable it" is noise to someone for
+ * whom it is enabled. It names the `pip` command and never `khb init --with-onenote`,
+ * because by the time this prints the hub exists and `init` refuses to run on it again.
+ *
+ * A probe costs a few spawns, which is nothing in a command a user runs once per hub.
+ */
+export async function oneNoteHint(): Promise<string | undefined> {
+  const probe = await probePyOneNote();
+  if (probe.bin) return undefined;
+  const lead = probe.without ? "" : "install python 3, then ";
+  return `${paint.dim("Optional:")} to read OneNote (.one) files, ${lead}run:  ${paint.cmd(PYONENOTE_INSTALL)}`;
+}
+
 export type InstallResult =
   | { status: "already"; bin: string }
   | { status: "installed"; bin: string; userSite: boolean }

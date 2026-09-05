@@ -129,4 +129,13 @@ if (upgrading) {
   console.log(
     `Registered as ${paint.name(`"${entry.name}"`)} — from any terminal, '${paint.cmd("khb")}' comes back here and starts your agent.`,
   );
+
+  // Everything khb extracts works out of the box except OneNote, so this is the one gap
+  // worth naming while the user is still setting up. Printed only when it *is* a gap, and
+  // skipped entirely when --with-onenote already reported above.
+  if (!withOneNote) {
+    const { oneNoteHint } = await import("./lib/pyonenote");
+    const hint = await oneNoteHint();
+    if (hint) console.log(`\n${hint}`);
+  }
 }
