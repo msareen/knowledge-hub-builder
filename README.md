@@ -19,7 +19,8 @@ KHB keeps two jobs separate:
   judgement and has no CLI command.
 
 Full design: [SPEC.md](SPEC.md). Agent contract: [AGENTS.md](AGENTS.md). Common workflow
-questions: [FAQ](document/faq.md).
+questions: [FAQ](document/faq.md). Ingesting a OneNote notebook:
+[Ingesting OneNote](document/onenote.md).
 
 ## Quick Start
 
@@ -165,7 +166,11 @@ Two extractors are genuinely optional:
   revision only, with tables, lists and creation timestamps. Files embedded in the notes are
   unpacked beside it, linked, and ingested as sources of their own — so an attached PDF is
   read at `quality: high` and an attached screenshot is OCR'd, each with its own ledger row.
-  Ink and freeform layout are not recoverable, so the section text stays `quality: low`
+  Ink and freeform layout are not recoverable, so the section text stays `quality: low`.
+  A modern OneNote notebook is cloud-first and is not a file on your disk, so this route
+  starts with OneNote's own **Save a Copy** — see
+  **[Ingesting OneNote](document/onenote.md)** for the export step, the setup, and what
+  survives the trip
 
 Without them, KHB leaves a pending row in `log.md` and prints the required setup rather than
 failing the run.

@@ -199,6 +199,13 @@ Nothing else in khb installs it, and you should not either: an ingest that finds
 pyOneNote pends those rows with the command and carries on. Suggest the `pip` line; let the
 user run it.
 
+**A modern notebook is not a file on disk.** OneNote for Microsoft 365 keeps notebooks in
+the service, so there is nothing under OneDrive to point a source at — the user first has to
+export one with OneNote's own **Notebook Properties → Save a Copy**, which writes a folder
+of `.one` sections. If someone asks to ingest OneNote and names a OneDrive path with no
+`.one` files under it, that is what is missing; walk them through
+`document/onenote.md` rather than guessing at a path.
+
 khb looks for it on `python`, `python3` and `py`, in that order, and drives it through
 `pyscripts/onenote.py` rather than pyOneNote's own CLI — that way nothing is written next
 to the user's notebook and no attachment is unpacked as a side effect of asking for text.
