@@ -16,7 +16,7 @@ Requires pyOneNote (github.com/DissectMalware/pyOneNote); the caller probes for 
 reports the install command, so an ImportError here is the caller's problem to explain.
 
 The approach — and most of the hard-won detail — is ported from a working exporter and its
-parser invariants (D:/backup/Onenote/extraction-tools/extract_readable_notes.py). The five
+parser invariants (a page-per-file exporter kept outside this repo). The five
 that matter, because getting any of them wrong yields text that looks plausible and is
 wrong:
 

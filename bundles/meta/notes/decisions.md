@@ -53,7 +53,7 @@ description: Design decisions for KHB and their rationale.
   **The parser lives in python, in its own file, not in a snippet.** The first cut called
   `get_properties()` and rendered the flat node stream it returned, which produces text that
   looks plausible and is wrong. The parser was then rewritten against a working exporter for
-  these notebooks (`D:/backup/Onenote/extraction-tools/extract_readable_notes.py`) and its
+  these notebooks (a page-per-file exporter, kept outside this repo) and its
   stated invariants, all five of which the snippet violated or dodged:
 
   - installed pyOneNote's `ObjectSpaceObjectStreamOfIDs.read()` returns `body[head]` without

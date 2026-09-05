@@ -28,20 +28,20 @@ const text = (md: string) => ({ kind: "text" as const, md });
 describe("oneNoteMarkdown", () => {
   test("the section is h1, its pages h2, in the order the parser gave them", () => {
     const md = oneNoteMarkdown({
-      sectionName: "Tanay Therapy",
-      pages: [page("Reports", [text("EEG on the 14th.")]), page("Vocab List", [text("said 'more' today")])],
+      sectionName: "Field Notes",
+      pages: [page("Reports", [text("Survey done on the 14th.")]), page("Glossary", [text("added two terms")])],
     });
     expect(md).toBe(
-      "# Tanay Therapy\n\n## Reports\n\nEEG on the 14th.\n\n## Vocab List\n\nsaid 'more' today",
+      "# Field Notes\n\n## Reports\n\nSurvey done on the 14th.\n\n## Glossary\n\nadded two terms",
     );
   });
 
   test("a subpage nests by its own PageLevel, and h6 is the floor", () => {
     const md = oneNoteMarkdown({
       sectionName: "Diary",
-      pages: [page("2022 Week 42-43", [], 1), page("20 Oct 2022", [text("Met monkeys.")], 2), page("Deep", [], 9)],
+      pages: [page("2026 Week 12-13", [], 1), page("20 Mar 2026", [text("Site visit.")], 2), page("Deep", [], 9)],
     });
-    expect(md).toBe("# Diary\n\n## 2022 Week 42-43\n\n### 20 Oct 2022\n\nMet monkeys.\n\n###### Deep");
+    expect(md).toBe("# Diary\n\n## 2026 Week 12-13\n\n### 20 Mar 2026\n\nSite visit.\n\n###### Deep");
   });
 
   test("falls back to the file's own name when the section declares none", () => {
@@ -74,7 +74,7 @@ describe("oneNoteMarkdown", () => {
     const md = oneNoteMarkdown({
       pages: [
         page("Reports", [
-          file({ name: "EEG Tanay.pdf", ext: ".pdf", file: "EEG Tanay.pdf" }),
+          file({ name: "Site Survey.pdf", ext: ".pdf", file: "Site Survey.pdf" }),
           file({ name: "scan.jpg", ext: ".jpg", image: true, bytes: 348_160, file: "scan.jpg" }),
         ]),
       ],
@@ -82,7 +82,7 @@ describe("oneNoteMarkdown", () => {
     // The prefix is the placeholder the acquiring side rewrites; the target is URL-encoded.
     expect(md).toBe(
       "## Reports\n\n" +
-        "_Embedded file: [EEG Tanay.pdf](khb-attachments/EEG%20Tanay.pdf) (2.3 MB)_\n\n" +
+        "_Embedded file: [Site Survey.pdf](khb-attachments/Site%20Survey.pdf) (2.3 MB)_\n\n" +
         "![scan.jpg](khb-attachments/scan.jpg)",
     );
   });
@@ -96,9 +96,9 @@ describe("oneNoteMarkdown", () => {
 
   test("an icon is dropped — the document it stands for is named on its own line", () => {
     const md = oneNoteMarkdown({
-      pages: [page("Reports", [file({ name: "CAPAAR.pdf", ext: ".pdf" }), file({ name: "", ext: ".png", image: true, icon: true })])],
+      pages: [page("Reports", [file({ name: "Vendor Report.pdf", ext: ".pdf" }), file({ name: "", ext: ".png", image: true, icon: true })])],
     });
-    expect(md).toBe("## Reports\n\n_Embedded file: CAPAAR.pdf (2.3 MB)_");
+    expect(md).toBe("## Reports\n\n_Embedded file: Vendor Report.pdf (2.3 MB)_");
   });
 
   test("a revision-only attachment says so, and is never mixed into current text", () => {
