@@ -429,11 +429,12 @@ landed, what didn't and why, and how many `log.md` rows are now uncurated.
 
 Then **offer to catalog, and wait for the answer.** Raw text is not yet knowledge — a bundle
 left at the end of ingest has a backlog and nothing citable — so never stop silently on the
-summary, and never start cataloging unasked either. Name the bundle and the size of the
-backlog in the offer, so the answer is informed:
+summary, and never start cataloging unasked either.
 
-Cataloging is the half that costs money, so put the number in the offer rather than making
-the user say yes to find it out. `khb estimate <bundle>` gives it in tokens:
+**This is the one place the spending question gets asked.** Cataloging is the half that costs
+money, so name the bundle, the size of the backlog *and* the number in the offer — a yes given
+without the number is not an informed one, and the catalog skill deliberately does not ask
+again. `khb estimate <bundle>` gives it in tokens, at the effort it marks as the default:
 
 > Ingest landed 94 files in `real-estate/raw/`; 94 rows are uncurated. Cataloging them is
 > roughly 6.2M tokens in and 1.5M out at medium effort. Shall I catalog them into concept

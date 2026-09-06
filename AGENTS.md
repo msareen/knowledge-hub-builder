@@ -198,10 +198,14 @@ reason never outlives the problem. A raw file carrying `quality: low` came from 
 transcript: distrust it, and re-read the original named in its `source:` header when the text
 looks wrong.
 
-**Ingest is free; catalog is not.** It reads every raw file through a model, so before
-starting one run `khb estimate <bundle>`, put the projection in front of the user in money as
-well as tokens, and wait for them to pick a model and an effort level. The protocol is in
-`skills/catalog/SKILL.md`; skipping it spends someone's budget on their behalf.
+**Ingest is free; catalog is not.** It reads every raw file through a model, so run
+`khb estimate <bundle>` first and report the projection — in money too, if you know the rates
+— before you start. Then start: the estimate is a guideline, not a checkpoint, and the
+"shall I catalog?" question belongs to ingest's hand-off, not to a second gate here. Run at
+the effort `khb estimate` marks as the default unless the user named one, defer the files it
+flags as outliers and say which, and never ask which model to use — a skill runs on whatever
+model the session already started on, and no one in the loop can change that mid-run. Full
+protocol in `skills/catalog/SKILL.md`.
 
 ## Parallel work
 

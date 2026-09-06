@@ -27,6 +27,7 @@ import {
   parsePrice,
   priceOf,
   project,
+  recommendEffort,
   summarize,
   type CountedFile,
   type Effort,
@@ -35,6 +36,14 @@ import {
 import { readFileSync, statSync } from "node:fs";
 
 const USAGE = "khb estimate [bundle] [--all] [--price IN/OUT] [--top N] [--json]";
+
+/**
+ * When one raw file is worth calling out on its own: this share of the backlog's tokens, in a
+ * backlog big enough for a share to mean anything. Three files cannot have an outlier.
+ */
+const OUTLIER_SHARE = 5;
+const OUTLIER_MIN_FILES = 20;
+
 const argv = process.argv.slice(2);
 
 const everything = takeFlag(argv, "--all");
@@ -137,6 +146,9 @@ const combined = (effort: Effort): Projection => {
 };
 const totals = EFFORTS.map(combined);
 const fileTotal = reports.reduce((running, report) => running + report.files.length, 0);
+// The effort a pass should run at if nobody says otherwise. Decided here, once, so the
+// skill reads it off the output instead of re-deriving a threshold in prose.
+const recommended = recommendEffort(totals);
 
 if (asJson) {
   const shape = (projection: Projection) => ({
@@ -161,6 +173,7 @@ if (asJson) {
           words: report.words,
           inputTokens: report.tokens,
           projections: report.projections.map(shape),
+          recommended: recommendEffort(report.projections),
           largest: [...report.files]
             .sort((a, b) => b.tokens - a.tokens)
             .slice(0, top)
@@ -172,6 +185,7 @@ if (asJson) {
           words: reports.reduce((running, report) => running + report.words, 0),
           inputTokens: reports.reduce((running, report) => running + report.tokens, 0),
           projections: totals.map(shape),
+          recommended,
         },
       },
       null,
@@ -201,15 +215,20 @@ if (!targets.length) {
   process.exit(0);
 }
 
-/** One projection row: effort, its two halves, the total, and a price if rates were given. */
-function projectionTable(rows: Projection[], indent = "  ") {
+/**
+ * One projection row: effort, its two halves, the total, a price if rates were given, and a
+ * marker on the row a pass should default to. The marker is the point — without it the table
+ * is three numbers and no answer, and every reader has to invent their own threshold.
+ */
+function projectionTable(rows: Projection[], pick: Effort, indent = "  ") {
   const head = `${"effort".padEnd(8)}${"input".padStart(10)}${"output".padStart(10)}${"total".padStart(10)}`;
   console.log(`${indent}${paint.dim(head)}${price ? paint.dim("       cost") : ""}`);
   for (const row of rows) {
     const cost = price ? `  ${`$${priceOf(row, price.input, price.output).toFixed(2)}`.padStart(9)}` : "";
+    const mark = row.effort === pick ? `  ${paint.ok("← default")}` : "";
     console.log(
       `${indent}${row.effort.padEnd(8)}${millions(row.input).padStart(10)}` +
-        `${millions(row.output).padStart(10)}${paint.bold(millions(row.total).padStart(10))}${cost}`,
+        `${millions(row.output).padStart(10)}${paint.bold(millions(row.total).padStart(10))}${cost}${mark}`,
     );
   }
 }
@@ -267,7 +286,7 @@ detail(
   paint.dim("input = the material and its per-file prompt, resent as the pass runs; output = concepts plus reasoning"),
 );
 console.log();
-projectionTable(totals, "  ");
+projectionTable(totals, recommended, "  ");
 console.log();
 for (const effort of EFFORTS) detail(paint.dim(`${effort.padEnd(8)}${EFFORT_PROFILES[effort].note}`));
 
@@ -276,14 +295,22 @@ if (reports.length > 1) {
   for (const report of reports) {
     if (!report.files.length) continue;
     detail(`${paint.name(report.bundle)}  ${report.files.length} file(s), ${millions(report.tokens)} tokens of material`);
-    projectionTable(report.projections, "    ");
+    projectionTable(report.projections, recommendEffort(report.projections), "    ");
   }
 }
 
 if (top && reports.length === 1 && reports[0].files.length) {
-  const largest = [...reports[0].files].sort((a, b) => b.tokens - a.tokens).slice(0, top);
+  const [only] = reports;
+  const largest = [...only.files].sort((a, b) => b.tokens - a.tokens).slice(0, top);
   section(`Largest ${largest.length} raw file(s)`);
-  for (const file of largest) detail(`${millions(file.tokens).padStart(9)}   ${paint.path(file.path)}`);
+  for (const file of largest) {
+    // The share is what makes this list actionable: on most corpora a couple of scans or
+    // exports carry a quarter of the bill, and dropping those is the cheapest real saving
+    // there is. A bare token count leaves everyone to do that division themselves.
+    const share = only.tokens ? (file.tokens / only.tokens) * 100 : 0;
+    const flag = share >= OUTLIER_SHARE && only.files.length > OUTLIER_MIN_FILES ? paint.warn("  outlier") : "";
+    detail(`${millions(file.tokens).padStart(9)}  ${`${share.toFixed(1)}%`.padStart(6)}   ${paint.path(file.path)}${flag}`);
+  }
 }
 
 section("Next");
@@ -292,10 +319,13 @@ if (!price)
     `these are tokens, not dollars. Add your model's rates to price them: ` +
       `${paint.cmd(`khb estimate ${named ?? ""}${named ? " " : ""}--price 3/15`)} ${paint.dim("(USD per million, input/output)")}`,
   );
-detail(`decide the model and the effort, then catalog: ${paint.path("skills/catalog/SKILL.md")}`);
+detail(`catalog it — ${paint.path("skills/catalog/SKILL.md")}, at ${paint.bold(recommended)} effort unless you ask for another`);
 detail(paint.dim(`coefficients live in scripts/lib/tokens.ts; a real run lands either side of them.`));
 
+// Quote the run that will actually happen. This line used to hardcode medium, so a corpus
+// big enough to default to `low` was headlined at nearly double what it would cost.
+const headline = totals[EFFORTS.indexOf(recommended)];
 console.log(
-  `\n${paint.head("estimate")}: ${count(fileTotal)} raw file(s), ${paint.bold(millions(totals[1].total))} tokens ` +
-    `at medium effort${price ? ` (~$${priceOf(totals[1], price.input, price.output).toFixed(2)})` : ""}, in ${totalElapsed()}`,
+  `\n${paint.head("estimate")}: ${count(fileTotal)} raw file(s), ${paint.bold(millions(headline.total))} tokens ` +
+    `at ${recommended} effort${price ? ` (~$${priceOf(headline, price.input, price.output).toFixed(2)})` : ""}, in ${totalElapsed()}`,
 );

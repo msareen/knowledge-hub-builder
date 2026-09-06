@@ -399,8 +399,17 @@ Scope is the catalog backlog by default — ledger rows with a `raw` file and an
 `curated`. `--all` prices every file in `raw/`, for deciding whether to re-catalog from
 scratch. With no bundle named it reports on all of them.
 
-The catalog skill runs this first and waits for you to choose a model and an effort level
-before spending anything.
+One row is marked `← default` — the effort a pass runs at when nobody says otherwise, chosen
+by size: the full protocol on a small bundle, one cheap pass once the bill is real, and never
+`high` by accident. The threshold lives in `recommendEffort` in `scripts/lib/tokens.ts`, so
+there is one number to tune rather than a rule of thumb repeated in prose. The largest-files
+list shows each file's share of the backlog and flags anything worth 5% or more as an
+`outlier`; on most corpora a couple of scans or exports carry a quarter of the cost.
+
+The catalog skill runs this first, reports it, and **starts** — it is a guideline, not a
+checkpoint. It defers the flagged outliers and says which, and it never asks you to pick a
+model: a skill runs on whatever model your session already started on, so there is nothing
+there for you or it to change.
 
 ### Moving between hubs
 

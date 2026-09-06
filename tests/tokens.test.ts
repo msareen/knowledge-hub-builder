@@ -9,6 +9,7 @@ import {
   parsePrice,
   priceOf,
   project,
+  recommendEffort,
   summarize,
   type CountedFile,
 } from "../scripts/lib/tokens";
@@ -113,6 +114,52 @@ describe("project", () => {
 
   test("an empty corpus projects to nothing", () => {
     expect(project(summarize([]), 600, "high")).toMatchObject({ input: 0, output: 0, total: 0 });
+  });
+});
+
+/**
+ * The default effort exists so the catalog skill never has to stop and ask for one. What
+ * matters is that it scales — `medium` on a small bundle, `low` once the bill is real — and
+ * that `high` is only ever a deliberate ask, never somewhere a run lands by itself.
+ */
+describe("recommendEffort", () => {
+  const forCorpus = (tokens: number) => {
+    const corpus = corpusOf(tokens);
+    return EFFORTS.map((effort) => project(corpus, 600, effort));
+  };
+
+  test("a small backlog gets the full protocol", () => {
+    expect(recommendEffort(forCorpus(100_000))).toBe("medium");
+  });
+
+  test("a large backlog drops to one cheap pass", () => {
+    // The corpus from the report that prompted this: ~10.4M source tokens, 2,478 files.
+    expect(recommendEffort(forCorpus(10_400_000))).toBe("low");
+  });
+
+  test("it switches sides at the ceiling, not somewhere either side of it", () => {
+    // Walk up until it flips, and check the flip lands where medium crosses 5M projected.
+    let last: ReturnType<typeof recommendEffort> = "medium";
+    let flipped = 0;
+    for (let tokens = 100_000; tokens <= 6_000_000; tokens += 100_000) {
+      const now = recommendEffort(forCorpus(tokens));
+      if (now !== last) {
+        flipped++;
+        last = now;
+      }
+    }
+    // Exactly one transition, medium → low, and never back.
+    expect(flipped).toBe(1);
+    expect(last).toBe("low");
+  });
+
+  test("high is never the default, at any size", () => {
+    for (const tokens of [1_000, 500_000, 5_000_000, 50_000_000, 500_000_000])
+      expect(recommendEffort(forCorpus(tokens))).not.toBe("high");
+  });
+
+  test("an empty backlog does not fall through to the expensive pass", () => {
+    expect(recommendEffort(EFFORTS.map((effort) => project(summarize([]), 600, effort)))).toBe("medium");
   });
 });
 

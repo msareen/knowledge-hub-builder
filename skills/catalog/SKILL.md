@@ -1,6 +1,6 @@
 ---
 name: catalog
-description: Turn one bundle's raw/ material into OKF concept docs — quote the token cost with khb estimate and get the user's model and effort first, then read each raw file, split it into sub-topics, label each with type/title/description/tags, link them, and register them in index.md. Uses parallel subagents when the runtime supports them. Use after khb ingest, or when the user asks to curate, catalog, organize, or write up a bundle.
+description: Turn one bundle's raw/ material into OKF concept docs — report the token cost with khb estimate, then read each raw file, split it into sub-topics, label each with type/title/description/tags, link them, and register them in index.md. Uses parallel subagents when the runtime supports them. Use after khb ingest, or when the user asks to curate, catalog, organize, or write up a bundle.
 ---
 
 # Catalog a bundle
@@ -40,12 +40,11 @@ than from a directory listing — a `raw/` file whose row is already filled has 
 Rows with an empty `raw` were never extracted; they are ingest's problem, not yours. If
 there are many, say so and offer to fix ingest first.
 
-## 2. Quote the cost — then stop
+## 2. Say what it costs, then start
 
 **`khb ingest` is free; this pass is not.** It reads every raw file through a model and
 writes concepts back, so a corpus that took an afternoon to extract can run to millions of
-tokens. A file count does not tell anyone that, and finding it out from a bill is not
-acceptable. Quote it first, every time — even when the user has already said "catalog it".
+tokens. A file count does not tell anyone that. So say the number — and then get on with it.
 
 ```
 khb estimate <bundle>        # tokens, in millions, at low / medium / high effort
@@ -53,37 +52,61 @@ khb estimate <bundle> --json # the same numbers, for you to reason over
 ```
 
 It counts the words and characters actually on disk and multiplies them by published
-coefficients. It writes nothing, calls no model, and quotes no prices — it does not know
-what anything costs.
+coefficients. It writes nothing and calls no model. It also quotes no prices: if you know
+current rates, convert the tokens to money in your report; if the user gives you rates,
+`khb estimate <bundle> --price <in>/<out>` (USD per million) does the arithmetic. Say plainly
+that these are estimates from character counts and a real run lands either side of them.
 
-**Pricing it is your job, and it is the reason you stop here.** Take the token numbers,
-apply the current published rates for the models you would actually use, and put the money
-in front of the user:
+**Report it in about four lines, then begin.** Files, source tokens, the projection at the
+effort you are using, and anything you are deferring:
 
-- Give a **range**, not a point: quote at least the fast/cheap model and the strong model,
-  at the effort you would recommend. The gap between them is usually the whole decision.
-- Say what the effort levels buy, in this bundle's terms — not as abstractions. `low` is one
-  pass and terse concepts, `medium` is the protocol below as written, `high` is fine-grained
-  splitting with low-quality sources re-read at the source.
-- Name the biggest files. `khb estimate` lists them, and on most corpora a handful of scans
-  or transcripts carry most of the cost. Dropping or deferring those is often the cheapest
-  real option, and the user cannot choose it if you do not offer it.
-- Say plainly that these are estimates from character counts, and a real run lands either
-  side of them.
-- If the user gave you rates, or you want khb to do the arithmetic:
-  `khb estimate <bundle> --price <in>/<out>` (USD per million tokens).
+> Cataloging `documents`: 2,478 files, 10.4M tokens of material. At low effort that is
+> roughly 16.5M in and 1.0M out. Running at low — the backlog is large. Deferring
+> `NEW_CIS_FORM.XLSX` (1.46M tokens, 14% of the corpus on its own); say the word and I'll
+> do it too. Starting now.
 
-Then **wait.** Do not start the seed wave, do not spawn a subagent, do not write a concept
-doc until the user has answered with a model and an effort level. Two things they routinely
-change once they see the number — narrowing the scope to part of the corpus, or running the
-bulk wave on a cheaper model than the one they are talking to you on — are only available
-before the pass starts.
+### Effort — pick it, do not ask for it
 
-The one case for skipping the wait is a backlog small enough that the question wastes more of
-the user's time than the run costs. Say the number anyway, in one line, and carry on.
+`khb estimate` marks one row `← default` and names it on its closing line; `--json` returns
+it as `recommended`. Use that unless the user named a level, and say which you used in a
+clause. **`high` is never automatic** — it is a deliberate ask.
 
-Once they have chosen, use that model for the seed and bulk waves below wherever the runtime
-exposes model selection, and run at the effort they picked.
+If the user named an effort, that wins, at any size.
+
+### Outliers — defer them and say so
+
+One enormous file can be a fifth of the bill. `khb estimate` flags any raw file worth 5% or
+more of a backlog of over twenty files as an `outlier`. Leave those uncurated this pass:
+name each one, say what it costs, and offer it. Its `log.md` row simply stays empty, which is
+the durable backlog, so nothing is lost and nothing needs undoing.
+
+When the user does ask for a deferred outlier, look at what it is before spending on it. A
+1.4M-token spreadsheet is usually a bulk data export, and the right treatment is **one**
+`type: Table` concept describing what the table holds, with a `resource:` pointing at the
+original — not a dozen prose concepts distilled from rows nobody will read as prose.
+
+### Do not ask which model
+
+You cannot change the model you are running on. This is a skill: its text is loaded into the
+conversation already in progress, so the pass runs on whatever model that session started on,
+and the user has no lever to change it mid-run either. Asking is a dead end that stalls the
+work — if the user names a model anyway, say in one line that the running model can't be
+switched, and carry on with the catalog.
+
+The one real model choice is which model the **subagents** in steps 4 and 5 get, in runtimes
+that expose that. It is your call, needs no input from anyone, and does not exist in runtimes
+that have no subagents.
+
+### Do not wait
+
+Consent already happened. The [ingest skill](../ingest/SKILL.md) asks "shall I catalog?" at
+its hand-off and carries the token number into that question, and a user who says "catalog
+it" has answered. A second gate here only ever fires *after* someone has decided, so it
+stalls a decision instead of informing one. Report the number and start the seed wave.
+
+Stop only if the estimate reveals something the user could not have known and would not
+want — a backlog that is almost entirely one deferred outlier, or a bundle whose raw files
+turn out to belong to someone else. That is new information, not a checkpoint.
 
 ## 3. Read the map before writing anything
 
@@ -100,8 +123,9 @@ Inventing a new subdirectory per raw file is the classic failure here.
 ## 4. Seed wave — one file, checked by hand
 
 Pick the most representative raw file and delegate it to **one subagent** with the prompt
-below. Use a fast, economical model when the runtime exposes model selection; otherwise use
-its default subagent. If subagents are unavailable, do the same work in the current thread.
+below. If your runtime lets you choose a subagent's model, pick a fast, economical one — your
+call, no need to ask; otherwise use its default subagent. If subagents are unavailable at all,
+do the same work in the current thread.
 Then read what it wrote. You are checking the shape, not the facts: right granularity,
 frontmatter complete, titles that read like knowledge rather than filenames. Correct the
 prompt if it is off, and take the concept titles it produced into your vocabulary before
@@ -200,9 +224,11 @@ still outstanding, and anything you flagged as low-quality and worth re-reading 
 - **Curate selectively.** Raw is bulk; concepts are distilled. Most corpora are 80% receipts
   and boilerplate. Declining is a real outcome, not a failure — and it is the one that moves
   the bill, since every file you decline was still read to decide it.
-- **The estimate is a floor on the reading, not on the writing.** `khb estimate` counts what
-  is on disk; it cannot know that you re-read a garbled scan four times. If a run is going
-  visibly past its quote, stop and say so rather than finishing quietly.
+- **The estimate is a guideline, not a budget you were granted.** `khb estimate` counts what
+  is on disk; it cannot know that you re-read a garbled scan four times, so a real run lands
+  either side of it. That cuts both ways: do not treat the number as permission to stop for
+  approval, and do not treat it as a ceiling you must finish under. If a run is going *far*
+  past its quote, say so mid-pass rather than finishing quietly.
 - **Granularity.** If two concepts are always read together, they are one. If one concept
   has two `# Schema` sections, it is two.
 - **Write knowledge, not summaries.** "This document discusses the retention policy" is

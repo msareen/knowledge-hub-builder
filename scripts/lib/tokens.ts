@@ -124,6 +124,26 @@ export function project(corpus: Corpus, overheadPerFile: number, effort: Effort)
 }
 
 /**
+ * Above this projected total, a run is big enough that the cheaper pass is the right default.
+ * Roughly: a few thousand pages of material, where `medium` starts costing more than the
+ * extra cross-linking is worth on a first pass through an unfamiliar corpus.
+ */
+const MEDIUM_CEILING = 5_000_000;
+
+/**
+ * Which effort to run at when nobody has said.
+ *
+ * The catalog skill needs a default that scales — `medium` on a 40-file bundle is right and
+ * on a 2,500-file one is three times the bill — and the rule lives here rather than as prose
+ * in the skill so there is one threshold to tune instead of two that drift apart. `high` is
+ * never recommended: it is a deliberate ask, not something to land on by accident.
+ */
+export function recommendEffort(projections: readonly Projection[]): Effort {
+  const medium = projections.find((projection) => projection.effort === "medium");
+  return medium && medium.total <= MEDIUM_CEILING ? "medium" : "low";
+}
+
+/**
  * Tokens as millions, which is the unit the bill is denominated in. Small corpora keep more
  * decimals rather than collapsing to `0.00M` and reading as free.
  */
