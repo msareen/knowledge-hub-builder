@@ -205,4 +205,7 @@ if (cmd !== "init" && cmd !== "upgrade" && !REGISTRY_COMMANDS.has(cmd)) {
 // their own arguments and not the subcommand name.
 process.argv = [process.argv[0], process.argv[1], ...argv];
 process.env.KHB_SUBCOMMAND = cmd;
+// doctor's whole job is reporting state, including "there is no hub here" — so it alone
+// gets to resolve a hub without dying for lack of one; every other command still needs one.
+if (cmd === "doctor") process.env.KHB_HUB_OPTIONAL = "1";
 await entry.load();

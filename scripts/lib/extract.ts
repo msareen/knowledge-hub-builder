@@ -276,23 +276,30 @@ const LIBRARY: Record<string, (file: string) => Promise<LibResult>> = {
 
     const out: string[] = [];
     sheets.forEach((sheetFile, i) => {
-      const rows: string[][] = [];
-      for (const rm of at(sheetFile).matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
-        const cells: string[] = [];
-        for (const cm of rm[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
-          const ref = cm[1].match(/r="([A-Z]+\d+)"/)?.[1];
-          const type = cm[1].match(/t="([^"]*)"/)?.[1];
-          const v = cm[2].match(/<v>([\s\S]*?)<\/v>/)?.[1];
-          const value =
-            type === "s" ? (shared[Number(v)] ?? "")
-            : type === "inlineStr" ? [...cm[2].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => unxml(t[1])).join("")
-            : unxml(v ?? "");
-          if (ref) cells[colIndex(ref)] = value;
-        }
-        // A sheet is mostly empty cells; drop rows that carry nothing at all.
-        const filled = [...cells].map((c) => (c ?? "").replaceAll("|", "\\|").trim());
-        if (filled.some(Boolean)) rows.push(filled);
+      // Walk <c> cells directly rather than <row>…</row> blocks: some exporters (databases,
+      // report tools) stamp a sheet's <dimension> — and every <row> up to it — out to
+      // Excel's max of 1,048,576 rows even when real data ends after a few hundred. Matching
+      // row-by-row then pays regex overhead a million times over for a handful of actual
+      // cells; matching cells directly costs only as much as there is real content, and each
+      // cell's own `r="A123"` reference is enough to recover its row and column.
+      const byRow = new Map<number, string[]>();
+      for (const cm of at(sheetFile).matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
+        const ref = cm[1].match(/r="([A-Z]+)(\d+)"/);
+        if (!ref) continue;
+        const type = cm[1].match(/t="([^"]*)"/)?.[1];
+        const v = cm[2].match(/<v>([\s\S]*?)<\/v>/)?.[1];
+        const value =
+          type === "s" ? (shared[Number(v)] ?? "")
+          : type === "inlineStr" ? [...cm[2].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => unxml(t[1])).join("")
+          : unxml(v ?? "");
+        if (!value) continue;
+        const rowNum = Number(ref[2]);
+        const cells = byRow.get(rowNum) ?? (byRow.set(rowNum, []), byRow.get(rowNum)!);
+        cells[colIndex(ref[1])] = value;
       }
+      const rows = [...byRow.keys()]
+        .sort((a, b) => a - b)
+        .map((n) => byRow.get(n)!.map((c) => (c ?? "").replaceAll("|", "\\|").trim()));
       if (!rows.length) return;
       // Pad every row to the widest one: a sparse sheet whose row 1 is narrower than row 5
       // otherwise renders as a ragged table, which no markdown reader will parse.
@@ -335,6 +342,44 @@ async function runCli(argv: string[]): Promise<string> {
   } catch {
     return ""; // not installed — expected, and not worth a warning
   }
+}
+
+/** Whether a binary launches at all — exit code is irrelevant (poppler's `pdftotext -v`
+ * exits 99 even though it ran fine), only a failed spawn means "not on PATH". */
+async function binaryExists(bin: string, args: string[]): Promise<boolean> {
+  try {
+    const proc = Bun.spawn([bin, ...args], { stdout: "ignore", stderr: "ignore", stdin: "ignore" });
+    await proc.exited;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the optional second-pass CLI readers (`CLI` above) are on PATH — a fact for
+ * `khb doctor` to report, not a step in a run. These are a bonus, not a requirement: the
+ * built-in library readers already cover ordinary files, so this only matters for the odd
+ * document neither library route can parse.
+ */
+export async function optionalCliStatus(): Promise<{ tool: string; ready: boolean; detail: string; fix: string }[]> {
+  const tools: Record<string, { probe: string[]; formats: string; fix: string }> = {
+    pdftotext: { probe: ["-v"], formats: "PDF", fix: "install poppler-utils (apt: poppler-utils, brew: poppler)" },
+    pandoc: { probe: ["--version"], formats: "DOCX/ODT/PPTX", fix: "install pandoc — https://pandoc.org/installing.html" },
+  };
+  const results = [];
+  for (const [bin, { probe, formats, fix }] of Object.entries(tools)) {
+    const ready = await binaryExists(bin, probe);
+    results.push({
+      tool: bin,
+      ready,
+      detail: ready
+        ? `installed — second pass on a ${formats} file the built-in reader can't parse`
+        : `not installed — that second pass is skipped for ${formats}`,
+      fix,
+    });
+  }
+  return results;
 }
 
 function writeCache(dest: string, path: string, tool: string, quality: Quality, text: string): string {
@@ -707,7 +752,7 @@ export async function ocrCached(path: string, hash: string, dpi = 216): Promise<
         render: (o: { data: Buffer; width: number; height: number }) =>
           sharp(o.data, { raw: { width: o.width, height: o.height, channels: 4 } }).png().toBuffer(),
       });
-      const { data } = await worker.recognize(Buffer.from(img.data));
+      const { data } = await withTimeout(worker.recognize(Buffer.from(img.data)), OCR_TIMEOUT_MS, `OCR of page ${i + 1}`);
       const text = data.text.trim();
       note(`  page ${i + 1}/${all.length} — ${text.length} chars`);
       pages.push(text);
@@ -722,6 +767,25 @@ export async function ocrCached(path: string, hash: string, dpi = 216): Promise<
     await worker.terminate();
     lib.destroy();
   }
+}
+
+/** A page scanned at 400dpi+ decodes to tens of megapixels — tesseract gains nothing past
+ * this many pixels on the long edge, and grinding on the extra resolution is what makes a
+ * single oversized scan look like a hung ingest run. */
+const OCR_MAX_DIMENSION = 3500;
+
+/** A file that neither succeeds nor fails inside this window is treated as failed rather
+ * than left to stall every source queued behind it. */
+const OCR_TIMEOUT_MS = 120_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
 }
 
 /**
@@ -739,9 +803,26 @@ export async function ocrImageCached(path: string, hash: string): Promise<Extrac
   const deps = await ocrDeps();
   if (!deps) return { status: "failed", reason: "OCR dependencies not installed" };
 
+  // Downscale oversized scans before they ever reach tesseract — same reasoning as the
+  // scanned-PDF path's fixed render dpi, just applied after the fact since a bare image
+  // arrives at whatever resolution it was scanned at.
+  let input: Buffer;
+  try {
+    const sharp = (await import("sharp")).default;
+    const meta = await sharp(path, { limitInputPixels: false }).metadata();
+    input = (meta.width ?? 0) > OCR_MAX_DIMENSION || (meta.height ?? 0) > OCR_MAX_DIMENSION
+      ? await sharp(path, { limitInputPixels: false })
+          .resize({ width: OCR_MAX_DIMENSION, height: OCR_MAX_DIMENSION, fit: "inside", withoutEnlargement: true })
+          .png()
+          .toBuffer()
+      : readFileSync(path);
+  } catch {
+    input = readFileSync(path);
+  }
+
   const worker = await deps.createWorker("eng");
   try {
-    const { data } = await worker.recognize(readFileSync(path));
+    const { data } = await withTimeout(worker.recognize(input), OCR_TIMEOUT_MS, "OCR");
     const text = data.text.trim();
     if (!text) return { status: "failed", reason: "no text in image — vision read may still help" };
     return { status: "ok", path: writeCache(dest, path, "tesseract.js", "low", text), tool: "tesseract.js", quality: "low" };

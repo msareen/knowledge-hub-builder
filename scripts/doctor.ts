@@ -14,8 +14,8 @@ import { HUB, BUNDLES, listBundles, read, join, existsSync } from "./lib/util";
 import { readLedger } from "./lib/ledger";
 import { staleLocations, hubVersion } from "./lib/upgrade";
 import { diffSourcesYamlAll } from "./lib/schema";
-import { oneNoteStatus, transcriberStatus } from "./lib/extract";
-import { version, MARKER, markerIn } from "./lib/paths";
+import { oneNoteStatus, transcriberStatus, optionalCliStatus } from "./lib/extract";
+import { version, MARKER, markerIn, findHub } from "./lib/paths";
 import { listHubs, canonical, loadConfig, agentFor, isAlive } from "./lib/registry";
 import { checkConfig } from "./lib/config-check";
 import { section, detail, totalElapsed } from "./lib/log";
@@ -31,55 +31,63 @@ const findings: string[] = [];
 const flag = (msg: string, fix?: string) =>
   findings.push(fix ? `${msg}\n      ${paint.dim("fix:")} ${paint.cmd(fix)}` : msg);
 
-console.log(`${paint.head("khb doctor")} → ${paint.path(HUB)}`);
+const hubFound = findHub();
+
+console.log(`${paint.head("khb doctor")} → ${hubFound ? paint.path(HUB) : paint.dim(`no hub in ${process.cwd()}`)}`);
 
 // ---- Hub identity -----------------------------------------------------------------------
-const marker = (() => {
-  try {
-    return JSON.parse(read(join(HUB, markerIn(HUB) ?? MARKER))) as Record<string, unknown>;
-  } catch {
-    return {} as Record<string, unknown>;
-  }
-})();
-
 section("Hub");
-detail(`name          ${(marker.name as string) || "(unset — khb.json 'name')"}`);
-detail(`description   ${(marker.description as string) || "(unset — khb.json 'description')"}`);
+if (!hubFound) {
+  detail(`none found in ${process.cwd()} or any parent directory.`);
+  detail(`create one     ${paint.cmd("khb init <dir>")}`);
+  detail(`or point at one   ${paint.cmd("khb --hub <dir> doctor")}   (or set $KHB_HUB)`);
+} else {
+  const marker = (() => {
+    try {
+      return JSON.parse(read(join(HUB, markerIn(HUB) ?? MARKER))) as Record<string, unknown>;
+    } catch {
+      return {} as Record<string, unknown>;
+    }
+  })();
 
-// Drift is normally self-healing: cli.ts refreshes a hub before any in-hub command, this one
-// included, so a mismatch here means the refresh was suppressed rather than that it is due.
-const stamped = hubVersion(HUB);
-const installed = version();
-detail(
-  `khb version   ${stamped ?? "unstamped"}` +
-    (stamped === installed ? ` (matches installed)` : ` — installed is ${installed}`),
-);
-if (stamped !== installed)
-  flag(
-    `hub is stamped ${stamped ?? "unstamped"} but khb is ${installed}; its contract docs may be a version behind.`,
-    process.env.KHB_NO_AUTO_UPGRADE ? "unset KHB_NO_AUTO_UPGRADE, or run: khb upgrade" : "khb upgrade",
+  detail(`name          ${(marker.name as string) || "(unset — khb.json 'name')"}`);
+  detail(`description   ${(marker.description as string) || "(unset — khb.json 'description')"}`);
+
+  // Drift is normally self-healing: cli.ts refreshes a hub before any in-hub command, this
+  // one included, so a mismatch here means the refresh was suppressed rather than due.
+  const stamped = hubVersion(HUB);
+  const installed = version();
+  detail(
+    `khb version   ${stamped ?? "unstamped"}` +
+      (stamped === installed ? ` (matches installed)` : ` — installed is ${installed}`),
   );
+  if (stamped !== installed)
+    flag(
+      `hub is stamped ${stamped ?? "unstamped"} but khb is ${installed}; its contract docs may be a version behind.`,
+      process.env.KHB_NO_AUTO_UPGRADE ? "unset KHB_NO_AUTO_UPGRADE, or run: khb upgrade" : "khb upgrade",
+    );
 
-// ---- Location and registry --------------------------------------------------------------
-// A hub moved more than once before anyone repaired it carries every former home, and
-// `khb update --path` rewrites them all in one pass — so say how many there are rather than
-// showing the most recent and implying it is the only one.
-const stale = staleLocations(HUB);
-detail(
-  `location      ${
-    stale.length
-      ? `moved from ${stale[stale.length - 1]}${stale.length > 1 ? ` (+${stale.length - 1} earlier)` : ""}`
-      : "matches the marker"
-  }`,
-);
-if (stale.length)
-  flag(
-    `this hub has moved; absolute paths recorded inside it still name ${stale.length > 1 ? "former locations" : "its former location"}.`,
-    "khb update --path            (khb update --path --dry-run to preview)",
+  // ---- Location and registry --------------------------------------------------------------
+  // A hub moved more than once before anyone repaired it carries every former home, and
+  // `khb update --path` rewrites them all in one pass — so say how many there are rather than
+  // showing the most recent and implying it is the only one.
+  const stale = staleLocations(HUB);
+  detail(
+    `location      ${
+      stale.length
+        ? `moved from ${stale[stale.length - 1]}${stale.length > 1 ? ` (+${stale.length - 1} earlier)` : ""}`
+        : "matches the marker"
+    }`,
   );
+  if (stale.length)
+    flag(
+      `this hub has moved; absolute paths recorded inside it still name ${stale.length > 1 ? "former locations" : "its former location"}.`,
+      "khb update --path            (khb update --path --dry-run to preview)",
+    );
 
-const registered = listHubs().some((entry) => canonical(entry.path) === canonical(HUB));
-detail(`registered    ${registered ? "yes" : "no — 'khb list' and 'khb go' will not offer it"}`);
+  const registered = listHubs().some((entry) => canonical(entry.path) === canonical(HUB));
+  detail(`registered    ${registered ? "yes" : "no — 'khb list' and 'khb go' will not offer it"}`);
+}
 
 // ---- Machine config ---------------------------------------------------------------------
 // Not about this hub — about the file that lists every hub on the machine and names the
@@ -105,13 +113,15 @@ else {
 for (const finding of configReport.findings) flag(`config: ${finding.what}`, finding.fix);
 
 // ---- sources.yaml schema ----------------------------------------------------------------
-const schemaDiffs = diffSourcesYamlAll(HUB);
-if (schemaDiffs.length) {
-  const fields = schemaDiffs.reduce((total, diff) => total + diff.changes.length, 0);
-  flag(
-    `${fields} sources.yaml field(s) across ${schemaDiffs.length} bundle(s) predate the current schema.`,
-    "khb update --schema          (khb update --schema --dry-run to preview)",
-  );
+if (hubFound) {
+  const schemaDiffs = diffSourcesYamlAll(HUB);
+  if (schemaDiffs.length) {
+    const fields = schemaDiffs.reduce((total, diff) => total + diff.changes.length, 0);
+    flag(
+      `${fields} sources.yaml field(s) across ${schemaDiffs.length} bundle(s) predate the current schema.`,
+      "khb update --schema          (khb update --schema --dry-run to preview)",
+    );
+  }
 }
 
 // ---- Bundles ----------------------------------------------------------------------------
@@ -130,10 +140,12 @@ function conceptCount(dir: string): number {
   ).length;
 }
 
-const bundles = listBundles();
+const bundles = hubFound ? listBundles() : [];
 section(`Bundles (${bundles.length})`);
 
-if (!bundles.length) {
+if (!hubFound) {
+  detail(`no hub — see above`);
+} else if (!bundles.length) {
   detail(`none yet — ${paint.cmd('khb new-bundle <name> "scope"')}`);
 } else {
   const summaries = bundles.map((bundle) => {
@@ -200,6 +212,14 @@ if (!transcriber.ready)
 const onenote = await oneNoteStatus();
 detail(`onenote       ${onenote.detail}`);
 if (onenote.fix) detail(`              ${paint.cmd(onenote.fix)}`);
+
+// Same reasoning as onenote above: these are a bonus second pass behind library readers that
+// already cover ordinary files, so a missing one is worth naming but not worth a finding —
+// it only ever matters for the odd file neither built-in route can parse.
+for (const tool of await optionalCliStatus()) {
+  detail(`${tool.tool.padEnd(13)} ${tool.detail}`);
+  if (!tool.ready) detail(`              ${paint.cmd(tool.fix)}`);
+}
 
 // ---- Findings ---------------------------------------------------------------------------
 section(findings.length ? `Findings (${findings.length})` : "Findings");

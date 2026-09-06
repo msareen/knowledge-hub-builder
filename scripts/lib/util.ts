@@ -12,6 +12,10 @@ import { MARKER, markerIn, findHub } from "./paths";
 function resolveHub(): string {
   const found = findHub();
   if (found) return found;
+  // `khb doctor` reports on the machine even with no hub in reach — a hard exit here would
+  // deny it that half of its own report. cli.ts sets this only for that command; every other
+  // command still gets the exit, since they have no hub-independent work to fall back to.
+  if (process.env.KHB_HUB_OPTIONAL) return process.cwd();
   const explicit = process.env.KHB_HUB;
   if (explicit) {
     console.error(`Not a KHB hub (no ${MARKER}): ${resolve(explicit)}`);
