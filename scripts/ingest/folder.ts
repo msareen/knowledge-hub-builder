@@ -5,7 +5,8 @@ import { readdirSync, statSync, existsSync } from "node:fs";
 import { join, normPath } from "../lib/util";
 import type { Entry } from "../lib/ledger";
 import { acquireFile, newCounters, report, type Options } from "./acquire";
-import { detail, pos } from "../lib/log";
+import { detail, pos, withItem } from "../lib/log";
+import { mapPool } from "../lib/pool";
 import { paintErr } from "../lib/color";
 import { makeExcluder } from "./exclude";
 import type { Source } from "./index";
@@ -50,11 +51,14 @@ export async function ingestFolder(
   const scoped = { ...opts, scope: new Set(files.map((path) => normPath(path))) };
 
   const counters = newCounters();
-  for (const [index, path] of files.entries()) {
-    // Flatten the subtree into the filename so two `notes.md` in sibling folders don't
-    // collide in raw/, and so the origin stays legible without opening the file.
-    const rel = relOf(path).replaceAll("/", "__");
-    await acquireFile(pos(index + 1, files.length), path, rel, rawDir, bundleDir, entries, counters, scoped);
-  }
+  await mapPool(files, opts.jobs, (path, index) =>
+    // Each file logs under its own tag, since with several in flight their lines interleave.
+    withItem(String(index + 1), () => {
+      // Flatten the subtree into the filename so two `notes.md` in sibling folders don't
+      // collide in raw/, and so the origin stays legible without opening the file.
+      const rel = relOf(path).replaceAll("/", "__");
+      return acquireFile(pos(index + 1, files.length), path, rel, rawDir, bundleDir, entries, counters, scoped);
+    }),
+  );
   report(counters);
 }

@@ -321,7 +321,7 @@ Commands can be run directly or requested through the matching agent skill.
 | `khb init [dir] [--name N] [--description "…"]` | Create a hub |
 | `khb upgrade` | Refresh package-owned contracts and skills (also runs automatically on version drift) |
 | `khb new-bundle <name> ["scope"]` | Create and register a bundle |
-| `khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]` | Acquire and extract declared sources |
+| `khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio] [--jobs N]` | Acquire and extract declared sources |
 | `khb lint` | Validate routing, bundle structure, and OKF metadata |
 | `khb doctor` | Read-only report: version, location, per-bundle counts, catalog backlog, extractors. Alias: `khb status` |
 | `khb visualize [--port N] [--no-open]` (aliases: `vis`, `viz`) | Serve the live bundle graph on a random free port and open it in your default browser — pan/zoomable cross-bundle map, drill into a bundle for its folder-clustered concepts, rebuild-on-refresh, exits when you close the tab |

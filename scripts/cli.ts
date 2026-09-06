@@ -10,7 +10,7 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
   "new-bundle": { load: () => import("./new-bundle"), usage: 'khb new-bundle <name> ["scope"]', desc: "scaffold a bundle + register it" },
   ingest: {
     load: () => import("./ingest/index"),
-    usage: "khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]",
+    usage: "khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio] [--jobs N]",
     desc: "acquire + extract declared sources → raw/",
   },
   lint: { load: () => import("./lint"), usage: "khb lint", desc: "validate the hub against skills/lint/SKILL.md" },

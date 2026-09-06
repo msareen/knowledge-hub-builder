@@ -10,10 +10,38 @@
 // trail for a pass that rewrites a bundle's raw/, and a run whose output you have to re-run
 // to reconstruct is worse than a noisy one. Nothing here changes what khb does.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { paint } from "./color";
 
 const RUN_START = Date.now();
 let itemStart = RUN_START;
+
+/**
+ * Which item the current line belongs to, once ingest runs several files at a time.
+ *
+ * A run with `--jobs 4` has four files mid-flight, each printing "extracting …" and
+ * "page 3/40" as it goes, so the lines interleave and an unlabelled one is unattributable.
+ * The context travels with the async work rather than being threaded through every
+ * signature: `note()` is called from deep inside the extractors, and passing a log tag down
+ * through `ocrCached` would put a reporting concern in the middle of conversion code.
+ */
+type ItemContext = { tag: string; start: number };
+const currentItem = new AsyncLocalStorage<ItemContext>();
+
+/**
+ * Run one unit of work in its own logging scope, so everything it prints carries `tag`.
+ * Sequential callers can skip this entirely — with no scope, output is exactly as it was
+ * before there was a pool.
+ */
+export function withItem<T>(tag: string, fn: () => Promise<T>): Promise<T> {
+  return currentItem.run({ tag, start: Date.now() }, fn);
+}
+
+/** "[12] " when several items are in flight, "" when the run is sequential. */
+function marker(): string {
+  const store = currentItem.getStore();
+  return store ? `${paint.dim(`[${store.tag}]`)} ` : "";
+}
 
 export const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
@@ -40,18 +68,23 @@ export function detail(msg: string) {
  * point — and starts this item's clock.
  */
 export function item(prefix: string, label: string) {
-  itemStart = Date.now();
+  const store = currentItem.getStore();
+  // Each item times itself from here. In a scope that clock lives with the item, so a slow
+  // file's elapsed time stays its own however many others start and finish while it runs.
+  if (store) store.start = Date.now();
+  else itemStart = Date.now();
   console.log(`  ${paint.dim(prefix)} ${label}`);
 }
 
 /** A step inside the current item: what khb is about to do, or what it just learned. */
 export function note(msg: string) {
-  console.log(`         ${msg}`);
+  console.log(`         ${marker()}${msg}`);
 }
 
 /** How the current item ended, with its own elapsed time. Exactly one per item. */
 export function outcome(msg: string) {
-  console.log(`         ${msg} (${secs(Date.now() - itemStart)})`);
+  const start = currentItem.getStore()?.start ?? itemStart;
+  console.log(`         ${marker()}${msg} (${secs(Date.now() - start)})`);
 }
 
 /**

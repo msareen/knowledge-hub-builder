@@ -107,7 +107,12 @@ khb ingest <bundle>                 # incremental: unchanged content hashes are 
 khb ingest <bundle> --force         # re-acquire everything
 khb ingest <bundle> --skip-ocr      # leave scans and images unread
 khb ingest <bundle> --skip-audio    # leave audio/video untranscribed
+khb ingest <bundle> --jobs 4        # how many files at once (default: cores, max 10)
 ```
+
+Files are acquired several at a time, so their progress lines interleave; each one carries a
+`[n]` tag matching the `[n/total]` line that announced it. `--jobs 1` restores one-at-a-time
+output when a run is being read closely.
 
 One command handles every scripted source in `sources.yaml` and extracts everything it can,
 locally. Read the summary it prints — the counts are the state of the world:

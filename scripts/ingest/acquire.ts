@@ -27,6 +27,7 @@ export type Options = {
   force: boolean;   // re-acquire even when the content hash is unchanged
   ocr: boolean;     // OCR scanned PDFs and images (default on; ~seconds/page)
   audio: boolean;   // transcribe audio/video (default on; ~minutes/file)
+  jobs: number;     // how many files to acquire at once (see lib/pool.ts)
   // Every path this source will visit, normalized. Only the caption/media pairing reads it
   // — a sidecar may only be folded into a recording that is itself being acquired, or a
   // `files:` source naming just the `.vtt` would acquire nothing at all.

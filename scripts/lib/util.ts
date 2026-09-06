@@ -88,6 +88,23 @@ export function rawRel(dir: string, rawRoot?: string): string {
 }
 
 /**
+ * Names handed out during this run but not yet on disk or in the ledger.
+ *
+ * A name is chosen before extraction and only written after it, which can be minutes later
+ * for a scan. Sequentially that gap is invisible — the file exists again before the next
+ * one is named. With several files in flight it is not: two sources whose names collide
+ * (`a/report.pdf` and `b/report.pdf` in one `files:` list) would both find `report.md`
+ * unclaimed and both write it, leaving one raw file with two ledger rows pointing at it.
+ * Claiming the name at the moment it is chosen closes that window; the loser falls through
+ * to the source-hashed form below, which is unique by construction.
+ *
+ * Never released. A name claimed by an extraction that then failed stays spent for the rest
+ * of the run, which costs a later same-named source its plain spelling and nothing else —
+ * cheaper than tracking completion to reclaim a string.
+ */
+const claimedRawNames = new Set<string>();
+
+/**
  * Keep the readable filename unless another source already owns it. The suffix is based on
  * source identity, not content, so identical bytes acquired from two origins retain honest
  * provenance instead of overwriting each other.
@@ -102,7 +119,12 @@ export function rawNameFor(
   const safe = safeRawName(name);
   const rel = `${rawRel(dir, rawRoot)}/${safe}`;
   const owner = [...entries].find((e) => e.raw === rel);
-  if ((!owner || owner.source === source) && (owner || !existsSync(join(dir, safe)))) return safe;
+  // Re-acquiring what this same source already owns is not a collision — it keeps its name.
+  const mine = owner?.source === source;
+  if ((!owner || mine) && (owner || !existsSync(join(dir, safe))) && (mine || !claimedRawNames.has(rel))) {
+    claimedRawNames.add(rel);
+    return safe;
+  }
   const stem = safe.toLowerCase().endsWith(".md") ? safe.slice(0, -3) : safe;
   return `${stem}--${sha256(source).slice(0, 12)}.md`;
 }

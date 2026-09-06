@@ -4,7 +4,8 @@ import { existsSync } from "node:fs";
 import { basename, normPath } from "../lib/util";
 import type { Entry } from "../lib/ledger";
 import { acquireFile, newCounters, report, type Options } from "./acquire";
-import { detail, item, outcome, pos } from "../lib/log";
+import { detail, item, outcome, pos, withItem } from "../lib/log";
+import { mapPool } from "../lib/pool";
 import { makeExcluder } from "./exclude";
 import type { Source } from "./index";
 
@@ -27,14 +28,16 @@ export async function ingestFiles(
   const scoped = { ...opts, scope: new Set(paths.map((path) => normPath(path))) };
 
   const counters = newCounters();
-  for (const [index, path] of paths.entries()) {
-    const position = pos(index + 1, paths.length);
-    if (!existsSync(path)) {
-      item(position, path);
-      outcome("missing, skipped");
-      continue;
-    }
-    await acquireFile(position, path, basename(path), rawDir, bundleDir, entries, counters, scoped);
-  }
+  await mapPool(paths, opts.jobs, (path, index) =>
+    withItem(String(index + 1), async () => {
+      const position = pos(index + 1, paths.length);
+      if (!existsSync(path)) {
+        item(position, path);
+        outcome("missing, skipped");
+        return;
+      }
+      await acquireFile(position, path, basename(path), rawDir, bundleDir, entries, counters, scoped);
+    }),
+  );
   report(counters);
 }

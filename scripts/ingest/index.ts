@@ -14,7 +14,8 @@ import { read, join, HUB } from "../lib/util";
 import { detail, section, totalElapsed } from "../lib/log";
 import { bundleForIngest, listBundles, DEFAULT_BUNDLE } from "../lib/scaffold";
 import { readLedger, writeLedger } from "../lib/ledger";
-import { takeFlag, rejectUnknownFlags } from "../lib/args";
+import { takeFlag, takeOpt, rejectUnknownFlags } from "../lib/args";
+import { cpus } from "node:os";
 import { paint, paintErr } from "../lib/color";
 import { ingestFolder } from "./folder";
 import { ingestFiles } from "./files";
@@ -26,14 +27,31 @@ export type Source =
   | { type: "files"; paths: string[]; exclude?: string[] }
   | { type: "web"; urls: string[] };
 
-const USAGE = "khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio]";
+const USAGE = "khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio] [--jobs N]";
 const argv = process.argv.slice(2);
+
+/**
+ * How many files to acquire at once. The work that dominates a run happens off this thread
+ * — tesseract in a worker, whisper and the CLI readers in spawned processes — so more lanes
+ * genuinely means more throughput, up to the cores that back them. Capped at 10: past that
+ * the lanes mostly queue behind each other's CPU while each still holds its own OCR worker
+ * and language data in memory.
+ */
+const JOBS_CAP = 10;
+const jobsFlag = takeOpt(argv, "--jobs", "-j");
+const jobs = jobsFlag === undefined ? Math.min(JOBS_CAP, cpus().length || 1) : Number(jobsFlag);
+if (!Number.isInteger(jobs) || jobs < 1) {
+  console.error(`--jobs must be a whole number of 1 or more (got ${JSON.stringify(jobsFlag)})`);
+  process.exit(1);
+}
+
 const opts: Options = {
   force: takeFlag(argv, "--force"),
   // On by default: a corpus half-ingested because the expensive formats were opt-in is a
   // corpus you have to remember to come back to. The flags exist for the impatient run.
   ocr: !takeFlag(argv, "--skip-ocr"),
   audio: !takeFlag(argv, "--skip-audio"),
+  jobs,
 };
 rejectUnknownFlags(argv, USAGE);
 const positional = argv;
@@ -117,7 +135,10 @@ console.log(`${paint.head("khb ingest")} → bundle ${paint.name(`'${bundle}'`)}
 detail(`hub:      ${HUB}`);
 detail(`bundle:   ${dir}`);
 detail(`sources:  ${sources.length} declared in bundles/${bundle}/sources.yaml`);
-detail(`options:  ocr=${opts.ocr ? "on" : "off"}  audio=${opts.audio ? "on" : "off"}  force=${opts.force ? "on" : "off"}`);
+detail(
+  `options:  ocr=${opts.ocr ? "on" : "off"}  audio=${opts.audio ? "on" : "off"}  force=${opts.force ? "on" : "off"}` +
+    `  jobs=${opts.jobs}${jobsFlag === undefined ? ` (of ${cpus().length || 1} cores, cap ${JOBS_CAP})` : ""}`,
+);
 detail(`ledger:   ${entries.size} existing row(s) in log.md`);
 
 for (const [index, source] of sources.entries()) {

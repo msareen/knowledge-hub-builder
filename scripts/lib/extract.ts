@@ -26,7 +26,7 @@
 // A pixel, audio or notebook source that extracted badly is not a dead end — the original
 // file is still on disk and named in the provenance header, so curation can escalate to a
 // vision read of the source instead of trusting garbled text.
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, openSync, readSync, closeSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, openSync, readSync, closeSync, renameSync } from "node:fs";
 import { INGEST_CACHE, join, basename } from "./util";
 import { note } from "./log";
 // The pyOneNote probe is shared with `khb init --with-onenote`, which runs before a hub
@@ -387,12 +387,41 @@ function writeCache(dest: string, path: string, tool: string, quality: Quality, 
   const fm =
     `---\nsource: ${path.replaceAll("\\", "/")}\nextracted: ${new Date().toISOString()}\n` +
     `tool: ${tool}\nquality: ${quality}\n---\n\n`;
-  writeFileSync(dest, fm + text);
+  // Write beside the entry and rename onto it, rather than writing the entry in place. Every
+  // reader decides there is a cache hit with `existsSync`, which goes true the instant the
+  // file is created and long before it holds any text — so an in-place write is briefly a
+  // valid-looking empty cache entry. Sequentially nobody is looking during that window; with
+  // several files in flight, another one reads the truncated file and caches nothing.
+  // Rename is atomic on both platforms and replaces an existing entry on Windows too.
+  const tmp = `${dest}.${process.pid}.tmp`;
+  writeFileSync(tmp, fm + text);
+  renameSync(tmp, dest);
   return dest;
 }
 
 function cacheHit(dest: string): Extraction {
   return { status: "ok", path: dest, ...extractedMeta(dest) };
+}
+
+/** Expensive extractions running right now, by cache key. */
+const inFlight = new Map<string, Promise<Extraction>>();
+
+/**
+ * One conversion per content hash at a time, however many files ask for it at once.
+ *
+ * The cache makes duplicate content free only once the first copy has finished writing it.
+ * Sequentially that is always true by the time the second copy is reached; with files in
+ * flight together, two copies of the same document both miss the cache and both pay for the
+ * OCR. Duplicates are ordinary in a real corpus, so without this, concurrency would make the
+ * duplicated work *worse* than the one-at-a-time run it replaces. The second caller simply
+ * awaits the first's result, which is the same value the cache would have handed it.
+ */
+function sharedExtraction(key: string, run: () => Promise<Extraction>): Promise<Extraction> {
+  const running = inFlight.get(key);
+  if (running) return running;
+  const started = run().finally(() => inFlight.delete(key));
+  inFlight.set(key, started);
+  return started;
 }
 
 // --- OneNote ---------------------------------------------------------------------------
@@ -693,6 +722,27 @@ export async function extractCached(path: string, hash: string, ext: string): Pr
 }
 
 /**
+ * Tell tesseract the resolution of what it is being handed.
+ *
+ * Tesseract sizes its layout analysis in physical units, so it needs a dpi to decide how
+ * tall a line of text ought to be. When the image carries none it believes — anything under
+ * `kMinCredibleResolution`, which is 70 — it prints "Invalid resolution N dpi. Using 70
+ * instead" and proceeds on that guess. A page rendered here at 216dpi analysed as though it
+ * were 70dpi has metrics off by a factor of three, which is how a scan border ends up
+ * segmented as a text line ("Scaling pix of size 6, 845 … made null pix"). Passing the real
+ * number is therefore an accuracy fix, not just a way to silence the warning.
+ */
+async function setOcrDpi(worker: { setParameters: (p: Record<string, string>) => Promise<unknown> }, dpi: number) {
+  // Below tesseract's own credibility floor its guess is as good as ours; leave it alone.
+  if (!Number.isFinite(dpi) || dpi < 70) return;
+  try {
+    await worker.setParameters({ user_defined_dpi: String(Math.round(dpi)) });
+  } catch {
+    // An older tesseract.js without the parameter is not worth failing an extraction over.
+  }
+}
+
+/**
  * Lazily loaded OCR stack, shared by the PDF and bare-image paths. The install hint is
  * printed once per process, not once per file — a corpus of scans would otherwise bury its
  * own summary under hundreds of identical warnings.
@@ -723,7 +773,13 @@ async function ocrDeps() {
  *
  *   bun add @hyzyla/pdfium sharp tesseract.js
  */
-export async function ocrCached(path: string, hash: string, dpi = 216): Promise<Extraction> {
+export function ocrCached(path: string, hash: string, dpi = 216): Promise<Extraction> {
+  const dest = extractedPath(hash);
+  if (existsSync(dest)) return Promise.resolve(cacheHit(dest));
+  return sharedExtraction(hash, () => ocrUncached(path, hash, dpi));
+}
+
+async function ocrUncached(path: string, hash: string, dpi: number): Promise<Extraction> {
   const dest = extractedPath(hash);
   if (existsSync(dest)) return cacheHit(dest);
 
@@ -739,6 +795,9 @@ export async function ocrCached(path: string, hash: string, dpi = 216): Promise<
 
   const lib = await PDFiumLibrary.init();
   const worker = await deps.createWorker("eng");
+  // These pages are rendered here, at a resolution we picked, so tesseract never has to
+  // guess at one — a PNG built from a raw pixel buffer carries no density of its own.
+  await setOcrDpi(worker, dpi);
   const tool = `tesseract.js @ ${dpi}dpi`;
   try {
     const doc = await lib.loadDocument(readFileSync(path));
@@ -796,9 +855,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
  * The `quality: low` marker plus the source path in the header is how curation knows to
  * escalate to a vision read when the text comes back thin or nonsensical.
  */
-export async function ocrImageCached(path: string, hash: string): Promise<Extraction> {
+export function ocrImageCached(path: string, hash: string): Promise<Extraction> {
   const dest = extractedPath(hash);
-  if (existsSync(dest)) return cacheHit(dest);
+  if (existsSync(dest)) return Promise.resolve(cacheHit(dest));
+  return sharedExtraction(hash, () => ocrImageUncached(path, hash));
+}
+
+async function ocrImageUncached(path: string, hash: string): Promise<Extraction> {
+  const dest = extractedPath(hash);
 
   const deps = await ocrDeps();
   if (!deps) return { status: "failed", reason: "OCR dependencies not installed" };
@@ -807,20 +871,30 @@ export async function ocrImageCached(path: string, hash: string): Promise<Extrac
   // scanned-PDF path's fixed render dpi, just applied after the fact since a bare image
   // arrives at whatever resolution it was scanned at.
   let input: Buffer;
+  // What the pixels handed to tesseract are worth per inch: the file's own density, less
+  // whatever the downscale below took out of it. Undefined when the image never said.
+  let effectiveDpi: number | undefined;
   try {
     const sharp = (await import("sharp")).default;
     const meta = await sharp(path, { limitInputPixels: false }).metadata();
-    input = (meta.width ?? 0) > OCR_MAX_DIMENSION || (meta.height ?? 0) > OCR_MAX_DIMENSION
-      ? await sharp(path, { limitInputPixels: false })
-          .resize({ width: OCR_MAX_DIMENSION, height: OCR_MAX_DIMENSION, fit: "inside", withoutEnlargement: true })
-          .png()
-          .toBuffer()
-      : readFileSync(path);
+    const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
+    if (longest > OCR_MAX_DIMENSION) {
+      input = await sharp(path, { limitInputPixels: false })
+        .resize({ width: OCR_MAX_DIMENSION, height: OCR_MAX_DIMENSION, fit: "inside", withoutEnlargement: true })
+        .png()
+        .toBuffer();
+      // `fit: inside` scales both axes by the same factor, so the density follows it.
+      if (meta.density) effectiveDpi = meta.density * (OCR_MAX_DIMENSION / longest);
+    } else {
+      input = readFileSync(path);
+      effectiveDpi = meta.density;
+    }
   } catch {
     input = readFileSync(path);
   }
 
   const worker = await deps.createWorker("eng");
+  if (effectiveDpi) await setOcrDpi(worker, effectiveDpi);
   try {
     const { data } = await withTimeout(worker.recognize(input), OCR_TIMEOUT_MS, "OCR");
     const text = data.text.trim();
@@ -972,9 +1046,14 @@ async function transcribeWhisper(
  * --skip-audio` leaves the rows pending and everything else proceeds. A recording that
  * arrived with captions beside it never gets here at all; ingest reads those instead.
  */
-export async function transcribeCached(path: string, hash: string, model = "base"): Promise<Extraction> {
+export function transcribeCached(path: string, hash: string, model = "base"): Promise<Extraction> {
   const dest = extractedPath(hash);
-  if (existsSync(dest)) return cacheHit(dest);
+  if (existsSync(dest)) return Promise.resolve(cacheHit(dest));
+  return sharedExtraction(hash, () => transcribeUncached(path, hash, model));
+}
+
+async function transcribeUncached(path: string, hash: string, model: string): Promise<Extraction> {
+  const dest = extractedPath(hash);
 
   const eng = await asrEngine();
   // The pending row carries the reason a person can act on: "not set up" and "not installed"
