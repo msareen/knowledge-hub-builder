@@ -375,8 +375,26 @@ a concept doc, and committed, so it survives `raw/` being deleted and re-derived
 | `fetched` | khb | ISO timestamp of last acquisition |
 | `raw` | khb | bundle-relative `raw/` path; **empty = never extracted** |
 | `curated` | agent | concept doc(s) distilled from it; **empty = catalog backlog** |
+| `reason` | khb | why `raw` is empty; blank on every row that did extract |
 
-`khb ingest` maintains the first four and never touches `curated`.
+`khb ingest` maintains every column but `curated`, which it never touches.
+
+`reason` is what makes an empty `raw` actionable weeks later, when the run that produced it
+is gone from the scrollback. The three causes have three different remedies and the column
+is where you tell them apart:
+
+| reason | what to do |
+|---|---|
+| `password-protected` | supply the password or re-export the file, then re-ingest |
+| `no extractor for this format` | nothing, usually — or convert it yourself and add the row by hand |
+| `image (--skip-ocr)`, `audio/video (--skip-audio)`, `scanned, 39p (--skip-ocr)` | re-run without the flag |
+| `vno is installed but not set up: …`, `OCR dependencies not installed` | install the dependency named, then re-ingest |
+| `OCR failed: …`, `fetch failed — …` | the extractor tried and lost; read the source yourself, or vision-read it |
+
+khb rewrites the column on every run, so a file that was locked in March and unlocked in
+April loses its stale reason as soon as it extracts. `khb doctor` tallies the reasons across
+the hub, which is the fastest way to see whether a corpus is missing one dependency or
+forty different things.
 
 A `#` row is a real source with a real backlog entry — an attachment out of a OneNote
 section, whose bytes are the copy in `raw/`. It cannot move on its own, so when its
@@ -414,8 +432,12 @@ left at the end of ingest has a backlog and nothing citable — so never stop si
 summary, and never start cataloging unasked either. Name the bundle and the size of the
 backlog in the offer, so the answer is informed:
 
-> Ingest landed 94 files in `real-estate/raw/`; 94 rows are uncurated. Shall I catalog them
-> into concept docs now?
+Cataloging is the half that costs money, so put the number in the offer rather than making
+the user say yes to find it out. `khb estimate <bundle>` gives it in tokens:
+
+> Ingest landed 94 files in `real-estate/raw/`; 94 rows are uncurated. Cataloging them is
+> roughly 6.2M tokens in and 1.5M out at medium effort. Shall I catalog them into concept
+> docs now?
 
 Take the answer at face value:
 

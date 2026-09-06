@@ -766,6 +766,30 @@ async function ocrDeps() {
 }
 
 /**
+ * A tesseract worker that reports a bad image instead of killing the run.
+ *
+ * On a failure tesseract.js does two things with the same error: it rejects the pending
+ * promise — which the callers below catch and turn into a `reason` on the ledger row — and
+ * then, if no `errorHandler` was registered, it *also* throws from inside the worker's
+ * message handler. That second copy is outside every `await` in this file, so it lands as an
+ * unhandled exception and takes the process's exit code to 1 after the run has already
+ * printed its summary and written its ledger.
+ *
+ * Which contradicts khb's own contract, printed in `khb help`: a source khb cannot extract is
+ * not a failure, it is a pending row. One corrupt PNG in a corpus of four thousand should not
+ * fail the pipeline that ingested the other 3,999. Registering a handler routes the error to
+ * the promise alone, where it is already being dealt with.
+ */
+type OcrDeps = NonNullable<Awaited<ReturnType<typeof ocrDeps>>>;
+function ocrWorker(deps: OcrDeps) {
+  return deps.createWorker("eng", undefined, {
+    errorHandler: () => {
+      /* already surfaced through the rejected promise the caller is awaiting */
+    },
+  });
+}
+
+/**
  * OCR a scanned PDF: render each page, then read the pixels. Runs automatically during
  * ingest when a PDF turns out to have no text layer — a scan is not a failure, it just
  * needs a different reader — but the deps are optional (~75 MB of WASM plus a one-time
@@ -794,7 +818,7 @@ async function ocrUncached(path: string, hash: string, dpi: number): Promise<Ext
   }
 
   const lib = await PDFiumLibrary.init();
-  const worker = await deps.createWorker("eng");
+  const worker = await ocrWorker(deps);
   // These pages are rendered here, at a resolution we picked, so tesseract never has to
   // guess at one — a PNG built from a raw pixel buffer carries no density of its own.
   await setOcrDpi(worker, dpi);
@@ -893,7 +917,7 @@ async function ocrImageUncached(path: string, hash: string): Promise<Extraction>
     input = readFileSync(path);
   }
 
-  const worker = await deps.createWorker("eng");
+  const worker = await ocrWorker(deps);
   if (effectiveDpi) await setOcrDpi(worker, effectiveDpi);
   try {
     const { data } = await withTimeout(worker.recognize(input), OCR_TIMEOUT_MS, "OCR");

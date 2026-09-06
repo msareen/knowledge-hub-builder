@@ -136,6 +136,7 @@ From outside, pass `--hub <dir>` or set `$KHB_HUB`.
 
 | Command | Purpose |
 |---|---|
+| `khb estimate [bundle] [--all] [--price IN/OUT] [--top N] [--json]` | what cataloging the backlog will cost, in tokens: the raw material counted, projected at low/medium/high effort, quoted in millions. Counts only — it contacts no model and knows no prices, so `--price` takes rates you supply. Aliases `cost`, `tokens` |
 | `khb lint` | validate structure against `skills/lint/SKILL.md` |
 | `khb doctor` (alias `khb status`) | read-only report on the hub: version, location, per-bundle concept/raw/backlog counts, transcriber, the OneNote reader, the machine config's schema findings, and the command that fixes each finding. Writes nothing, and does not duplicate `lint` |
 | `khb upgrade` | refresh this hub's package-owned contract docs — runs by itself whenever `khb.json`'s stamped version differs from the installed khb, so these docs always match the CLI |
@@ -190,9 +191,17 @@ them in `index.md`. When the runtime supports parallel agents, fan them out over
 files; only the orchestrating agent writes `index.md`, `log.md` and `refs.md`.
 
 Each bundle's `log.md` is the durable ledger across both steps — rows with an empty
-`curated` column are the catalog backlog, so keep it current. A raw file carrying
-`quality: low` came from OCR or a transcript: distrust it, and re-read the original named in
-its `source:` header when the text looks wrong.
+`curated` column are the catalog backlog, so keep it current. A row with an empty `raw` never
+extracted, and its `reason` column says why (`password-protected`, `image (--skip-ocr)`, `no
+extractor for this format`, …); khb owns that column and rewrites it every run, so a stale
+reason never outlives the problem. A raw file carrying `quality: low` came from OCR or a
+transcript: distrust it, and re-read the original named in its `source:` header when the text
+looks wrong.
+
+**Ingest is free; catalog is not.** It reads every raw file through a model, so before
+starting one run `khb estimate <bundle>`, put the projection in front of the user in money as
+well as tokens, and wait for them to pick a model and an effort level. The protocol is in
+`skills/catalog/SKILL.md`; skipping it spends someone's budget on their behalf.
 
 ## Parallel work
 

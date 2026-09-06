@@ -13,6 +13,11 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
     usage: "khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio] [--jobs N]",
     desc: "acquire + extract declared sources → raw/",
   },
+  estimate: {
+    load: () => import("./estimate"),
+    usage: "khb estimate [bundle] [--all] [--price IN/OUT] [--top N] [--json]",
+    desc: "what cataloging the backlog will cost in tokens; aliases: cost, tokens",
+  },
   lint: { load: () => import("./lint"), usage: "khb lint", desc: "validate the hub against skills/lint/SKILL.md" },
   doctor: {
     load: () => import("./doctor"),
@@ -63,7 +68,14 @@ const REGISTRY_COMMANDS = new Set(["list", "go", "agent", "forget", "update", "c
 // itself so help text lists each command once. `-v` is taken by --version, so
 // `visualize` gets word-shaped aliases instead of a letter one. `status` is the word people
 // reach for when they want to know how a thing is doing, and here that is `doctor`.
-const ALIASES: Record<string, string> = { vis: "visualize", viz: "visualize", status: "doctor" };
+const ALIASES: Record<string, string> = {
+  vis: "visualize",
+  viz: "visualize",
+  status: "doctor",
+  // What you actually want to know is the cost; tokens are the unit it is quoted in.
+  cost: "estimate",
+  tokens: "estimate",
+};
 
 const argv = process.argv.slice(2);
 

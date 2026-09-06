@@ -3,6 +3,7 @@
 // present) are skipped.
 import { readdirSync, statSync, existsSync } from "node:fs";
 import { join, normPath } from "../lib/util";
+import { relative, resolve } from "node:path";
 import type { Entry } from "../lib/ledger";
 import { acquireFile, newCounters, report, type Options } from "./acquire";
 import { detail, pos, withItem } from "../lib/log";
@@ -39,7 +40,14 @@ export async function ingestFolder(
   // relOf is posix-normalized so an 'exclude' entry like "drafts/" behaves the same whether
   // the corpus was walked on Windows or POSIX; it's computed once and reused for both the
   // exclude check and the flattened raw/ filename below.
-  const relOf = (path: string) => path.slice(source.path.length + 1).replaceAll("\\", "/");
+  //
+  // Computed with `relative`, not by slicing off `source.path.length`: `join` normalizes the
+  // path it builds, so a perfectly ordinary `path: ./src` produced walked paths two
+  // characters shorter than the prefix being assumed, and every file came out with its name
+  // eaten from the front — `notes.txt` ingested as `tes.txt.md`, and an `exclude` of
+  // `drafts/` matching nothing. Same for a trailing slash or a `..` segment.
+  const root = resolve(source.path);
+  const relOf = (path: string) => relative(root, resolve(path)).replaceAll("\\", "/");
   const excluded = makeExcluder(source.exclude);
   const files = found.filter((path) => !excluded(path, relOf(path)));
   const skippedCount = found.length - files.length;

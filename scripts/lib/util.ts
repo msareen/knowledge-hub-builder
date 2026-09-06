@@ -41,6 +41,34 @@ export function read(path: string): string {
   return readFileSync(path, "utf8");
 }
 
+/** Reserved OKF filenames — routing and ledgers, never concept docs. */
+export const RESERVED_NAMES = ["index.md", "log.md", "refs.md"];
+
+/**
+ * Every concept doc in a bundle: the `.md` files outside `raw/` that are not reserved names.
+ * Bundle-relative and forward-slashed, so the paths read the same on every platform.
+ */
+export function conceptFiles(bundleDir: string): string[] {
+  const walk = (current: string): string[] =>
+    readdirSync(current).flatMap((entry: string) => {
+      const path = join(current, entry);
+      if (statSync(path).isDirectory()) return entry === "raw" ? [] : walk(path);
+      return [relative(bundleDir, path).replaceAll("\\", "/")];
+    });
+  return walk(bundleDir).filter(
+    (file) => file.endsWith(".md") && !RESERVED_NAMES.includes(file.split("/").pop()!),
+  );
+}
+
+/** Every extracted file under a bundle's `raw/`, bundle-relative and forward-slashed. */
+export function rawFiles(bundleDir: string): string[] {
+  const root = join(bundleDir, "raw");
+  if (!existsSync(root)) return [];
+  return (readdirSync(root, { recursive: true }) as string[])
+    .filter((file) => file.endsWith(".md"))
+    .map((file) => `raw/${file.replaceAll("\\", "/")}`);
+}
+
 /** All markdown link targets in a file: [text](target) */
 export function mdLinks(md: string): { text: string; target: string }[] {
   const out: { text: string; target: string }[] = [];

@@ -1,6 +1,6 @@
 // log.md — the durable ingest ledger (OKF-reserved filename, so lint never treats it
 // as a concept doc). Committed, unlike raw/, so it survives raw/ being deleted and
-// re-derived. Columns: source | sha256 | fetched | raw | curated.
+// re-derived. Columns: source | sha256 | fetched | raw | curated | reason.
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -10,28 +10,57 @@ export type Entry = {
   fetched: string;  // ISO timestamp of last acquisition
   raw: string;      // bundle-relative raw/ path, or "" when extraction is still pending
   curated: string;  // concept doc(s) distilled from it, or "" when not yet curated
+  // Why `raw` is empty — "password-protected", "image (--skip-ocr)", "no extractor for this
+  // format". Empty on any row that did extract.
+  //
+  // It was only ever said out loud, on the console, during the run that decided it: a ledger
+  // read a week later showed a blank `raw` and no way to tell a file khb cannot read from one
+  // a flag skipped from one whose password the user has. Those have three different remedies
+  // and the run that knew which is long gone, so the answer belongs in the file that outlives
+  // it. khb owns this column outright and rewrites it every run — unlike `curated`.
+  reason: string;
 };
 
 const HEADER = `# {{name}} — ingest log
 
 Ingestion ledger, one row per source. \`khb ingest\` maintains \`source\`, \`sha256\`,
-\`fetched\` and \`raw\`; the agent fills \`curated\` while cataloging (skills/catalog/SKILL.md).
+\`fetched\`, \`raw\` and \`reason\`; the agent fills \`curated\` while cataloging
+(skills/catalog/SKILL.md).
 
-Empty \`raw\` = seen but not extracted (protected, unreadable, or skipped by a flag).
+Empty \`raw\` = seen but not extracted, and \`reason\` says why (protected, no extractor,
+or skipped by a flag).
 Empty \`curated\` = in raw/ but not yet distilled into a concept doc.
 
-| source | sha256 | fetched | raw | curated |
-|---|---|---|---|---|
+| source | sha256 | fetched | raw | curated | reason |
+|---|---|---|---|---|---|
 `;
 
 const unwrap = (s: string) => s.trim().replace(/^`|`$/g, "").trim();
 const wrap = (s: string) => (s ? `\`${s.replaceAll("|", "\\|")}\`` : "");
 
+/**
+ * One table cell's worth of explanation, applied at write time so every path that sets a
+ * reason gets it. A failing extractor can hand back a whole stack trace, and a newline or a
+ * pipe in a markdown table does not corrupt one row, it corrupts the table. The ledger
+ * records *what* went wrong; the console output of the run that found out is the transcript.
+ */
+const REASON_MAX = 160;
+const asReason = (text = "") => {
+  const line = text.replace(/\s+/g, " ").replaceAll("|", "\\|").trim();
+  return line.length > REASON_MAX ? `${line.slice(0, REASON_MAX - 1)}…` : line;
+};
+
 export function ledgerPath(bundleDir: string) {
   return join(bundleDir, "log.md");
 }
 
-/** Parse log.md into entries keyed by source. Missing file = empty ledger. */
+/**
+ * Parse log.md into entries keyed by source. Missing file = empty ledger.
+ *
+ * Five cells is the pre-`reason` table and still parses: a ledger written by an older khb
+ * keeps every row, gains an empty reason, and picks one up the next time its source is
+ * re-tried. There is no migration to run — `writeLedger` rewrites the whole table anyway.
+ */
 export function readLedger(bundleDir: string): Map<string, Entry> {
   const p = ledgerPath(bundleDir);
   const out = new Map<string, Entry>();
@@ -41,8 +70,8 @@ export function readLedger(bundleDir: string): Map<string, Entry> {
     const cells = line.split("|").slice(1, -1).map(unwrap);
     if (cells.length < 5) continue;
     if (cells[0] === "source" || /^-+$/.test(cells[0])) continue; // header / separator
-    const [source, sha256, fetched, raw, curated] = cells;
-    out.set(source, { source, sha256, fetched, raw, curated });
+    const [source, sha256, fetched, raw, curated, reason] = cells;
+    out.set(source, { source, sha256, fetched, raw, curated, reason: reason ?? "" });
   }
   return out;
 }
@@ -54,16 +83,25 @@ export function writeLedger(bundleDir: string, entries: Map<string, Entry>, bund
   const preamble = existing.split("\n").filter((l) => !l.startsWith("|")).join("\n").trimEnd();
   const rows = [...entries.values()]
     .sort((a, b) => a.source.localeCompare(b.source))
-    .map((e) => `| ${wrap(e.source)} | ${wrap(e.sha256.slice(0, 12))} | ${e.fetched} | ${wrap(e.raw)} | ${wrap(e.curated)} |`);
-  const table = ["", "| source | sha256 | fetched | raw | curated |", "|---|---|---|---|---|", ...rows, ""];
+    .map(
+      (e) =>
+        `| ${wrap(e.source)} | ${wrap(e.sha256.slice(0, 12))} | ${e.fetched} | ${wrap(e.raw)} | ` +
+        // Prose, not a path, so it is the one cell that is not backticked.
+        `${wrap(e.curated)} | ${asReason(e.reason)} |`,
+    );
+  const table = ["", "| source | sha256 | fetched | raw | curated | reason |", "|---|---|---|---|---|---|", ...rows, ""];
   writeFileSync(p, preamble + "\n" + table.join("\n"));
 }
 
 /**
  * Upsert, preserving the agent-owned `curated` column. Returns the merged entry.
+ *
+ * `reason` is khb's and defaults to empty, so a successful extraction clears whatever the
+ * last run recorded without every caller having to remember to. A file that was
+ * password-protected in March and unlocked in April must not still read as protected.
  */
-export function record(entries: Map<string, Entry>, e: Omit<Entry, "curated">): Entry {
-  const merged = { ...e, curated: entries.get(e.source)?.curated ?? "" };
+export function record(entries: Map<string, Entry>, e: Omit<Entry, "curated" | "reason"> & { reason?: string }): Entry {
+  const merged = { ...e, reason: e.reason ?? "", curated: entries.get(e.source)?.curated ?? "" };
   entries.set(e.source, merged);
   return merged;
 }

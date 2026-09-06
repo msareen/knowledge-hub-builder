@@ -48,7 +48,7 @@ export async function ingestWeb(
         // A transient refresh failure must not erase a previously acquired, still-usable
         // copy. Record a pending row only when this source has never succeeded before.
         if (!entries.has(url))
-          record(entries, { source: url, sha256: "", fetched: new Date().toISOString(), raw: "" });
+          record(entries, { source: url, sha256: "", fetched: new Date().toISOString(), raw: "", reason: `fetch failed — ${error}` });
         outcome(`failed — ${error}`);
       }
     }),

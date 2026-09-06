@@ -10,7 +10,7 @@
 // It writes nothing. That is the point, and it is also the boundary: `doctor` reports and
 // names the command that repairs, but never repairs. `khb lint` stays the structural
 // validator — doctor counts and points at it rather than duplicating a rule.
-import { HUB, BUNDLES, listBundles, read, join, existsSync } from "./lib/util";
+import { HUB, BUNDLES, listBundles, conceptFiles, rawFiles, read, join } from "./lib/util";
 import { readLedger } from "./lib/ledger";
 import { staleLocations, hubVersion } from "./lib/upgrade";
 import { diffSourcesYamlAll } from "./lib/schema";
@@ -21,8 +21,6 @@ import { checkConfig } from "./lib/config-check";
 import { section, detail, totalElapsed } from "./lib/log";
 import { rejectUnknownFlags } from "./lib/args";
 import { paint } from "./lib/color";
-import { readdirSync, statSync } from "node:fs";
-import { relative } from "node:path";
 
 rejectUnknownFlags(process.argv.slice(2), "khb doctor");
 
@@ -125,21 +123,6 @@ if (hubFound) {
 }
 
 // ---- Bundles ----------------------------------------------------------------------------
-const RESERVED = ["index.md", "log.md", "refs.md"];
-
-/** Concept docs: every .md in the bundle outside raw/ that is not a reserved filename. */
-function conceptCount(dir: string): number {
-  const walk = (current: string): string[] =>
-    readdirSync(current).flatMap((entry: string) => {
-      const path = join(current, entry);
-      if (statSync(path).isDirectory()) return entry === "raw" ? [] : walk(path);
-      return [relative(dir, path).replaceAll("\\", "/")];
-    });
-  return walk(dir).filter(
-    (file) => file.endsWith(".md") && !RESERVED.includes(file.split("/").pop()!),
-  ).length;
-}
-
 const bundles = hubFound ? listBundles() : [];
 section(`Bundles (${bundles.length})`);
 
@@ -151,16 +134,11 @@ if (!hubFound) {
   const summaries = bundles.map((bundle) => {
     const dir = join(BUNDLES, bundle);
     const ledger = readLedger(dir);
-    const rawDir = join(dir, "raw");
-    const rawFiles = existsSync(rawDir)
-      ? (readdirSync(rawDir, { recursive: true }) as string[]).filter((file) => file.endsWith(".md"))
-          .length
-      : 0;
     const rows = [...ledger.values()];
     return {
       bundle,
-      concepts: conceptCount(dir),
-      rawFiles,
+      concepts: conceptFiles(dir).length,
+      rawFiles: rawFiles(dir).length,
       rows: rows.length,
       // The catalog backlog in the ledger's own terms — "in raw/ but not yet distilled into
       // a concept doc" — so a row must have a raw file to be part of it. A row with neither
@@ -168,6 +146,12 @@ if (!hubFound) {
       // overstate the work cataloging can actually pick up.
       backlog: rows.filter((row) => row.raw && !row.curated).length,
       pending: rows.filter((row) => !row.raw).length,
+      // Why each unextracted row is unextracted. Page counts and byte sizes differ per file
+      // and would shatter one cause into forty findings, so they collapse to `N` for the
+      // tally — the per-row detail is in log.md, which is where you go to act on it.
+      reasons: rows
+        .filter((row) => !row.raw)
+        .map((row) => (row.reason || "not recorded — re-run khb ingest").replace(/\d+/g, "N")),
     };
   });
 
@@ -186,15 +170,28 @@ if (!hubFound) {
     flag(
       `${backlog} row(s) in raw/ but not yet cataloged, across ` +
         `${summaries.filter((summary) => summary.backlog).length} bundle(s).`,
-      "ask an agent to catalog the bundle (skills/catalog/SKILL.md)",
+      // Cataloging is the one thing khb points at that costs money, so the fix names the
+      // command that says how much before it names the pass that spends it.
+      "khb estimate            then ask an agent to catalog (skills/catalog/SKILL.md)",
     );
   // An empty `raw` is a source khb saw and could not convert — a missing extractor, a
-  // protected file, or a --skip flag. It is not a failed run, but it is work still owed.
-  if (pending)
+  // protected file, or a --skip flag. It is not a failed run, but it is work still owed, and
+  // the three causes have three different remedies. Naming them is the difference between a
+  // number you can act on and one you can only feel bad about.
+  if (pending) {
+    const tally = new Map<string, number>();
+    for (const summary of summaries)
+      for (const reason of summary.reasons) tally.set(reason, (tally.get(reason) ?? 0) + 1);
+    const ranked = [...tally].sort(([, a], [, b]) => b - a);
+    const shown = ranked.slice(0, 6);
+    const rest = ranked.slice(6).reduce((total, [, count]) => total + count, 0);
     flag(
-      `${pending} source(s) acquired but not extracted (empty 'raw' in log.md).`,
-      "khb ingest <bundle> — after installing whatever the row's reason names",
+      `${pending} source(s) acquired but not extracted (empty 'raw' in log.md):\n` +
+        shown.map(([reason, count]) => `        ${String(count).padStart(5)}  ${reason}`).join("\n") +
+        (rest ? `\n        ${String(rest).padStart(5)}  ${paint.dim(`across ${ranked.length - 6} other reason(s)`)}` : ""),
+      "khb ingest <bundle> — after fixing what the reason names; log.md has the per-file detail",
     );
+  }
 }
 
 // ---- Extraction -------------------------------------------------------------------------

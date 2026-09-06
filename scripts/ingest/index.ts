@@ -169,6 +169,11 @@ const uncurated = rows.filter((row) => row.raw && !row.curated).length;
 console.log(`\n${paint.ok("done")} in ${totalElapsed()}`);
 console.log(`ledger: ${rows.length} source(s) in ${paint.path(join(dir, "log.md"))}`);
 if (pending)
-  console.log(`  ${paint.warn(String(pending))} with an empty 'raw' — not extracted; see the reasons above`);
+  console.log(
+    `  ${paint.warn(String(pending))} with an empty 'raw' — not extracted; each row's 'reason' column says why`,
+  );
 console.log(`  ${uncurated ? paint.warn(String(uncurated)) : "0"} in raw/ but not yet cataloged (empty 'curated')`);
+// Cataloging is the step that costs money, so the closing line offers the price before it
+// offers the work — this is where someone decides whether to spend an afternoon's tokens.
+if (uncurated) console.log(`\nWhat that will cost: ${paint.cmd(`khb estimate ${bundle}`)}`);
 console.log(`Next: catalog ${paint.name(bundle)} — turn raw/ into concept docs (skills/catalog/SKILL.md).`);

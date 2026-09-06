@@ -108,6 +108,10 @@ that is the half that spends tokens.
    JUDGEMENT — an agent, following the skills in skills/. This is what spends tokens.
   ═══════════════════════════════════════════════════════════════════════════════════
 
+   khb estimate <bundle>                                     ← what the next step costs
+        │      counts raw/, projects it at low/medium/high effort, quotes it in millions
+        │      of tokens. Writes nothing, calls no model. Run it before saying yes.
+        ▼
    catalog        (no command — ask your agent to catalog the bundle)
         │      raw/*.md → concept docs with front matter, linked, listed in index.md,
         │      and log.md's `curated` column filled in
@@ -204,7 +208,12 @@ KHB also maintains `bundles/<bundle>/log.md`:
   re-pointed at the new path, keeping its `raw` file and its `curated` value — it does not
   come back as a second row to catalog again;
 - `raw` identifies the extracted file;
-- an empty `raw` means extraction is pending;
+- an empty `raw` means extraction is pending, and `reason` says why — `password-protected`,
+  `image (--skip-ocr)`, `no extractor for this format`, `OCR failed: …`. Those need four
+  different things from you, and the run that knew which is long gone by the time anyone
+  reads the file, so the answer is recorded rather than only printed. KHB rewrites the column
+  every run, so a stale reason never outlives the problem, and `khb doctor` tallies them
+  across the hub;
 - an empty `curated` means the raw file has not been cataloged.
 
 Authenticated systems such as Confluence, Azure DevOps, or private git hosts remain an
@@ -322,6 +331,7 @@ Commands can be run directly or requested through the matching agent skill.
 | `khb upgrade` | Refresh package-owned contracts and skills (also runs automatically on version drift) |
 | `khb new-bundle <name> ["scope"]` | Create and register a bundle |
 | `khb ingest [bundle] [--force] [--skip-ocr] [--skip-audio] [--jobs N]` | Acquire and extract declared sources |
+| `khb estimate [bundle] [--all] [--price IN/OUT] [--top N] [--json]` (aliases: `cost`, `tokens`) | What cataloging the backlog will cost in tokens — see below |
 | `khb lint` | Validate routing, bundle structure, and OKF metadata |
 | `khb doctor` | Read-only report: version, location, per-bundle counts, catalog backlog, extractors. Alias: `khb status` |
 | `khb visualize [--port N] [--no-open]` (aliases: `vis`, `viz`) | Serve the live bundle graph on a random free port and open it in your default browser — pan/zoomable cross-bundle map, drill into a bundle for its folder-clustered concepts, rebuild-on-refresh, exits when you close the tab |
@@ -343,6 +353,7 @@ nothing; each finding names the command that does.
 Hub            name, description, stamped version vs installed, location, registered
 Machine config where it is, the agent it names, how many hubs, schema findings
 Bundles        per bundle: concepts, raw/ files, log.md rows, catalog backlog, pending
+               — and why each pending row is pending, tallied by reason
 Extraction     which formats are bundled, and whether a transcriber is ready
 Findings       what needs attention, each with its fix
 ```
@@ -355,6 +366,41 @@ changing anything to get it.
 
 It is not a validator: `khb lint` still owns structure and OKF conformance, and `doctor`
 points at it rather than repeating a rule.
+
+### `khb estimate` — what will cataloging cost?
+
+Ingest is free: it is CPU, disk and a fan. Cataloging is not — an agent reads every raw file
+and writes concepts back — and `412 files` tells you nothing about that. If they are scanned
+contracts it is eight million tokens, and the usual way to find that out is a bill.
+
+```console
+$ khb estimate personal --price 3/15
+Raw material
+  files      412
+  size       48.2 MB
+  words      6,204,918
+  tokens     8.31M  (chars÷4 or words×1.33, whichever is larger)
+  prompt     1,275 tokens per file — the catalog prompt plus 27 existing concept(s) as vocabulary
+
+Projection
+  effort       input    output     total       cost
+  low         11.4M     0.83M     12.2M      $46.71
+  medium      17.6M      2.08M    19.7M      $84.02
+  high        30.7M      4.57M    35.3M     $160.65
+```
+
+It reads what is on disk, counts characters and words, and multiplies by coefficients in
+`scripts/lib/tokens.ts`. **It contacts no model and knows no prices** — `--price` takes
+input/output rates in USD per million that you supply, which is also why the numbers never go
+stale. `--json` gives an agent the same figures to reason over, and `--top N` names the
+largest files, which on most corpora is where the money actually is.
+
+Scope is the catalog backlog by default — ledger rows with a `raw` file and an empty
+`curated`. `--all` prices every file in `raw/`, for deciding whether to re-catalog from
+scratch. With no bundle named it reports on all of them.
+
+The catalog skill runs this first and waits for you to choose a model and an effort level
+before spending anything.
 
 ### Moving between hubs
 

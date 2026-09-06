@@ -31,6 +31,7 @@ function entry(overrides: Partial<Entry> = {}): Entry {
     fetched: "2026-08-30T00:00:00.000Z",
     raw: "one.md",
     curated: "",
+    reason: "",
     ...overrides,
   };
 }
@@ -91,6 +92,73 @@ describe("readLedger / writeLedger round trip", () => {
     const rowLines = text.split("\n").filter((l: string) => l.startsWith("|") && l.includes("/src/"));
     expect(rowLines[0]).toContain("/src/a.md");
     expect(rowLines[1]).toContain("/src/z.md");
+  });
+});
+
+/**
+ * A blank `raw` used to be a dead end: it said the source was not extracted and nothing said
+ * why, so a password-protected file, a format khb has no reader for, and one that `--skip-ocr`
+ * passed over were indistinguishable a week later — three states with three different fixes.
+ */
+describe("the reason column", () => {
+  test("round-trips the reason a pending row was recorded with", () => {
+    const { dir } = bundle();
+    const entries = new Map<string, Entry>();
+    entries.set("/src/locked.pdf", entry({ source: "/src/locked.pdf", raw: "", reason: "password-protected" }));
+    writeLedger(dir, entries, "test-bundle");
+    expect(readLedger(dir).get("/src/locked.pdf")!.reason).toBe("password-protected");
+  });
+
+  test("a ledger written before the column existed still parses, every row intact", () => {
+    const { dir } = bundle();
+    writeFileSync(
+      join(dir, "log.md"),
+      "# old — ingest log\n\n| source | sha256 | fetched | raw | curated |\n|---|---|---|---|---|\n" +
+        "| `/src/one.md` | `abc123` | 2026-01-01T00:00:00Z | `raw/folder/one.md` | `notes/x.md` |\n" +
+        "| `/src/two.pdf` | `def456` | 2026-01-01T00:00:00Z |  |  |\n",
+    );
+    const back = readLedger(dir);
+    expect(back.size).toBe(2);
+    expect(back.get("/src/one.md")!.curated).toBe("notes/x.md");
+    // No reason recorded, but nothing invented either — the next ingest fills it in.
+    expect(back.get("/src/two.pdf")!.reason).toBe("");
+  });
+
+  test("an extraction that later succeeds clears the reason it failed with", () => {
+    const entries = new Map<string, Entry>();
+    record(entries, { source: "/src/scan.pdf", sha256: "a", fetched: "t", raw: "", reason: "scanned, 39p (--skip-ocr)" });
+    expect(entries.get("/src/scan.pdf")!.reason).toBe("scanned, 39p (--skip-ocr)");
+    // The same source, extracted on a later run. Nothing passes a reason, and none survives.
+    record(entries, { source: "/src/scan.pdf", sha256: "a", fetched: "t2", raw: "raw/folder/scan.md" });
+    expect(entries.get("/src/scan.pdf")!.reason).toBe("");
+  });
+
+  test("a multi-line failure is flattened, so one bad row cannot break the table", () => {
+    const { dir } = bundle();
+    const entries = new Map<string, Entry>();
+    entries.set(
+      "https://x.test/a",
+      entry({ source: "https://x.test/a", raw: "", reason: "fetch failed — Error: socket hang up\n    at onEnd | inner" }),
+    );
+    writeLedger(dir, entries, "test-bundle");
+    const rows = readFileSync(join(dir, "log.md"), "utf8")
+      .split("\n")
+      .filter((line: string) => line.startsWith("| `https://x.test/a`"));
+    expect(rows.length).toBe(1);
+    expect(rows[0]).not.toContain("\n");
+    // The pipe inside the message is escaped, so it does not open a seventh column: six
+    // columns are seven unescaped delimiters, whatever the reason text contains.
+    expect(rows[0].replaceAll("\\|", "").split("|").length - 1).toBe(7);
+  });
+
+  test("a runaway reason is truncated rather than filling the ledger", () => {
+    const { dir } = bundle();
+    const entries = new Map<string, Entry>();
+    entries.set("/src/x", entry({ source: "/src/x", raw: "", reason: "boom ".repeat(200) }));
+    writeLedger(dir, entries, "test-bundle");
+    const reason = readLedger(dir).get("/src/x")!.reason;
+    expect(reason.length).toBeLessThanOrEqual(160);
+    expect(reason.endsWith("…")).toBe(true);
   });
 });
 

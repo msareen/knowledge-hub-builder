@@ -59,9 +59,13 @@ export const newCounters = (): Counters => ({
   embedded: 0, lowQuality: 0, skipped: 0, moved: 0, pending: 0,
 });
 
-/** Record the source with an empty `raw` so the owed work survives this process. */
+/**
+ * Record the source with an empty `raw` so the owed work survives this process — and with
+ * the reason, so the *next* reader knows which remedy it needs without re-running ingest to
+ * hear the console say it again.
+ */
 function pend(entries: Map<string, Entry>, source: string, hash: string, counters: Counters, why: string) {
-  record(entries, { source, sha256: hash, fetched: new Date().toISOString(), raw: "" });
+  record(entries, { source, sha256: hash, fetched: new Date().toISOString(), raw: "", reason: why });
   counters.pending++;
   // The path is already on this item's own line; say only why it stopped.
   outcome(`pending — ${why}`);

@@ -1,6 +1,6 @@
 ---
 name: catalog
-description: Turn one bundle's raw/ material into OKF concept docs — read each raw file, split it into sub-topics, label each with type/title/description/tags, link them, and register them in index.md. Uses parallel subagents when the runtime supports them. Use after khb ingest, or when the user asks to curate, catalog, organize, or write up a bundle.
+description: Turn one bundle's raw/ material into OKF concept docs — quote the token cost with khb estimate and get the user's model and effort first, then read each raw file, split it into sub-topics, label each with type/title/description/tags, link them, and register them in index.md. Uses parallel subagents when the runtime supports them. Use after khb ingest, or when the user asks to curate, catalog, organize, or write up a bundle.
 ---
 
 # Catalog a bundle
@@ -40,7 +40,52 @@ than from a directory listing — a `raw/` file whose row is already filled has 
 Rows with an empty `raw` were never extracted; they are ingest's problem, not yours. If
 there are many, say so and offer to fix ingest first.
 
-## 2. Read the map before writing anything
+## 2. Quote the cost — then stop
+
+**`khb ingest` is free; this pass is not.** It reads every raw file through a model and
+writes concepts back, so a corpus that took an afternoon to extract can run to millions of
+tokens. A file count does not tell anyone that, and finding it out from a bill is not
+acceptable. Quote it first, every time — even when the user has already said "catalog it".
+
+```
+khb estimate <bundle>        # tokens, in millions, at low / medium / high effort
+khb estimate <bundle> --json # the same numbers, for you to reason over
+```
+
+It counts the words and characters actually on disk and multiplies them by published
+coefficients. It writes nothing, calls no model, and quotes no prices — it does not know
+what anything costs.
+
+**Pricing it is your job, and it is the reason you stop here.** Take the token numbers,
+apply the current published rates for the models you would actually use, and put the money
+in front of the user:
+
+- Give a **range**, not a point: quote at least the fast/cheap model and the strong model,
+  at the effort you would recommend. The gap between them is usually the whole decision.
+- Say what the effort levels buy, in this bundle's terms — not as abstractions. `low` is one
+  pass and terse concepts, `medium` is the protocol below as written, `high` is fine-grained
+  splitting with low-quality sources re-read at the source.
+- Name the biggest files. `khb estimate` lists them, and on most corpora a handful of scans
+  or transcripts carry most of the cost. Dropping or deferring those is often the cheapest
+  real option, and the user cannot choose it if you do not offer it.
+- Say plainly that these are estimates from character counts, and a real run lands either
+  side of them.
+- If the user gave you rates, or you want khb to do the arithmetic:
+  `khb estimate <bundle> --price <in>/<out>` (USD per million tokens).
+
+Then **wait.** Do not start the seed wave, do not spawn a subagent, do not write a concept
+doc until the user has answered with a model and an effort level. Two things they routinely
+change once they see the number — narrowing the scope to part of the corpus, or running the
+bulk wave on a cheaper model than the one they are talking to you on — are only available
+before the pass starts.
+
+The one case for skipping the wait is a backlog small enough that the question wastes more of
+the user's time than the run costs. Say the number anyway, in one line, and carry on.
+
+Once they have chosen, use that model for the seed and bulk waves below wherever the runtime
+exposes model selection, and run at the effort they picked.
+
+## 3. Read the map before writing anything
 
 Open the bundle's `index.md` and any nested indexes, and list the existing concepts: path,
 `title`, `type`, `tags`. This is the **vocabulary**, and it does two jobs — it stops you
@@ -52,7 +97,7 @@ concepts go in (`contracts/`, `metrics/`, `notes/`, `playbooks/` — whatever fi
 domain; structure carries no fixed meaning). Reuse existing directories wherever they fit.
 Inventing a new subdirectory per raw file is the classic failure here.
 
-## 3. Seed wave — one file, checked by hand
+## 4. Seed wave — one file, checked by hand
 
 Pick the most representative raw file and delegate it to **one subagent** with the prompt
 below. Use a fast, economical model when the runtime exposes model selection; otherwise use
@@ -62,7 +107,7 @@ frontmatter complete, titles that read like knowledge rather than filenames. Cor
 prompt if it is off, and take the concept titles it produced into your vocabulary before
 going wide.
 
-## 4. Bulk wave — the rest in parallel
+## 5. Bulk wave — the rest in parallel
 
 Use one subagent per remaining raw file and start them concurrently when the runtime
 supports parallel delegation. Group several small files into one task when they are
@@ -74,7 +119,7 @@ Parallel subagents cannot see each other's output, so two rules are absolute:
 - **Every prompt carries the vocabulary.** Otherwise you get `q3-budget`, `budget-q3` and
   `quarterly-budget` as three concepts.
 - **Subagents write concept docs only.** `index.md`, `log.md` and `refs.md` have exactly one
-  writer — you, in step 5. Concurrent edits to a shared index silently lose rows.
+  writer — you, in step 6. Concurrent edits to a shared index silently lose rows.
 
 Prompt each subagent with, substituting the bracketed parts:
 
@@ -119,7 +164,7 @@ Prompt each subagent with, substituting the bracketed parts:
 > Reply with one line per concept you wrote: `<path> | <title> | <description>`, then any
 > flags. Do not edit `index.md`, `log.md` or `refs.md`.
 
-## 5. Merge — you, single writer
+## 6. Merge — you, single writer
 
 Everything in this step happens in this thread, sequentially, because every file it touches
 is shared.
@@ -140,7 +185,7 @@ is shared.
    the user agrees, add the source to that bundle's `sources.yaml`. Never inline-link across
    bundles, and never copy the content over.
 
-## 6. Verify
+## 7. Verify
 
 ```
 khb lint          # index coverage, frontmatter, ref targets, no cross-bundle links
@@ -153,7 +198,11 @@ still outstanding, and anything you flagged as low-quality and worth re-reading 
 ## Judgement notes
 
 - **Curate selectively.** Raw is bulk; concepts are distilled. Most corpora are 80% receipts
-  and boilerplate. Declining is a real outcome, not a failure.
+  and boilerplate. Declining is a real outcome, not a failure — and it is the one that moves
+  the bill, since every file you decline was still read to decide it.
+- **The estimate is a floor on the reading, not on the writing.** `khb estimate` counts what
+  is on disk; it cannot know that you re-read a garbled scan four times. If a run is going
+  visibly past its quote, stop and say so rather than finishing quietly.
 - **Granularity.** If two concepts are always read together, they are one. If one concept
   has two `# Schema` sections, it is two.
 - **Write knowledge, not summaries.** "This document discusses the retention policy" is
