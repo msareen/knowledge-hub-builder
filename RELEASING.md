@@ -3,7 +3,42 @@
 Maintainer-only. Not shipped into hubs — unlike `AGENTS.md`/`CLAUDE.md`/`SPEC.md`, this file
 is not in `package.json`'s `files`, so `khb upgrade` never touches it and users never see it.
 
+## Not every bump is a release
+
+Two different things use the same first three steps, and conflating them is how contract-doc
+changes go nowhere:
+
+- **Internal bump — steps 1–3, then stop.** No tag, no GitHub release, no `npm publish`.
+  Several can stack up between releases; the next release publishes whatever version is
+  current by then.
+- **Release — steps 1–6.** Ends with the package on npm.
+
+**A change to any package-owned file needs an internal bump at minimum** — `AGENTS.md`,
+`CLAUDE.md`, `SPEC.md`, `skills/`, `.claude/skills/`, `.agents/skills/`: everything in
+`MANAGED` (`scripts/lib/paths.ts`). The reason is that the automatic refresh is gated on the
+*version*, not on the content:
+
+```ts
+// scripts/cli.ts — runs before every in-hub command
+if (hubVersion(hub) !== version() || markerIn(hub) !== MARKER) { … }
+```
+
+Equal versions and a correctly-named marker and the whole block is skipped, silently. So a
+rewritten skill shipped under an unchanged version reaches no hub, `khb doctor` reports
+`matches installed` and flags nothing, and the stale copy sits there stating an older
+contract than the CLI implements. Only an explicit `khb upgrade` — which *is* unconditional
+— would fix it, and nobody runs that unprompted.
+
+Code-only changes do not have this problem: the CLI is what the user installed, not a copy
+inside their hub. It is specifically the files khb copies into a hub that need the bump to
+travel, and this repo is its own hub, so the stamp in its `khb.json` should track
+`package.json` regardless.
+
+Bump the **patch** digit unless the change is genuinely a feature or a break.
+
 ## Steps
+
+Steps 1–3 are both kinds of bump; 4–6 are the release only.
 
 1. **Bump `package.json`'s `version`.** Don't hand-edit `khb.json`'s `"khb"` field — that is
    the stamp of what this hub was last built by, and `khb upgrade` is the only thing that
@@ -24,6 +59,9 @@ is not in `package.json`'s `files`, so `khb upgrade` never touches it and users 
    version would quietly stamp the hub with the version you just moved off.
 
 3. **Commit** the bump on `main` — `package.json` and the restamped `khb.json` together.
+
+   **An internal bump stops here.** Everything below turns it into a release.
+
 4. **Tag** `vX.Y.Z` as an annotated tag, message = the release notes (see below), then push
    both: `git push origin main && git push origin vX.Y.Z`.
 5. **`gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`** — reuse the same notes
