@@ -56,13 +56,19 @@ const COMMANDS: Record<string, { load: () => Promise<unknown>; usage: string; de
     usage: "khb config [view|edit|check|fix|path]",
     desc: "the machine config: show it, open it, validate it, repair it",
   },
+  "install-skill": {
+    load: () => import("./install-skill"),
+    usage: "khb install-skill [--path] [--force] [--dry-run]",
+    desc: "add the global /khb skill to Claude, Codex and Gemini, so any folder can reach your hubs",
+  },
 };
 
 /**
- * Commands that work *outside* a hub, against ~/.khb/hubs-config.json. They must not
- * resolve or upgrade a hub — their whole job is running before you are in one.
+ * Commands that work *outside* a hub — against ~/.khb/hubs-config.json, or (install-skill)
+ * against the agents' user-level skill folders. They must not resolve or upgrade a hub —
+ * their whole job is running before you are in one.
  */
-const REGISTRY_COMMANDS = new Set(["list", "go", "agent", "forget", "update", "config"]);
+const REGISTRY_COMMANDS = new Set(["list", "go", "agent", "forget", "update", "config", "install-skill"]);
 
 // Short forms that just resolve to a canonical command above — kept out of COMMANDS
 // itself so help text lists each command once. `-v` is taken by --version, so

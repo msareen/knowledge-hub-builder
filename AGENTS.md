@@ -30,7 +30,10 @@ explicit instruction, carve one out and move the files; otherwise leave the shap
 3. Enter the bundle via its `index.md`, then read only the concepts/notes it routes you to.
 
 This file is the single common contract — bundles carry no per-bundle agent rules.
-Claude loads it through `CLAUDE.md`; Codex loads it directly.
+Claude Code, Codex and other agents all load it directly; there is no per-runtime shim.
+Each runtime then discovers the workflow adapters in its own folder — `.claude/skills/`
+for Claude, `.agents/skills/` for Codex — and every adapter points at the same canonical
+`skills/<name>/SKILL.md`.
 
 ## Hard rules
 
@@ -161,6 +164,15 @@ paths — and fill themselves in as hubs are used, so they need no maintenance.
 A hub's `name` and `description` in that list come from its own `khb.json`, so they travel
 with it. Set them at creation with `khb init --name --description`, or edit the marker's
 `name`/`description` keys — those two are yours, unlike the rest of the file.
+
+`khb install-skill [--path] [--force] [--dry-run]` also runs outside any hub. It installs one
+**global** skill, `khb`, into the user-level skill folders of Claude (`~/.claude/skills/`),
+Codex (`~/.agents/skills/`) and Gemini (`~/.gemini/skills/`); `--path` prints the shipped
+folder for any other agent to copy. That skill is a router, not a protocol: it picks a hub
+(the one you are in, the one the user named, or one from `khb list --json`, asking when
+several fit), reads that hub's `AGENTS.md`, then follows `<hub>/skills/<name>/SKILL.md`
+with `--hub "<hub>"` on every khb command. So `/khb …` works from any folder without
+`khb go`, and every hub is still worked by the skills at its own version.
 
 There is no `khb catalog` command — cataloging is entirely a judgement pass.
 

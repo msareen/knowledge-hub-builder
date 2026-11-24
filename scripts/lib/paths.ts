@@ -57,7 +57,6 @@ export function findHub(): string | undefined {
  */
 export const MANAGED = [
   "AGENTS.md",
-  "CLAUDE.md",
   "SPEC.md",
   "skills",
   ".agents/skills",
@@ -69,7 +68,7 @@ export const MANAGED = [
  * hub — a stale copy left behind states an older contract than the one now shipping,
  * and an agent has no way to tell which is current. Only ever list package-owned names.
  */
-export const RETIRED = ["AGENT.md", "query.md", "ingest.md", "lint.md"];
+export const RETIRED = ["AGENT.md", "query.md", "ingest.md", "lint.md", "CLAUDE.md"];
 
 export const version = (): string =>
   JSON.parse(readFileSync(join(PKG, "package.json"), "utf8")).version ?? "0.0.0";

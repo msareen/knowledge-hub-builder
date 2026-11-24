@@ -76,6 +76,10 @@ after ingestion.
 Later, from any terminal, `khb` on its own takes you back to the hub and starts your agent
 there — see [Moving between hubs](#moving-between-hubs).
 
+Or skip the trip: `khb install-skill` once, and `/khb <question>` works in Claude, Codex or
+Gemini from whatever folder you are already in — see
+[`/khb` from any folder](#khb-install-skill--khb-from-any-folder).
+
 ## How It Works
 
 The whole path, and where the money goes. `khb` does the mechanical half — deterministic,
@@ -302,8 +306,7 @@ into another bundle.
 
 KHB has one source of truth for agent behavior:
 
-- `AGENTS.md` is the common contract. Codex loads it directly.
-- `CLAUDE.md` imports `AGENTS.md` for Claude Code.
+- `AGENTS.md` is the common contract. Claude Code and Codex both load it directly.
 - `skills/<name>/SKILL.md` contains each canonical workflow.
 - `.agents/skills/` contains Codex discovery adapters.
 - `.claude/skills/` contains Claude discovery adapters.
@@ -424,6 +427,7 @@ These run **outside** any hub, from any terminal:
 | `khb update [new-path] [--path\|-p] [--schema\|-s] [--from <old>] [--dry-run]` | Repair the hub: path references after a move, and/or backfill `sources.yaml` to the current schema. No flag runs both |
 | `khb forget <name> [more…]` | Drop one or more hubs from the list. The folders are untouched. With no name it points you at `khb list` for the names |
 | `khb config [view\|edit\|check\|fix\|path]` | The config file itself — see below |
+| `khb install-skill [--path] [--force] [--dry-run]` | Install the global `/khb` skill for Claude, Codex and Gemini, so an agent in any folder can reach your hubs — see below |
 
 `khb go` prints the hub's path and then starts your agent there, so a bare `khb` from a
 cold terminal ends with an agent open on the right folder. No program can change its
@@ -438,6 +442,43 @@ Delete the file and the next command in each hub puts it back.
 A hub's name and description come from its own `khb.json`, so they travel with the hub
 rather than living in one machine's list. Set them with `khb init --name --description`,
 or edit those two keys in the marker later.
+
+### `khb install-skill` — `/khb` from any folder
+
+`khb go` opens your agent *in* a hub, because that is where the workflow skills live. If you
+would rather stay in the project you are working on, install the one global skill:
+
+```bash
+khb install-skill            # Claude, Codex and Gemini
+khb install-skill --dry-run  # see what it would write first
+```
+
+| Agent | Installed to |
+|---|---|
+| Claude Code | `~/.claude/skills/khb/SKILL.md` |
+| Codex | `~/.agents/skills/khb/SKILL.md` |
+| Gemini CLI | `~/.gemini/skills/khb/SKILL.md` |
+
+Then, from any folder:
+
+```text
+/khb what is our refund policy?
+/khb ingest the PDFs in ./contracts into the legal bundle
+/khb catalog legal
+```
+
+The skill only finds the hub. It uses the hub you name, else the one you are standing in,
+else picks from `khb list` by description and asks you when more than one fits. Then it reads
+that hub's own `AGENTS.md` and `skills/<name>/SKILL.md` and passes `--hub` to every `khb`
+command. The workflows themselves never leave the hub, so each hub is worked by the skills
+of its own version. It is called `khb` rather than `query`, so it never shadows a hub's own
+skills when you are inside one.
+
+For an agent not on that list, `khb install-skill --path` prints the folder to copy into its
+skills directory. A skill named `khb` that khb did not write is left alone unless you pass
+`--force`. Rerun the command after updating khb to refresh the copies. Your agent may ask
+permission the first time it reads the hub folder, because that folder is outside the one it
+was started in.
 
 ### `khb go --respond` — carrying a session's answer back out
 
@@ -569,7 +610,6 @@ same thing on demand, with a fuller report.
 khb.json
 outer.index.md
 AGENTS.md
-CLAUDE.md
 SPEC.md
 skills/<name>/SKILL.md
 .agents/skills/<name>/SKILL.md

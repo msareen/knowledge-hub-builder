@@ -7,9 +7,9 @@ rules and tooling and holds no knowledge; the hub holds all of it and is yours.
 
 A personal knowledge system built as a **bundle of bundles**: independent knowledge bundles
 joined by a thin router, navigable by any coding/knowledge agent (Claude, Codex, or other).
-The common contract and canonical workflows are agent-agnostic. Runtime-specific shims
-only handle discovery: Codex reads `AGENTS.md` and `.agents/skills/`; Claude imports the
-contract through `CLAUDE.md` and discovers `.claude/skills/`.
+The common contract and canonical workflows are agent-agnostic. Every runtime reads
+`AGENTS.md` directly; only skill discovery is runtime-specific, through thin adapters —
+Codex in `.agents/skills/`, Claude in `.claude/skills/`.
 
 Lineage: the operating model (immutable raw sources → LLM-curated wiki → schema, driven
 by ingest/query/lint) is [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f);
@@ -75,8 +75,7 @@ my-knowledge/                  # ~/OneDrive/my-knowledge, a private repo, a shar
 ├── .ingest-cache/extracted/   # hub-wide extraction cache, keyed by content hash (gitignored)
 │
 │   ── below: package-owned copies, refreshed by `khb upgrade`, never hand-edited ──
-├── AGENTS.md                  # common contract; Codex discovers this directly
-├── CLAUDE.md                  # Claude shim — imports AGENTS.md
+├── AGENTS.md                  # common contract; Claude, Codex and others read it directly
 ├── .agents/skills/<name>/     # Codex discovery adapter → canonical skill
 ├── .claude/skills/<name>/     # Claude discovery adapter → canonical skill
 ├── SPEC.md                    # this file
@@ -124,12 +123,14 @@ acting on them** — an agent can never read a protocol the CLI no longer implem
 │   ├── doctor.ts              # read-only state report; writes nothing, repairs nothing
 │   ├── visualize.ts           # serve the live bundle graph from indexes + refs
 │   ├── config.ts              # khb config: view / edit / check / fix the machine config
+│   ├── install-skill.ts       # khb install-skill: the global skill → each agent's skills folder
 │   ├── ingest/                # folder.ts / files.ts / web.ts → acquire.ts → bundle/raw
 │   └── lib/
 │       ├── args.ts            # argv helpers; what they consume they remove, leaving positionals
 │       ├── color.ts           # semantic terminal colour; one palette per stream
 │       ├── config-check.ts    # the machine config's schema: findings + the repairs for them
 │       ├── create.ts          # making a hub, shared by `khb init` and the first-run wizard
+│       ├── global-skill.ts    # where each agent reads user-level skills; install/refresh rules
 │       ├── extract.ts         # every local extractor + the content-hash cache
 │       ├── graph.ts           # graph data for the visualizer — read-only, never writes
 │       ├── graph-page.ts      # the visualizer's browser UI, rendered from that data
@@ -146,6 +147,7 @@ acting on them** — an agent can never read a protocol the CLI no longer implem
 │   └── onenote.py             #   imported: the `.one` parser (needs pyOneNote's object model)
 ├── .bundle_template/          # copied by `khb new-bundle`
 ├── templates/hub/             # copied by `khb init`
+├── global-skills/khb/         # the one global skill — installed per user, never into a hub
 └── AGENTS.md, skills/, …      # the masters that `khb init`/`upgrade` copy into hubs
 ```
 
@@ -203,8 +205,8 @@ Three properties define it:
   does not own survive an upgrade.
 
 The commands over it are `khb list`, `khb go`, `khb agent`, `khb update`, `khb forget` and
-`khb config` — the only ones that run **outside** a hub, and therefore the only ones that
-skip hub resolution and the version drift check. A bare `khb` is `khb go`: one hub asks to open it,
+`khb config` — with `khb install-skill` (§2f), the only ones that run **outside** a hub,
+and therefore the only ones that skip hub resolution and the version drift check. A bare `khb` is `khb go`: one hub asks to open it,
 several show the list and take a pick, none prints the help.
 
 `khb go` ends by launching your configured agent with the hub as its working directory.
@@ -377,6 +379,40 @@ degrades to a milestone line every 500 units. So `khb … > out.txt` keeps clean
 stdout, and a CI log still shows the walk moving. There is no `--quiet`: the per-unit line
 is the audit trail for a pass that rewrites files, and a run you have to repeat to find out
 what it did is worse than a noisy one.
+
+### 2f. The global skill — `/khb` from any folder
+
+Every workflow skill lives in a hub, so an agent only finds them when it starts inside one —
+which is what `khb go` is for. The global skill removes that step. It ships in the package at
+`global-skills/khb/SKILL.md`, is **not** in `MANAGED` (a hub never receives a copy), and
+`khb install-skill` copies it into each agent's user-level skill folder:
+
+| Agent | Folder |
+|---|---|
+| Claude Code | `~/.claude/skills/khb/` |
+| Codex | `~/.agents/skills/khb/` |
+| Gemini CLI | `~/.gemini/skills/khb/` (it also reads the `~/.agents/skills` alias) |
+| anything else | copy the folder `khb install-skill --path` prints |
+
+The skill is a **router, never a protocol**. It (1) picks one hub: the one the user named
+(`khb go <name> --path`), else the hub enclosing the working directory, else one from
+`khb list --json` chosen by description, asking when several fit; (2) reads that hub's
+`AGENTS.md`; (3) reads and follows `<hub>/skills/<name>/SKILL.md`, resolving hub-relative
+paths against the hub and passing `--hub "<hub>"` to every khb command. Holding no
+workflow text is the point: hubs on this machine may be stamped at different versions, and
+each must be worked by the protocol at its own version, which only the hub's own copy
+states. Copying a protocol into the global skill would recreate the drift the adapter rule
+forbids.
+
+It is named `khb`, not `query` or `ingest`, because a user-level skill outranks a project
+skill of the same name in Claude Code; a global `query` would shadow every hub's own. Its
+description triggers on the user mentioning their hub, khb or a hub by name — not on any
+lookup question in any repo.
+
+Install is idempotent and careful: an identical copy is left alone, one khb wrote earlier
+(it carries a `khb-global-skill:` marker) is refreshed, and a `khb` skill khb did not write
+is skipped unless `--force`. Rerun it after updating khb; `--dry-run` reports without
+writing.
 
 ## 3. Routing model
 

@@ -1,6 +1,6 @@
 # Releasing
 
-Maintainer-only. Not shipped into hubs — unlike `AGENTS.md`/`CLAUDE.md`/`SPEC.md`, this file
+Maintainer-only. Not shipped into hubs — unlike `AGENTS.md`/`SPEC.md`, this file
 is not in `package.json`'s `files`, so `khb upgrade` never touches it and users never see it.
 
 ## Not every bump is a release
@@ -14,7 +14,7 @@ changes go nowhere:
 - **Release — steps 1–6.** Ends with the package on npm.
 
 **A change to any package-owned file needs an internal bump at minimum** — `AGENTS.md`,
-`CLAUDE.md`, `SPEC.md`, `skills/`, `.claude/skills/`, `.agents/skills/`: everything in
+`SPEC.md`, `skills/`, `.claude/skills/`, `.agents/skills/`: everything in
 `MANAGED` (`scripts/lib/paths.ts`). The reason is that the automatic refresh is gated on the
 *version*, not on the content:
 

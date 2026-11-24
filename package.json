@@ -18,12 +18,12 @@
     "pyscripts/",
     "!**/__pycache__/**",
     "skills/",
+    "global-skills/",
     "templates/",
     ".bundle_template/",
     ".agents/skills/",
     ".claude/skills/",
     "AGENTS.md",
-    "CLAUDE.md",
     "SPEC.md",
     "README.md",
     "document/"

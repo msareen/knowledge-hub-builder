@@ -27,8 +27,8 @@ detail(`copying bundle/ …`);
 cpSync(src, join(dest, "bundle"), { recursive: true });
 
 // Inject the hub's package-owned copies (kept current by `khb upgrade`). AGENTS.md and
-// skills/ are canonical; the shims/adapters make them discoverable by Claude and Codex.
-for (const item of ["AGENTS.md", "CLAUDE.md", "skills", ".agents/skills", ".claude/skills"]) {
+// skills/ are canonical; the adapters make the skills discoverable by Claude and Codex.
+for (const item of ["AGENTS.md", "skills", ".agents/skills", ".claude/skills"]) {
   const target = join(dest, item);
   mkdirSync(join(target, ".."), { recursive: true });
   cpSync(join(HUB, item), target, { recursive: true });

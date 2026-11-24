@@ -16,7 +16,7 @@ injects those patterns so the folder works alone with any agent.
    ```
    <dest>/bundle/            the bundle, copied whole
    <dest>/outer.index.md     single-bundle router pointing at bundle/index.md
-   <dest>/AGENTS.md          the contract, plus CLAUDE.md
+   <dest>/AGENTS.md          the contract, read directly by Claude, Codex and others
    <dest>/skills/            the canonical protocols (query, ingest, lint, …)
    <dest>/.claude/skills/    discovery adapters, and .agents/skills/ likewise
    <dest>/README.md          provenance: what this is and when it was exported

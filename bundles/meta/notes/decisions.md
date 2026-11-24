@@ -6,6 +6,20 @@ description: Design decisions for KHB and their rationale.
 
 # Design decisions
 
+- **2026-11-24 — `CLAUDE.md` retired; `AGENTS.md` is read directly by every runtime.**
+  Claude Code now loads `AGENTS.md` itself, so the shim that imported it was a second
+  entry point with nothing of its own to say. Its few lines (adapters in `.claude/skills/`,
+  the ingest/catalog split, self-contained skills) were already stated in `AGENTS.md`. It
+  leaves `MANAGED`, the package `files` and `khb export`, and joins `RETIRED`, so
+  `khb upgrade` deletes the stale copy from each hub. Supersedes the 2026-07-19 Claude
+  compatibility layer and the shim half of 2026-07-26.
+- **2026-11-24 — One global skill, `khb`, routes to hubs from any folder.** `khb install-skill`
+  copies `global-skills/khb/SKILL.md` into the user-level skill folders of Claude, Codex and
+  Gemini (`--path` prints it for any other agent). It holds no workflow: it picks a hub,
+  reads that hub's `AGENTS.md`, and follows `<hub>/skills/<name>/SKILL.md` with `--hub`, so
+  each hub is still worked by the protocol at its own version. One router rather than global
+  copies of `query`/`ingest` because copies drift and because a user-level skill shadows a
+  project skill of the same name. It is never in `MANAGED`.
 - **2026-09-06 — `khb status` is an alias of `khb doctor`, and `khb init` closes with the
   OneNote hint.** Two small surface fixes with one theme: telling people a thing they would
   otherwise have to already know. `status` is simply the word people reach for; it lives in
